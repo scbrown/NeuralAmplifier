@@ -18,10 +18,10 @@ just fmt             # Format every component
 Component-scoped recipes take a subcommand:
 
 ```bash
-just orchestrator test    # Python service (Claude Agent SDK)
-just mod lint             # .gls.js GLSMAC mod
-just engine build         # C++ GSE HTTP builtin (needs GLSMAC_DIR)
-just play GAIANS          # Full loop against GLSMAC under a virtual display
+just orchestrator test       # Python brain (Claude Agent SDK)
+just glsmac test             # GLSMAC adapter — headless via --gse-tests
+just thinker build           # Thinker adapter (needs the Thinker toolchain)
+just play thinker GAIANS     # Full loop for an engine (thinker | glsmac)
 ```
 
 ## Setup
@@ -30,10 +30,13 @@ just play GAIANS          # Full loop against GLSMAC under a virtual display
 2. Install [pre-commit](https://pre-commit.com/)
 3. Install [uv](https://github.com/astral-sh/uv) (for the Python orchestrator)
 4. Have Node available (for markdown/`.gls.js` tooling via `npx`)
-5. For engine/integration work: a local [GLSMAC](https://github.com/afwbkbc/glsmac) checkout
-   and its build dependencies (SDL2, GL/GLU/GLEW, FreeType, yaml-cpp, uuid), plus `Xvfb` for
-   headless runs. Point `just` at it with `GLSMAC_DIR=/path/to/glsmac`.
-6. Run `just setup` to install git hooks.
+5. For the **GLSMAC adapter**: a local [GLSMAC](https://github.com/afwbkbc/glsmac) checkout and
+   its build deps (SDL2, GL/GLU/GLEW, FreeType, yaml-cpp, uuid). Point `just` at it with
+   `GLSMAC_DIR=/path/to/glsmac`. Headless logic tests use GLSMAC's own `--gse-tests` path — no
+   display needed. See [docs/glsmac-integration-notes.md](docs/glsmac-integration-notes.md).
+6. For the **Thinker adapter**: the Thinker fork and its 32-bit MinGW/MSVC toolchain; runs
+   under Windows or Wine. See [docs/thinker-adapter-notes.md](docs/thinker-adapter-notes.md).
+7. Run `just setup` to install git hooks.
 
 ## Pre-Commit Hooks
 
@@ -67,12 +70,14 @@ CI runs the same gate on every push and pull request via GitHub Actions.
 
 ## License Boundary
 
-Original work in this repo — `orchestrator/`, `mod/`, `docs/` — is **MIT**. Code under
-`engine/` modifies GLSMAC and is **AGPL-3.0**; keep that surface minimal and plan to
-contribute it upstream. Don't copy GLSMAC source into the MIT-licensed parts of the tree.
+Original work in this repo — `orchestrator/`, `adapters/thinker/`, `adapters/glsmac/mod/`,
+`docs/` — is **MIT**. The GSE `http` builtin under `adapters/glsmac/builtin/` modifies GLSMAC
+and is **AGPL-3.0**; keep that surface minimal and plan to contribute it upstream. Don't copy
+GLSMAC source into the MIT-licensed parts of the tree.
 
 ## How We Build & Test
 
 See [docs/building-and-testing.md](docs/building-and-testing.md) for the per-component build
-and test strategy, the headless (Xvfb) integration harness, and what is testable at each
-phase of the roadmap.
+and test strategy (the GLSMAC adapter's logic is tested headless via `--gse-tests` — no Xvfb),
+the [contract](docs/contract.md) as the shared test seam, and what is testable at each phase of
+the roadmap.

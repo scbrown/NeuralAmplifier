@@ -63,52 +63,55 @@ Centauri and can weigh fuzzy strategy the way a person does — *and say so out 
 
 ## ✨ How It Works
 
-**🧵 Thin in-game mod (`.gls.js`)**
+A platform-agnostic **brain** plus thin **adapters** that attach it to a running game. The
+brain never knows which game it's driving — it speaks one [contract](docs/contract.md).
 
-- Hooks GLSMAC's `turn` event and snapshots the board into a compact JSON **world view**.
-- Applies the orders Claude returns by calling backend bindings (`um` units, `bm` bases,
-  `fm` factions, `tm` map). The engine stays authoritative — illegal orders are simply
-  rejected.
+**🐍 Orchestrator (Python + Claude Agent SDK) — the brain**
 
-**🔌 One small engine addition (C++)**
+- Owns everything LLM-shaped: prompt assembly, tool-use loops, retries, streaming, secrets,
+  memory, move validation, and safe degradation.
+- Takes a **world view** in, returns **structured orders** (with reasoning) out — over HTTP.
+  The same code drives either engine.
 
-- A new **GSE HTTP builtin** so scripts can reach the outside world (GLSMAC's scripting layer
-  ships no network IO by default). Invoked via `Async` so a slow model never freezes the
-  render loop. Small, generic, and a candidate to contribute upstream.
+**🔌 Two engine adapters — the hands**
 
-**🐍 External orchestrator (Python + Claude Agent SDK)**
+- **Thinker (near-term):** a fork of the MIT/C++ [Thinker](https://github.com/induktio/thinker)
+  mod that bridges the original `terranx.exe`'s AI hooks. The **complete, balanced** game —
+  production, tech, diplomacy, real fog — controllable on day one.
+- **GLSMAC (long-term):** a `.gls.js` mod + a small GSE `http` builtin for the open-source
+  engine. Clean and testable, but its game systems are still being built.
 
-- Owns everything LLM-shaped: prompt assembly, tool-use loops, retries, streaming, secrets.
-- Turns the world view into a prompt, calls Claude, and returns **structured, validated
-  moves** — plus the reasoning behind them, for the log.
+**🧠 Two tiers of decision**
+
+- A **deterministic tier** (classic-AI heuristics, in the engine) handles the mechanical work.
+  The **LLM tier** sets policy and drills down to any unit or base when it chooses — so Claude
+  is consulted a few times a turn, not for every twitch.
 
 **🔍 Legible by design**
 
-- Context leaves the game as plain JSON over HTTP, so every turn's input to Claude and every
-  decision back out can be logged, replayed, and audited. No black box.
+- Context leaves the game as plain JSON over HTTP — every turn's input to Claude and every
+  decision back out is logged, replayed, and audited. No black box.
 
 ## 🏗️ Architecture
 
 ```text
-        ┌──────────────────────────┐
-        │   GLSMAC backend (C++)    │  authoritative game state
-        └────────────┬─────────────┘
-                     │ turn event / bindings
-        ┌────────────┴─────────────┐
-        │  agent mod  (.gls.js)     │  snapshot world view · apply orders
-        └────────────┬─────────────┘
-                     │ async HTTP (via GSE net builtin)
-        ┌────────────┴─────────────┐
-        │  orchestrator  (Python)   │  prompt · retries · validate · memory
-        └────────────┬─────────────┘
-                     │ Claude Agent SDK
-        ┌────────────┴─────────────┐
-        │          Claude           │  strategy + reasoning
-        └──────────────────────────┘
+        ┌──────────────────────────────┐
+        │   orchestrator (Python)       │  brain · MIT · platform-agnostic
+        │   prompt · validate · memory  │
+        └───────▲───────────────┬──────┘
+         world  │               │ orders     ← the shared CONTRACT (JSON/HTTP)
+          view  │               ▼
+        ┌───────┴───────────────────────┐
+        │            adapter             │
+        │  ┌───────────┐  ┌───────────┐  │
+        │  │ thinker   │  │ glsmac    │  │
+        │  │ → terranx │  │ → GSE mod │  │
+        │  └───────────┘  └───────────┘  │
+        └───────────────────────────────┘
 ```
 
-Full design — the context Claude receives, the alternatives weighed, and the phased
-roadmap — lives in **[VISION.md](VISION.md)**.
+Full design — the contract Claude speaks, the two-engine strategy, and the roadmap — lives in
+**[VISION.md](VISION.md)**.
 
 ## 🚀 Quick Start
 
@@ -126,10 +129,11 @@ just check           # Run the quality gate
 Layout:
 
 ```text
-orchestrator/   Python service — the LLM brain (Claude Agent SDK)
-mod/            .gls.js GLSMAC agent mod — the thin in-game client
-engine/         C++ GSE HTTP builtin — patch + notes (AGPL-3.0 boundary)
-docs/           Design docs, incl. building-and-testing.md
+orchestrator/       Python brain — the LLM decision loop (Claude Agent SDK) · MIT
+adapters/
+  thinker/          Near-term: DLL bridge to terranx.exe (MIT)
+  glsmac/           Long-term: .gls.js mod + GSE http builtin (AGPL boundary)
+docs/               contract.md, building-and-testing.md, adapter notes
 ```
 
 ## 🛠️ Development
@@ -138,9 +142,10 @@ docs/           Design docs, incl. building-and-testing.md
 just build               # Build all components
 just test                # Run all tests
 just lint                # Lint everything
-just fmt                 # Format everything
 just check               # Full quality gate (pre-commit hooks)
 just orchestrator test   # Component-scoped recipes: <component> <cmd>
+just glsmac test         # GLSMAC adapter (headless --gse-tests)
+just thinker build       # Thinker adapter (needs the Thinker toolchain)
 just docs check          # Markdown lint
 ```
 
@@ -155,10 +160,10 @@ if you're an AI agent working in this repo.
 
 ## 📄 License
 
-[MIT](LICENSE) for this repository — the Python orchestrator, the `.gls.js` mod, and the
-docs.
+[MIT](LICENSE) for this repository — the Python orchestrator, the Thinker adapter (Thinker is
+MIT too), the `.gls.js` mod, and the docs.
 
-**One boundary to know:** the GSE HTTP builtin under `engine/` modifies
-[GLSMAC](https://github.com/afwbkbc/glsmac), which is **AGPL-3.0**. Any distributed
-engine-side changes inherit AGPL-3.0 and are meant to be contributed upstream — a reason we
-keep that surface small and separate. See [engine/README.md](engine/README.md).
+**One boundary to know:** the GSE `http` builtin under `adapters/glsmac/builtin/` modifies
+[GLSMAC](https://github.com/afwbkbc/glsmac), which is **AGPL-3.0**. Those engine-side changes
+inherit AGPL-3.0 and are meant to be contributed upstream — a reason we keep that surface small
+and separate. See [adapters/glsmac/README.md](adapters/glsmac/README.md).

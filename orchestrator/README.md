@@ -2,9 +2,10 @@
 
 The LLM brain, as an external Python service (Claude Agent SDK). **License: MIT.**
 
-It receives a per-turn **world view** (JSON) from the in-game [`mod`](../mod/), builds a
-prompt, calls Claude, and returns **structured, validated moves** drawn from the turn's legal
-`action_space` — plus the reasoning behind them, for the log.
+It receives a per-turn **world view** (JSON) from an [adapter](../adapters/) over the
+[contract](../docs/contract.md), builds a prompt, calls Claude, and returns **structured,
+validated moves** drawn from the turn's legal `action_space` — plus the reasoning behind them,
+for the log. It is engine-agnostic: the same code drives the Thinker and GLSMAC adapters.
 
 ## Responsibilities
 

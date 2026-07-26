@@ -25,16 +25,16 @@ check:
     pre-commit run --all-files
 
 # Build every component
-build: (orchestrator "build") (mod "build") (engine "build")
+build: (orchestrator "build") (glsmac "build") (thinker "build")
 
 # Test every component
-test: (orchestrator "test") (mod "test")
+test: (orchestrator "test") (glsmac "test")
 
 # Lint every component
-lint: (orchestrator "lint") (mod "lint")
+lint: (orchestrator "lint") (glsmac "lint")
 
 # Format every component
-fmt: (orchestrator "fmt") (mod "fmt")
+fmt: (orchestrator "fmt") (glsmac "fmt")
 
 # === Orchestrator (Python · Claude Agent SDK) ===
 
@@ -56,53 +56,50 @@ orchestrator cmd="test":
         *)             echo "Unknown: {{cmd}}. Try: build install test lint fmt run" ;;
     esac
 
-# === Mod (.gls.js GLSMAC agent mod) ===
+# === GLSMAC adapter (Track B · .gls.js mod + GSE http builtin) ===
 
-# The thin in-game client: just mod <cmd>
-# Commands: build test lint fmt
-mod cmd="test":
+# The long-term open engine adapter: just glsmac <cmd>  (needs GLSMAC_DIR for build/test)
+# Commands: build test lint fmt   (build = the AGPL http builtin; test = headless --gse-tests)
+glsmac cmd="test":
     #!/usr/bin/env bash
     set -euo pipefail
-    if [ ! -d mod/src ]; then
-        echo "mod: not yet scaffolded (see VISION.md §Roadmap, Phase 0)."; exit 0
+    if [ ! -d adapters/glsmac/mod ]; then
+        echo "glsmac adapter: not yet scaffolded (see VISION.md §Roadmap, Track B)."; exit 0
     fi
     case "{{cmd}}" in
-        build)  echo "mod is interpreted .gls.js — nothing to compile." ;;
-        test)   bash mod/scripts/test.sh ;;
-        lint)   npx prettier --check "mod/**/*.js" ;;
-        fmt)    npx prettier --write "mod/**/*.js" ;;
+        build)  bash adapters/glsmac/builtin/scripts/apply.sh "{{glsmac}}" \
+                    && cmake --build "{{glsmac}}/build" --target glsmac ;;
+        test)   bash adapters/glsmac/mod/scripts/gse-test.sh "{{glsmac}}" ;;  # headless --gse-tests
+        lint)   npx prettier --check "adapters/glsmac/mod/**/*.js" ;;
+        fmt)    npx prettier --write "adapters/glsmac/mod/**/*.js" ;;
         *)      echo "Unknown: {{cmd}}. Try: build test lint fmt" ;;
     esac
 
-# === Engine (C++ · GSE HTTP builtin, AGPL-3.0 boundary) ===
+# === Thinker adapter (Track A · DLL bridge to terranx.exe) ===
 
-# The one engine addition: just engine <cmd>  (needs GLSMAC_DIR / --glsmac)
-# Commands: build test apply
-engine cmd="build":
+# The near-term deep-game adapter: just thinker <cmd>  (needs the Thinker toolchain)
+# Commands: build test
+thinker cmd="build":
     #!/usr/bin/env bash
     set -euo pipefail
-    if [ ! -d engine/src ]; then
-        echo "engine: not yet scaffolded (see VISION.md §Roadmap, Phase 0)."; exit 0
-    fi
-    if [ ! -d "{{glsmac}}" ]; then
-        echo "engine: GLSMAC checkout not found at '{{glsmac}}'. Set GLSMAC_DIR."; exit 1
+    if [ ! -d adapters/thinker/src ]; then
+        echo "thinker adapter: not yet scaffolded (see VISION.md §Roadmap, Track A)."; exit 0
     fi
     case "{{cmd}}" in
-        apply)  bash engine/scripts/apply.sh "{{glsmac}}" ;;   # graft builtin into GLSMAC tree
-        build)  cmake --build "{{glsmac}}/build" --target glsmac ;;
-        test)   bash engine/scripts/smoke.sh "{{glsmac}}" ;;
-        *)      echo "Unknown: {{cmd}}. Try: apply build test" ;;
+        build)  bash adapters/thinker/scripts/build.sh ;;
+        test)   bash adapters/thinker/scripts/test.sh ;;   # runs SMAC under Wine
+        *)      echo "Unknown: {{cmd}}. Try: build test" ;;
     esac
 
 # === Integration ===
 
-# Run the full observe→decide→act loop against GLSMAC under a virtual display.
-# Boots a quickstart game, loads the mod, and drives one faction with Claude.
-play faction="GAIANS":
+# Run the full observe→decide→act loop end to end for the chosen engine.
+# engine = thinker | glsmac ; drives one faction with Claude via the orchestrator.
+play engine="thinker" faction="GAIANS":
     #!/usr/bin/env bash
     set -euo pipefail
-    echo "Starting orchestrator + GLSMAC (headless via Xvfb), faction {{faction}}..."
-    bash scripts/play.sh "{{glsmac}}" "{{faction}}"
+    echo "Starting orchestrator + {{engine}} adapter, faction {{faction}}..."
+    bash scripts/play.sh "{{engine}}" "{{faction}}"
 
 # === Documentation ===
 

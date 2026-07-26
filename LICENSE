@@ -24,9 +24,11 @@ SOFTWARE.
 
 NOTE ON THE ENGINE BOUNDARY
 
-Code under `engine/` modifies GLSMAC (https://github.com/afwbkbc/glsmac), which
-is licensed under the GNU Affero General Public License v3.0 (AGPL-3.0). Those
-modifications inherit AGPL-3.0 obligations when built or distributed as part of
-GLSMAC, and are intended to be contributed upstream. The MIT license above
-covers the original works in this repository — the Python orchestrator, the
-`.gls.js` mod, the documentation, and the project scaffolding.
+Code under `adapters/glsmac/builtin/` modifies GLSMAC
+(https://github.com/afwbkbc/glsmac), which is licensed under the GNU Affero
+General Public License v3.0 (AGPL-3.0). Those modifications inherit AGPL-3.0
+obligations when built or distributed as part of GLSMAC, and are intended to be
+contributed upstream. The MIT license above covers the original works in this
+repository — the Python orchestrator, the Thinker adapter (Thinker itself is
+MIT; preserve its notice on adapted code), the `.gls.js` mod, the documentation,
+and the project scaffolding.

@@ -9,10 +9,15 @@ See [VISION.md](VISION.md) for the full design and roadmap.
 
 ## Repository Layout
 
-- `orchestrator/` — Python service, the LLM brain (Claude Agent SDK). **MIT.**
-- `mod/` — `.gls.js` GLSMAC agent mod, the thin in-game client. **MIT.**
-- `engine/` — C++ GSE HTTP builtin: patch + notes. **Modifies GLSMAC → AGPL-3.0.**
-- `docs/` — design docs, including `building-and-testing.md`.
+A platform-agnostic brain + two engine adapters, joined by one JSON contract.
+
+- `orchestrator/` — Python brain, the LLM decision loop (Claude Agent SDK). **MIT.**
+- `adapters/thinker/` — near-term: DLL bridge to the original `terranx.exe` via a Thinker
+  fork. **MIT.**
+- `adapters/glsmac/` — long-term: `.gls.js` mod (**MIT**) + a GSE `http` builtin that modifies
+  GLSMAC (**AGPL-3.0**).
+- `docs/` — `contract.md` (the shared interface), `building-and-testing.md`, and the adapter
+  notes (`thinker-adapter-notes.md`, `glsmac-integration-notes.md`).
 
 ## Conventions
 
@@ -22,9 +27,11 @@ See [VISION.md](VISION.md) for the full design and roadmap.
 - **Prefer subcommands over separate recipes.** Group related operations under one recipe
   with a subcommand argument (e.g. `just orchestrator test`, `just docs lint`) rather than
   creating separate top-level recipes (`just orchestrator-test`, `just docs-lint`).
-- **Mind the license boundary.** Original work under `orchestrator/`, `mod/`, and `docs/` is
-  MIT. Anything under `engine/` modifies GLSMAC and is AGPL-3.0 — keep that surface small and
-  contribute it upstream.
+- **Mind the license boundary.** Original work under `orchestrator/`, `adapters/thinker/`,
+  `adapters/glsmac/mod/`, and `docs/` is MIT. The GSE builtin under `adapters/glsmac/builtin/`
+  modifies GLSMAC and is AGPL-3.0 — keep that surface small and contribute it upstream.
+- **One contract.** The orchestrator speaks only `docs/contract.md`; engine specifics stay in
+  the adapter. Don't leak Thinker/GLSMAC details into the orchestrator.
 
 ## Build Commands
 
@@ -46,9 +53,9 @@ Component-scoped work uses the `<component> <cmd>` form:
 
 ```bash
 just orchestrator test    # build install test lint fmt run
-just mod lint             # build test lint fmt
-just engine build         # apply build test   (needs GLSMAC_DIR)
-just play GAIANS          # full observe→decide→act loop under Xvfb
+just glsmac test          # build test lint fmt  (test = headless --gse-tests)
+just thinker build        # build test           (needs the Thinker toolchain)
+just play thinker GAIANS  # full observe→decide→act loop for an engine
 ```
 
 ## Quality Requirements
