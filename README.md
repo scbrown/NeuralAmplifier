@@ -66,8 +66,9 @@ Centauri and can weigh fuzzy strategy the way a person does — *and say so out 
 **🧵 Thin in-game mod (`.gls.js`)**
 
 - Hooks GLSMAC's `turn` event and snapshots the board into a compact JSON **world view**.
-- Applies the orders Claude returns by calling backend bindings (`game.um`, `game.fm`,
-  `game.tm`). The engine stays authoritative — illegal orders are simply rejected.
+- Applies the orders Claude returns by calling backend bindings (`um` units, `bm` bases,
+  `fm` factions, `tm` map). The engine stays authoritative — illegal orders are simply
+  rejected.
 
 **🔌 One small engine addition (C++)**
 

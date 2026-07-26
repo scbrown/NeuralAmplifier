@@ -43,13 +43,13 @@ testing, not a solved problem.
 
 ## 3. What GLSMAC gives us (and doesn't)
 
-Grounding, from the current source tree:
+Grounding, verified against the GLSMAC source (fork at `scbrown/glsmac`):
 
 | Surface | Reality today |
 |---|---|
 | **Scripting engine (GSE)** | A JS-like `.gls.js` language (`src/gse/`). Game logic is progressively moving into scripts. Scripts hook events via `.on(...)` and call backend bindings. This is our integration home. |
-| **Events** | `start`, `configure`, `create_world`, `turn`, `unit_spawn`, `unit_despawn`, `error`. The `turn` event is our heartbeat. |
-| **Bindings** | `game.um` (units: `spawn_unit`, …), `game.fm` (factions: `remove`, …), `game.tm` (map: `get_map_width/height`, `get_tile`), `game.message(...)`, `game.get_players()`, `game.year`. |
+| **Events** | Global: `start`, `configure`, `create_world`, `turn`, `error`, `message`. Manager-scoped via `.on(...)`: `um.on('unit_spawn' / 'unit_despawn' / 'unit_turn')`, `bm.on('base_spawn' / 'get_base_intake' / 'get_base_workable_tiles')`, plus `get_tile_resources`. The `turn` event is our heartbeat; **`unit_turn`** and the base/tile calc callbacks are natural per-entity injection points. |
+| **Bindings (managers)** | `um` (units: `spawn_unit`, `define_unit`, …), `fm` (factions: `add`, `import_colors`, …), `tm` (map: `get_map_width/height`, `get_tile`, `get_distance`), `bm` (bases: `spawn_base`, `get_bases`, `define_pop`), `rm` (resources), plus `game.message(...)`, `game.get_players()`, `game.year`. |
 | **Backend/frontend split** | `src/game/FrontendRequest.h` (backend→frontend state, ~33 events: `FR_UNIT_*`, `FR_BASE_*`, `FR_TURN_*`, …) and `src/game/BackendRequest.h` (frontend→backend, currently thin). A clean seam. |
 | **The "sandbox"** | **An *absence* of IO builtins, not a security restriction.** Registered builtins are only `Async`, `Console`, `Conversions`, `Include`, `Math`, `Object`, `String`, `Common` — no network/socket/filesystem. Since GLSMAC is AGPL-3.0 and we compile our own build, we simply **add** one. |
 | **No headless mode** | The engine is OpenGL/SDL2 render-driven. A bot backend needs a virtual framebuffer (Xvfb) or, eventually, a backend/renderer decoupling. |
