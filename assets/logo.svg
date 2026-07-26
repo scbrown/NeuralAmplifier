@@ -1,0 +1,80 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <!-- Amplified-signal gradient: quiet on the left, loud on the right -->
+    <linearGradient id="signalGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#3D85C6" />
+      <stop offset="55%" style="stop-color:#81B29A" />
+      <stop offset="100%" style="stop-color:#F2CC8F" />
+    </linearGradient>
+    <!-- Core neural node gradient -->
+    <radialGradient id="coreGrad" cx="50%" cy="45%" r="60%">
+      <stop offset="0%" style="stop-color:#F2CC8F" />
+      <stop offset="70%" style="stop-color:#E0A85A" />
+      <stop offset="100%" style="stop-color:#C4863C" />
+    </radialGradient>
+    <linearGradient id="synapse" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#9B72AA" />
+      <stop offset="100%" style="stop-color:#E07A5F" />
+    </linearGradient>
+    <filter id="glow" x="-40%" y="-40%" width="180%" height="180%">
+      <feGaussianBlur stdDeviation="4" result="b" />
+      <feMerge>
+        <feMergeNode in="b" />
+        <feMergeNode in="SourceGraphic" />
+      </feMerge>
+    </filter>
+    <filter id="shadow" x="-5%" y="-5%" width="110%" height="110%">
+      <feDropShadow dx="0" dy="2" stdDeviation="3" flood-color="#00000033" />
+    </filter>
+  </defs>
+
+  <!-- Background circle -->
+  <circle cx="256" cy="256" r="240" fill="#1a1a2e" />
+  <circle cx="256" cy="256" r="232" fill="none" stroke="#2d2d4a" stroke-width="1.5" />
+
+  <!-- Faint hex tiles at the base: the game map being read -->
+  <g stroke="#3a3a5c" stroke-width="2" fill="none" opacity="0.55">
+    <path d="M170 402 l22 -13 l22 13 l0 26 l-22 13 l-22 -13 z" />
+    <path d="M214 402 l22 -13 l22 13 l0 26 l-22 13 l-22 -13 z" />
+    <path d="M258 402 l22 -13 l22 13 l0 26 l-22 13 l-22 -13 z" />
+    <path d="M302 402 l22 -13 l22 13 l0 26 l-22 13 l-22 -13 z" />
+    <path d="M192 428 l22 -13 l22 13 l0 26 l-22 13 l-22 -13 z" opacity="0.5" />
+    <path d="M280 428 l22 -13 l22 13 l0 26 l-22 13 l-22 -13 z" opacity="0.5" />
+  </g>
+
+  <!-- Amplified signal: small wave in, big wave out, sweeping through the core -->
+  <path d="M 84 250
+           q 14 -18 28 0 q 14 18 28 0
+           q 18 -34 40 0 q 22 34 46 0
+           q 30 -66 62 0 q 32 66 66 0
+           q 22 -46 42 0"
+        stroke="url(#signalGrad)" stroke-width="7" fill="none"
+        stroke-linecap="round" filter="url(#shadow)" />
+
+  <!-- Synaptic edges radiating from the core to satellite nodes -->
+  <g stroke="url(#synapse)" stroke-width="3" fill="none" opacity="0.9" stroke-linecap="round">
+    <path d="M 256 214 L 150 150" />
+    <path d="M 256 214 L 372 152" />
+    <path d="M 256 214 L 120 240" />
+    <path d="M 256 214 L 396 244" />
+    <path d="M 256 214 L 176 316" />
+    <path d="M 256 214 L 344 320" />
+  </g>
+
+  <!-- Satellite neural nodes (family palette) -->
+  <circle cx="150" cy="150" r="11" fill="#E07A5F" stroke="#C45B3C" stroke-width="2" />
+  <circle cx="372" cy="152" r="11" fill="#3D85C6" stroke="#2A6BAD" stroke-width="2" />
+  <circle cx="120" cy="240" r="9"  fill="#81B29A" stroke="#5E9B7E" stroke-width="2" />
+  <circle cx="396" cy="244" r="9"  fill="#9B72AA" stroke="#7D5691" stroke-width="2" />
+  <circle cx="176" cy="316" r="9"  fill="#3D85C6" stroke="#2A6BAD" stroke-width="2" />
+  <circle cx="344" cy="320" r="9"  fill="#81B29A" stroke="#5E9B7E" stroke-width="2" />
+
+  <!-- Central core node: the amplifier / the brain -->
+  <circle cx="256" cy="214" r="30" fill="url(#coreGrad)" stroke="#C4863C" stroke-width="2.5" filter="url(#glow)" />
+  <circle cx="256" cy="214" r="14" fill="#1a1a2e" opacity="0.85" />
+  <circle cx="256" cy="214" r="6"  fill="#F2CC8F" />
+
+  <!-- Tiny endpoint dots for polish -->
+  <circle cx="84"  cy="250" r="3" fill="#3D85C6" />
+  <circle cx="470" cy="250" r="3.5" fill="#F2CC8F" />
+</svg>

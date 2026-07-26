@@ -1,0 +1,54 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  lint-markdown:
+    name: Markdown lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      # Pin to the same version pre-commit uses (.pre-commit-config.yaml) so CI
+      # and local linting agree and CI cannot drift onto a newer rule set.
+      - run: npx markdownlint-cli2@0.17.2
+
+  check:
+    name: Pre-commit checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install pre-commit
+      - run: pre-commit run --all-files
+
+  orchestrator:
+    name: Orchestrator (Python)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - id: guard
+        # Only lint/test the orchestrator once it is scaffolded (Phase 1).
+        run: |
+          if [ -f orchestrator/pyproject.toml ]; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+            echo "orchestrator not yet scaffolded — skipping."
+          fi
+      - if: steps.guard.outputs.present == 'true'
+        uses: astral-sh/setup-uv@v5
+      - if: steps.guard.outputs.present == 'true'
+        working-directory: orchestrator
+        run: |
+          uv sync
+          uv run ruff check .
+          uv run pytest

@@ -1,0 +1,44 @@
+# OS
+.DS_Store
+Thumbs.db
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Environment / secrets
+.env
+.env.local
+*.key
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+dist/
+*.egg-info/
+
+# Node (docs/mod tooling)
+node_modules/
+
+# C++ / CMake (engine builtin build output)
+build/
+*.o
+*.obj
+
+# GLSMAC debug dumps (when running the integration loop)
+tmp/lastmap.*
+
+# Agent runtime / session state
+.runtime/
+.claude/
+.logs/
+state.json
+CLAUDE.md
+CLAUDE.local.md
