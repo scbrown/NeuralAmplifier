@@ -126,7 +126,8 @@ Layered on top, without changing the wire format:
   violations become advisories. This is a *strategic* guardrail that **complements, never
   replaces** the engine's legality gate — it can only subtract or annotate *legal* orders.
 - **Precedence** (highest wins): engine legality (`action_space`) > Hank deny-policies >
-  canonical datalinks > engine-observed (Hank-promoted) > house-rule > learned tactic.
+  canonical datalinks > engine-observed (Hank-promoted) > house-rule > `strat:` doctrine >
+  learned tactic.
 
 Both layers are optional and degrade safely: if Quipu/Hank are unreachable, the orchestrator
 plays from the cached static briefing and the engine's `action_space` alone. Full design in

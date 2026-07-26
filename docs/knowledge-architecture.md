@@ -26,15 +26,19 @@ The engine stays authoritative: the [contract](contract.md)'s `action_space` rem
 legality gate. The knowledge layer only *annotates, constrains, and informs* legal play — it
 never invents actions.
 
-## Two knowledge planes, one Quipu graph
+## Three knowledge planes, one Quipu graph
 
 - **Datalinks plane** — static, canonical SMAC rules from `alphax.txt` (+ encyclopedia prose).
   Ground truth, slow-changing. Class-heavy RDF with SHACL as the guardrail.
+- **Doctrine plane** — curated *expert* strategy from the community (unit designs, base build
+  orders, secret-project priorities): how to *use* the rules well. A prior, not law. Its own
+  `strat:` namespace and `ruleTier "doctrine"`. See [strategy-knowledge.md](strategy-knowledge.md).
 - **Memory plane** — bitemporal per-game and cross-game learned strategy. Fast-changing,
   episode-heavy, valid-time-versioned.
 
-Both live in one Quipu graph, distinguished by class, `group_id`, and a **mandatory engine+tier
-tag** on every fact.
+All live in one Quipu graph, distinguished by class, `group_id`, and a **mandatory engine+tier
+tag** on every fact. The planes compose: rules ground doctrine, doctrine seeds play, and learned
+memory refines and can override doctrine as its confidence grows.
 
 ## The Quipu SMAC ontology
 
@@ -207,8 +211,10 @@ Hank bookends the turn: it ingests the board before retrieval and guards the ord
 7. Surviving orders → the adapter (which still runs engine validation — belt and suspenders).
 
 **Precedence** the prompt and guard enforce: engine legality (`action_space`) > Hank
-deny-policies > canonical datalinks > engine-observed (Hank-promoted) > house-rule > learned
-tactic. **Budget discipline:** the static briefing is cached and paid once; per-turn calls are
+deny-policies > canonical datalinks > engine-observed (Hank-promoted) > house-rule >
+`strat:` doctrine > learned tactic (a learned tactic is promoted above the doctrine it
+contradicts once its confidence crosses threshold). **Budget discipline:** the static briefing
+is cached and paid once; per-turn calls are
 bounded to action-space scope; under budget, drop tactics before rules (rules are correctness,
 tactics are optimization); bound deny-repair retries.
 
@@ -259,6 +265,9 @@ This umbrella will link to focused sub-docs as they land, each kept small per re
 - `docs/quipu-integration.md` — interfaces, retrieval calls, budgeting, degradation.
 - `docs/ontology/smac-ontology.md` + `docs/ontology/smac-shapes.ttl.md` — the class/predicate
   reference and the SHACL guardrail shapes.
+- `docs/strategy-knowledge.md` — the curated `strat:` doctrine plane: unit-design templates,
+  base build orders, facility/secret-project priorities, and how they surface at the unit-design
+  and base-production decisions.
 - `docs/learned-memory.md` — the `mem:` vocabulary, episodes, bitemporal usage, contract
   reconciliation.
 - `docs/hank-integration.md` — roles (a) and (b), the tool→source→Quipu path, honest blockers.

@@ -5,12 +5,13 @@
 <h1 align="center">neural amplifier</h1>
 
 <p align="center">
-  <em>🧠 An LLM brain for <a href="https://github.com/afwbkbc/glsmac">GLSMAC</a> — Alpha Centauri, played by Claude</em>
+  <em>🧠 An LLM brain for <em>Sid Meier's Alpha Centauri</em> — played by Claude</em>
 </p>
 
 <p align="center">
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="License: MIT"/></a>
-  <a href="https://github.com/afwbkbc/glsmac"><img src="https://img.shields.io/badge/engine-GLSMAC%20(AGPL--3.0)-orange.svg" alt="Engine: GLSMAC"/></a>
+  <a href="VISION.md#3-two-engines-one-brain"><img src="https://img.shields.io/badge/engines-Thinker%20%C2%B7%20GLSMAC-orange.svg" alt="Engines: Thinker and GLSMAC"/></a>
+  <a href="docs/knowledge-architecture.md"><img src="https://img.shields.io/badge/knowledge-Quipu%20%C2%B7%20Hank-blueviolet.svg" alt="Knowledge: Quipu and Hank"/></a>
   <a href="https://github.com/casey/just"><img src="https://img.shields.io/badge/tasks-just-brightgreen.svg" alt="Task runner: just"/></a>
   <a href="VISION.md"><img src="https://img.shields.io/badge/status-pre--alpha-lightgrey.svg" alt="Status: pre-alpha"/></a>
 </p>
@@ -19,10 +20,12 @@
 
 In *Sid Meier's Alpha Centauri*, a **Neural Amplifier** is a base facility that strengthens
 a colony's collective mind — amplifying the will of the many into something more than the
-sum of its parts. This project borrows the name and the idea: it plugs an LLM into
-[GLSMAC](https://github.com/afwbkbc/glsmac), the open-source reimplementation of Alpha
-Centauri, takes the raw signal of the game board, and **amplifies it into strategy** —
-playing a faction on its own or advising a human at the wheel.
+sum of its parts. This project borrows the name and the idea: it plugs an LLM into a
+**controllable Alpha Centauri** — the complete original game via [Thinker](https://github.com/induktio/thinker)
+now, the open-source [GLSMAC](https://github.com/afwbkbc/glsmac) engine long-term — takes the
+raw signal of the game board, and **amplifies it into strategy** — playing a faction on its own
+or advising a human at the wheel. One brain, either engine, behind a single
+[contract](docs/contract.md).
 
 ## 🎬 See It In Action
 
@@ -49,17 +52,18 @@ copilot**.
 
 |  | **Built-in 4X AI** | **Scripted bots** | **Neural Amplifier** |
 |--|:-----------------:|:-----------------:|:--------------------:|
-| Exists for GLSMAC today | ❌ | ❌ | ✅ |
 | Reasons about long-horizon tradeoffs | ❌ | ❌ | ✅ |
 | Explains *why* it made a move | ❌ | ❌ | ✅ |
 | Every input fully inspectable | ❌ | ⚠️ | ✅ |
 | Plays fair (fog-of-war respected) | ⚠️ (often cheats) | ⚠️ | ✅ |
 | Doubles as a human copilot | ❌ | ❌ | ✅ |
-| No hard-coded heuristics to maintain | ❌ | ❌ | ✅ |
+| Grounded in the game's rules + real strategy, not hard-coded heuristics | ❌ | ❌ | ✅ |
 
-GLSMAC has **no computer opponents yet** (they're on its own roadmap for ~v0.7). Classic 4X
-AI leans on scripted heuristics and difficulty cheating; an LLM already understands Alpha
-Centauri and can weigh fuzzy strategy the way a person does — *and say so out loud*.
+The original game's AI is dated and leans on difficulty cheating; the open-source engine has
+**no computer opponents yet**. An LLM already understands Alpha Centauri and can weigh fuzzy,
+long-horizon strategy the way a person does — *and say so out loud*. Neural Amplifier goes
+further than raw training memory: it grounds that reasoning in the game's actual rules and in
+curated strategy (see **Knowledge & Guardrails** below), so it plays *well*, not just legally.
 
 ## ✨ How It Works
 
@@ -110,15 +114,37 @@ brain never knows which game it's driving — it speaks one [contract](docs/cont
         └───────────────────────────────┘
 ```
 
-Two sibling services layer on **knowledge** and **guardrails**: [Quipu](https://github.com/scbrown/quipu)
-is a governed bitemporal graph holding the SMAC datalinks and the brain's learned strategy across
-games; [Hank](https://github.com/scbrown/hank) is a hot in-memory graph that runs strategic
-policy checks and what-if analysis on the live board. The engine's `action_space` stays the hard
-legality gate; the knowledge layer only annotates, constrains, and remembers. Design:
-**[docs/knowledge-architecture.md](docs/knowledge-architecture.md)**.
-
 Full design — the contract Claude speaks, the two-engine strategy, and the roadmap — lives in
 **[VISION.md](VISION.md)**.
+
+## 🧠 Knowledge & Guardrails
+
+Training memory knows Alpha Centauri *broadly* — but not well enough to distinguish canonical
+rules from a house-rule, cite how *this* engine scores a fight, or carry strategy across games.
+So the brain is backed by two sibling services (design:
+**[docs/knowledge-architecture.md](docs/knowledge-architecture.md)**):
+
+- **[Quipu](https://github.com/scbrown/quipu) — persisted, governed knowledge.** A bitemporal
+  graph holding three layers: the **datalinks** (the game's rules — techs, units, facilities,
+  secret projects, social engineering — as a SHACL-guarded graph, tagged so a house-rule can't
+  masquerade as canonical); curated **strategy/doctrine** (real SMAC unit designs and base build
+  orders — see [docs/strategy-knowledge.md](docs/strategy-knowledge.md)); and **learned memory**
+  (tactics and opponent patterns the brain accumulates across games).
+- **[Hank](https://github.com/scbrown/hank) — hot in-memory board + guardrail harness.** Holds
+  the per-faction, fog-limited board graph in memory and runs a strategic **policy guard** and
+  **what-if** analysis on proposed orders before they apply.
+
+Two decisions this is built to sharpen:
+
+- **Unit design** — at the unit workshop, retrieve the doctrine's recommended **prototypes**
+  (chassis · reactor · weapon · armor · abilities) for the current tech and threat, so the brain
+  proposes a sound design instead of guessing.
+- **Base planning** — at production, retrieve the **build order** and facility priorities for
+  that base's role and game phase, so infrastructure is chosen with intent.
+
+The engine's `action_space` stays the hard legality gate; the knowledge layer only **annotates,
+constrains, and remembers** — it never invents a move. Precedence, honesty about what's blocked,
+and the rollout are in the [design doc](docs/knowledge-architecture.md).
 
 ## 🚀 Quick Start
 
@@ -140,7 +166,8 @@ orchestrator/       Python brain — the LLM decision loop (Claude Agent SDK) ·
 adapters/
   thinker/          Near-term: DLL bridge to terranx.exe (MIT)
   glsmac/           Long-term: .gls.js mod + GSE http builtin (AGPL boundary)
-docs/               contract.md, building-and-testing.md, adapter notes
+docs/               contract.md, adapter notes, knowledge-architecture.md,
+                    strategy-knowledge.md, ontology/, and the Quipu/Hank integration docs
 ```
 
 ## 🛠️ Development
