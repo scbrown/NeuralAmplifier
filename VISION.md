@@ -30,8 +30,12 @@ amplifies it into strategy.
 
 1. **LLMs are unexpectedly good at exactly what 4X AI has always hard-coded badly** — fuzzy,
    long-horizon strategic tradeoffs, weighed in natural language and *explained*.
-2. **Claude already knows Alpha Centauri** — factions, tech tree, social engineering,
-   terraforming, secret projects, combat — from training. We feed *state*, not the rules.
+2. **Claude already knows Alpha Centauri broadly** — factions, tech tree, social engineering,
+   terraforming, secret projects, combat — from training. We feed *state*, **plus a governed
+   knowledge layer**: broad memory isn't enough to play *well*, so a Quipu-backed knowledge base
+   grounds engine-specific mechanics, keeps a house-rule from masquerading as canonical, and
+   accumulates learned strategy across games (see
+   [docs/knowledge-architecture.md](docs/knowledge-architecture.md)).
 3. **The tooling to do this cleanly now exists** — an agent SDK for the brain, and two viable
    engines to attach it to (below).
 
@@ -118,14 +122,20 @@ its entire input is legible.**
 Layers of context (full detail in [docs/contract.md](contract.md)):
 
 1. **Static briefing** (once/game, prompt-cached): rules/house-rules, faction roster +
-   agendas, victory conditions, map size, difficulty.
+   agendas, victory conditions, map size, difficulty — sourced from the **Quipu datalinks KB**,
+   engine-filtered so only rules true for the current engine appear.
 2. **Per-turn world view** (fog-limited JSON): turn/year/scores; tiles (terrain, altitude,
    resources, features, improvements, owner); own units (id, type, position, HP, morale,
    moves, orders); bases (location, pop, yields, production, facilities, garrison); economy
    (energy, research, SE, techs); visible others; and **deltas since last turn**.
 3. **Action space**: the legal moves this turn — the engine-accepted menu Claude selects from
    (anti-hallucination).
-4. **Memory**: strategic notes Claude wrote before, persisted for continuity.
+4. **Memory & knowledge**: turn-to-turn notes plus retrieved facts, tactics, and opponent
+   patterns from the **Quipu knowledge layer**. Strategic memory is a governed *bitemporal*
+   store (learned across games, time-travelable), not just a free-text string.
+5. **Guardrails**: the engine's `action_space` (hard legality) plus a **Hank policy harness**
+   that checks proposed orders against governed strategic/house-rule invariants before they
+   apply. See [docs/knowledge-architecture.md](docs/knowledge-architecture.md).
 
 **Grounded reality (differs by engine):**
 
@@ -167,6 +177,18 @@ Dual-track, sharing the orchestrator. Each phase names an exit criterion.
 - **S2 — Two tiers:** deterministic defaults + LLM policy/drill-down.
 - **S3 — Copilot:** human-in-the-loop suggest/approve.
 
+**Knowledge & guardrails — Quipu + Hank (both tracks)**
+
+The governed knowledge layer, sequenced in [docs/knowledge-architecture.md](docs/knowledge-architecture.md).
+
+- **K1–K3 — Quipu:** datalinks read path (parse `alphax.txt` → SHACL-governed `smac:` facts →
+  Quipu-sourced static briefing), per-turn retrieval, then bitemporal learned memory (a tactic
+  learned in game N surfaces in game N+1). *Exit: prompts are annotated from a governed KB and
+  memory carries across games.*
+- **K4–K6 — Hank:** engine-mechanics grounding (promote engine scoring functions into Quipu),
+  dev-time code guardrails, then the hot in-memory game-state graph + policy-guard + what-if
+  harness. *Blocked-partial:* depends on Hank Phase 4 and net-new non-code ingestion.
+
 ## 8. Prior art for the deterministic tier
 
 GLSMAC has no AI; SMAC's is dated. Adapt proven work rather than inventing:
@@ -177,6 +199,10 @@ GLSMAC has no AI; SMAC's is dated. Adapt proven work rather than inventing:
 - **[Freeciv](https://github.com/freeciv/freeciv)** AI (GPL) — well-structured open 4X AI
   (autoworkers, city governors, threat models) for *design inspiration*.
 - **SMACX AI Growth mod** (Yitzi) — rules/data-level (`alphax.txt`) heuristic *values*.
+
+Those same `alphax.txt` values seed the **Quipu datalinks KB**, and **Hank** promotes the
+engines' actual scoring functions into it — so the knowledge layer is grounded in the
+deterministic tier's own logic, not a paraphrase.
 
 ## 9. Open questions & risks
 

@@ -93,7 +93,11 @@ omitted (the orchestrator treats missing sections as "not available on this engi
 - Orders reference `action_id`s from the world view's `action_space` — the adapter looks each
   up and applies it. Unknown/duplicate ids are ignored (belt-and-suspenders; the engine
   validates too).
-- `notes` becomes next turn's `memory`.
+- `notes` is a **volatile scratchpad, not the store of record.** The orchestrator distills it
+  into the Quipu knowledge layer each turn; next turn's `memory` is *synthesized by retrieval*
+  from that governed bitemporal store rather than carried verbatim. The wire field is unchanged —
+  only its semantics move (see [knowledge-architecture.md](knowledge-architecture.md) and
+  [learned-memory.md](learned-memory.md)).
 - **Degradation:** if the orchestrator times out / errors / exceeds budget, it returns the
   safe fallback (`end_turn` where present, else the deterministic default) rather than
   failing — the game never stalls waiting on the brain.
@@ -105,6 +109,28 @@ governors, default production). It only calls `/decide` for scopes the LLM shoul
 policy each turn, plus any unit/base the LLM elects to **drill down** on. The orchestrator can
 signal drill-down by returning a `focus` list in `notes`/orders (to be specified as the tiers
 land). This keeps LLM calls to a handful per turn.
+
+## Knowledge layer & guardrails
+
+The `action_space` is the **legality guardrail** and stays the last word on what's *possible*.
+Layered on top, without changing the wire format:
+
+- **Knowledge (Quipu).** Before building the prompt, the orchestrator retrieves engine-filtered
+  datalinks (rules), learned tactics, and opponent patterns from a governed bitemporal knowledge
+  graph and *annotates* the existing options — it never adds or removes actions. The static
+  briefing is sourced from this KB; per-turn fetches are bounded to the items in this turn's
+  `action_space`.
+- **Policy guard (Hank).** After the LLM proposes orders (already drawn from `action_space`), the
+  orchestrator evaluates them against governed strategic/house-rule policies over a hot in-memory
+  copy of the board: `deny` violations are stripped and returned for bounded repair, `warn`
+  violations become advisories. This is a *strategic* guardrail that **complements, never
+  replaces** the engine's legality gate — it can only subtract or annotate *legal* orders.
+- **Precedence** (highest wins): engine legality (`action_space`) > Hank deny-policies >
+  canonical datalinks > engine-observed (Hank-promoted) > house-rule > learned tactic.
+
+Both layers are optional and degrade safely: if Quipu/Hank are unreachable, the orchestrator
+plays from the cached static briefing and the engine's `action_space` alone. Full design in
+[knowledge-architecture.md](knowledge-architecture.md).
 
 ## Per-engine mapping (summary)
 

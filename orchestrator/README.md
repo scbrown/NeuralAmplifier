@@ -10,10 +10,17 @@ for the log. It is engine-agnostic: the same code drives the Thinker and GLSMAC 
 ## Responsibilities
 
 - Prompt assembly (static briefing + per-turn world view + memory).
+- **Knowledge retrieval** — pull engine-filtered datalinks, learned tactics, and opponent
+  patterns from Quipu to annotate the prompt (optional; degrades to the cached briefing).
 - Tool-use loop, retries, streaming, and API-key/secrets handling.
 - Move validation against the versioned world-view schema (never emit an illegal action).
-- Turn-to-turn strategic memory.
+- **Policy guard** — check proposed orders against Hank's governed strategic/house-rule policies
+  before applying (optional; complements the engine's `action_space` legality gate).
+- Turn-to-turn strategic memory, backed by the Quipu bitemporal store (not a free-text string).
 - Safe degradation (`end_turn`) on timeout, error, or budget exhaustion.
+
+> The Quipu (knowledge) and Hank (guardrail) dependencies are **optional** and degrade safely —
+> unreachable services never block a turn. Design: [../docs/knowledge-architecture.md](../docs/knowledge-architecture.md).
 
 ## Develop
 

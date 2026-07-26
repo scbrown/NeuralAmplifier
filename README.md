@@ -110,6 +110,13 @@ brain never knows which game it's driving — it speaks one [contract](docs/cont
         └───────────────────────────────┘
 ```
 
+Two sibling services layer on **knowledge** and **guardrails**: [Quipu](https://github.com/scbrown/quipu)
+is a governed bitemporal graph holding the SMAC datalinks and the brain's learned strategy across
+games; [Hank](https://github.com/scbrown/hank) is a hot in-memory graph that runs strategic
+policy checks and what-if analysis on the live board. The engine's `action_space` stays the hard
+legality gate; the knowledge layer only annotates, constrains, and remembers. Design:
+**[docs/knowledge-architecture.md](docs/knowledge-architecture.md)**.
+
 Full design — the contract Claude speaks, the two-engine strategy, and the roadmap — lives in
 **[VISION.md](VISION.md)**.
 
