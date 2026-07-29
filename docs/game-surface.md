@@ -1,0 +1,272 @@
+# The Game Surface
+
+An inventory of every decision *Alpha Centauri* asks a faction to make, so we can answer one
+question precisely: **which parts of the game can our AI actually play?**
+
+Without this, "Claude plays a faction" is unfalsifiable. With it, coverage is a number.
+
+Grounded in the Thinker fork at [`scbrown/thinker`](https://github.com/scbrown/thinker); all
+`file:line` citations are `src/...` in that tree unless noted. Companions:
+[thinker-adapter-notes.md](thinker-adapter-notes.md) (hooks and slot modes),
+[headless-harness.md](headless-harness.md) (dialogs and unattended runs),
+[contract.md](contract.md) (the `scope` / `action_space` vocabulary).
+
+---
+
+## 1. Three kinds of coverage
+
+These get conflated, and only the third is measurable:
+
+1. **Surface coverage** — does the adapter handle this decision *at all*, or does it fall
+   through to the deterministic tier? Design state; the tables below.
+2. **Tier coverage** — deterministic or LLM-routed? Per VISION §4 both are legitimate; what
+   matters is that the assignment is *deliberate* rather than accidental.
+3. **Exercise coverage** — did a real run actually *hit* this surface? A surface can be fully
+   implemented and never fire in any test.
+
+### Surface instrumentation
+
+Give every surface a stable ID (`base.production`, `unit.design`, `faction.tech`,
+`diplo.treaty_break`, …) and have each adapter hook emit its ID into the decision log. A
+headless run then yields a **coverage report** for free: which surfaces fired, how often, and
+which never fired. That turns vague questions into harness assertions:
+
+- "Did this scenario exercise unit design?" → assert `unit.design` count > 0
+- "Are we regressing?" → diff surface sets between runs
+- "Is a surface dead?" → implemented but never fires; the scenario is wrong or the hook is misplaced
+
+It also makes canned-save design deliberate: a coastal start for naval and sea colonies, a
+contact-heavy save for diplomacy, a late-game save for secret projects and transcendence. Each
+save targets **named** surfaces instead of being whatever state was lying around.
+
+---
+
+## 2. The turn spine
+
+Decision *ordering* is fixed by `mod_faction_upkeep` (`game.cpp:1557`, installed at
+`patch.cpp:511`). Any per-turn LLM policy call has to fit this sequence:
+
+```text
+mod_faction_upkeep(faction_id)              game.cpp:1557    [per faction, per turn]
+ ├─ plans_upkeep                            :1562   AI strategic plan state (plan.cpp:432)
+ ├─ social_upkeep                           :1566   commit pending SE
+ ├─ mod_repair_phase                        :1568
+ ├─ mod_production_phase                    :1570   → per base: mod_base_upkeep (base.cpp:4045)
+ ├─ mod_allocate_energy                     :1572   econ/labs/psych sliders
+ ├─ enemy_diplomacy                         :1574   ← AI↔AI diplomacy (opaque engine fn)
+ ├─ enemy_strategy                          :1576
+ ├─ mod_social_ai                           :1584   SE model choice
+ ├─ probe_upkeep / move_upkeep              :1585-6
+ ├─ corner-market check                     :1589   AI-only (!is_human)
+ ├─ mod_tech_selection                      :1622   research target (when tech_research_id < 0)
+ └─ call_council                            :1636   AI-only (!is_human)
+```
+
+Per-unit orders fire separately as the engine iterates units (`mod_enemy_turn`
+`veh_turn.cpp:4` → `mod_enemy_move` `veh_turn.cpp:137`). So **faction policy** lives in
+`mod_faction_upkeep` and **unit drill-down** in `mod_enemy_move` — matching the contract's
+`turn` / `unit` / `base` scopes.
+
+---
+
+## 3. Coverage matrix
+
+Legend — **AI**: ✅ engine/Thinker path exists · ⚠️ exists but asymmetric · ❌ human-dialog only.
+**Tier**: D = deterministic tier suffices · L = LLM should own · D+L = deterministic default,
+LLM drills down.
+
+### 3.1 Base & economy — scope `base`
+
+| Surface | AI | Path | Tier |
+|---|:--:|---|:--:|
+| `base.production` | ✅ | `mod_base_build` base.cpp:1145 → `select_build` build.cpp:810 | D+L |
+| `base.queue` | ✅ | `base_queue` base.cpp:1276 | D |
+| `base.hurry` | ✅ | `mod_base_hurry` build.cpp:40 → `hurry_item` :214 | D+L |
+| `base.workers` | ✅ | `mod_base_yield` base.cpp:1834; `base_radius` :1733 | D |
+| `base.specialists` | ✅ | `pick_specialist` base.cpp:4577, `best_specialist` :4600 | D |
+| `base.psych` | ✅ | `mod_base_psych` base.cpp:2400 | D |
+| `base.facility` | ✅ | `select_build` build.cpp:810; `can_build` base.cpp:4701 | D+L |
+| `base.project` | ✅ | `find_project` build.cpp:349; `facility_score` plan.cpp:8 | **L** |
+| `base.satellite` | ✅ | `find_satellite` build.cpp:284 | D |
+| `base.staple` | ⚠️ | `consider_staple` build.cpp:232 — **skipped for player bases** (base.cpp:1152) | L |
+| `base.drone_riot` | ✅ | `mod_base_drones` base.cpp:2882 → `mod_drone_riot` :2808 | D |
+| `base.growth` | ✅ | `mod_base_growth` base.cpp:2669 (deterministic, no chooser) | D |
+| `base.defend_goal` | ✅ | `move_upkeep` move.cpp:1078-1090 | D |
+| `base.support` | ✅ | `mod_base_check_support` base.cpp:1530 | D |
+| `base.capture` | ✅ | `mod_capture_base` base.cpp:399 | D+L |
+| `base.hq_relocate` | ✅ | `find_relocate_base` base.cpp:45 (`conf.auto_relocate_hq`) | D |
+| `base.name` | ✅ | `mod_name_base` game.cpp:2075 | D |
+| `base.abandon` | ❌ | AI returns early base.cpp:3325 — **"ABANDONBASE" is human-only** | **L** |
+| `base.governor_config` | ❌ | `gov_config()` returns `~0u` for AI (engine_base.h:248) — **no AI policy exists** | **L** |
+| `base.hq_escape` | ❌ | `X_pop("ESCAPE")` base.cpp:515 — human single-player only; others auto-`true` :513 | **L** |
+| `base.disband` | ❌ | `mod_base_kill` base.cpp:224 — no deliberate AI caller | L |
+| `base.retool` | ❌ | penalty applies to humans only (base.cpp:1045, build.cpp:11) | L |
+| `econ.energy_sliders` | ⚠️ | `mod_allocate_energy` game.cpp:1902 — **returns early for humans** :1908 | **L** |
+| `econ.commerce` | ✅ | passive; base.cpp:2142-2184 | — |
+| `econ.corner_market` | ⚠️ | game.cpp:1589 — **AI-only** (`!is_human`) | L |
+
+### 3.2 Units, military, terraforming — scope `unit`
+
+| Surface | AI | Path | Tier |
+|---|:--:|---|:--:|
+| `unit.turn_order` | ✅ | `mod_enemy_turn` veh_turn.cpp:4 (10-pass priority loop :6-67) | D |
+| `unit.dispatch` | ✅ | `mod_enemy_move` veh_turn.cpp:137; table :164-190 | D+L |
+| `unit.move` | ✅ | `action_go_to` veh_action.cpp:449; `TileSearch` path.cpp:5-232 | D |
+| `unit.attack` | ✅ | `combat_move` move.cpp:2931; `battle_priority` :211, `best_odds` :3096 | D+L |
+| `unit.design` | ⚠️ | `design_units` plan.cpp:103 — **hard-returns for humans** plan.cpp:104 | **L** |
+| `unit.upgrade` | ✅ | `mod_upgrade_prototype` veh.cpp:2266; driver plan.cpp:131-193 | D |
+| `unit.retire` | ✅ | `retire_proto` plan.cpp:220 (≥60 designs) | D |
+| `former.item` | ✅ | `former_move` move.cpp:2047 → `select_item` :1803 | D |
+| `former.terraform` | ✅ | `action_terraform` veh_action.cpp:154 | D |
+| `colony.found` | ✅ | `colony_move` move.cpp:1405; `base_tile_score` :1340 | **L** |
+| `colony.sea` | ✅ | triad branch move.cpp:1422-1424 | L |
+| `probe.action` | ⚠️ | `probe` probe.cpp:327; AI block :954-1055 — **sabotage targets hardcoded** :1066 | **L** |
+| `transport.move` | ✅ | `trans_move` move.cpp:2448; `invasion_plan` :646 | D+L |
+| `air.ops` | ✅ | in `combat_move` move.cpp:2988-3002 | D |
+| `air.fuel` | ✅ | veh_action.cpp:3101-3160 (AI always returns home :3132) | D |
+| `unit.airdrop` | ✅ | `airdrop_move` move.cpp:2864 | D |
+| `unit.artillery` | ✅ | first turn pass veh_turn.cpp:13-17; fire move.cpp:3395-3420 | D |
+| `unit.retreat` | ✅ | `escape_move` path.cpp:552 (no human equivalent) | D |
+| `crawler.convoy` | ✅ | `crawler_move` move.cpp:1223 → `want_convoy` :1167 | D |
+| `native.move` | ✅ | `mod_alien_move` veh_turn.cpp:251; `mod_alien_fauna` :568 | D |
+| `unit.monolith` | ✅ | AI auto in `veh_skip` veh.cpp:2668-2672 | D |
+| `unit.pod` | ✅ | `mod_goody_box` veh.cpp:1145 | D |
+| `unit.artifact` | ✅ | `artifact_move` move.cpp:2204 | D+L |
+| `unit.psi_gate` | ✅ | move.cpp:3431-3461, `teleport_score` :131 | D |
+| `unit.planet_buster` | ✅ | `nuclear_move` move.cpp:2701 | **L** |
+| `unit.odp_attack` | ❌ | `action_sat_attack` basewin.cpp:43 — **no AI caller** | L |
+| `unit.tectonic/fungal` | ❌ | `action_tectonic` veh_action.cpp:1452, `action_fungal` :1537 — **no caller at all** | L |
+| `unit.patrol` | ❌ | `valid_patrol` veh_action.cpp:1241 — no Thinker caller | D |
+| `unit.disband` | ❌ | `action_destruct` veh_action.cpp:1174 — no AI caller | L |
+| `unit.gift` | ❌ | `action_give` veh_action.cpp:1649 — engine diplomacy only | L |
+| `unit.obliterate` | ❌ | `action_oblit` veh_action.cpp:1210 — no Thinker caller | **L** |
+
+### 3.3 Faction level — scope `turn`
+
+| Surface | AI | Path | Tier |
+|---|:--:|---|:--:|
+| `faction.tech` | ✅ | `mod_tech_ai` tech.cpp:613; scoring `mod_tech_val` :366 | **L** |
+| `faction.tech_steal` | ✅ | `steal_tech` faction.cpp:744 | L |
+| `faction.se` | ⚠️ | `mod_social_ai` faction.cpp:1458 — **hard-returns for humans** :1463 | **L** |
+| `faction.agenda` | ✅ | `mod_setup_player` faction.cpp:1798 | — |
+| `diplo.declare_war` | ✅ | `mod_wants_to_attack` faction.cpp:1731 → `evaluate_attack` :1548 | **L** |
+| `diplo.treaty_break` | ✅ | `break_treaty` faction.cpp:534 (popups :546-558 return-value gated) | L |
+| `diplo.atrocity` | ✅ | `atrocity` faction.cpp:398, `major_atrocity` :487 | L |
+| `diplo.ai_to_ai` | ⚠️ | `enemy_diplomacy` engine.cpp:808 — **opaque engine fn, never overridden** | observe only |
+| `diplo.tech_trade` | ❌ | `mod_buy_tech` gui_dialog.cpp:481 — asserts `!is_human(faction2)`; **human-initiated only** | **L** |
+| `diplo.energy_loan` | ❌ | `mod_energy_trade` gui_dialog.cpp:352-397 — same assert :77 | L |
+| `diplo.base_swap` | ❌ | `mod_base_swap` gui_dialog.cpp:207 — same assert | L |
+| `diplo.treaty_offer` | ❌ | `propose_pact`/`propose_treaty` engine.cpp:748-749 — raw ptrs, no override | **L** |
+| `diplo.surrender` | ❌ | no AI function; Thinker only throttles the dialog base.cpp:950-970 | L |
+| `diplo.tribute` | ❌ | `demand_withdrawal` engine.cpp:755 etc. — no Thinker logic | L |
+| `diplo.map_trade` | ❌ | `trade_maps` engine.cpp:747 — pure engine | L |
+| `council.call` | ⚠️ | `call_council` game.cpp:1636 — **AI-only**; human gets only "COUNCILOPEN" :1633 | L |
+| `council.vote` | ❌ | `council_get_vote` engine.cpp:683 — **zero call sites anywhere in Thinker** | **L** |
+| `council.buy_vote` | ❌ | `buy_council_vote` engine.cpp:743 — decision opaque | L |
+| `victory.diplomatic` | ✅ | `aah_ooga` faction.cpp:888; `at_climax` :944 (false for humans) | L |
+| `victory.conquest` | ✅ | `end_of_game` game.cpp:1222 | L |
+
+### 3.4 Interrupts & events
+
+Random events, warming, volcanoes, pods and native life execute **identically for AI and human**
+— only the `POP2`/`popp` call is gated on `is_player`/`is_visible` (`game.cpp:255` picks a base
+across all factions). Two exceptions are genuine mechanical asymmetries, not presentation:
+global warming accumulation (`base.cpp:3205`) and colony-pod base disbanding (`base.cpp:3325`).
+
+Full popup catalogue and the blocking-dialog inventory live in
+[headless-harness.md](headless-harness.md) §4.
+
+---
+
+## 4. The gap list
+
+**Surfaces with no AI path.** These are invisible to a faction on an AI slot and have no engine
+heuristic to copy — so the LLM tier must own them outright, or they are fork work. Ordered by
+how much they cost us:
+
+1. **`unit.design` — the Unit Workshop.** `design_units` hard-returns for humans
+   (`plan.cpp:104`). In Mode B/B+ *nothing* designs our units. Biggest single gap, and one of
+   the two decisions VISION explicitly wants the knowledge layer to sharpen.
+2. **`council.vote`.** `council_get_vote` (`engine.cpp:683`) has **zero call sites** in the
+   entire fork — verified by grep. The whole Planetary Council voting decision is opaque.
+3. **`base.governor_config`.** 21 permission bits per base, `~0u` for AI (`engine_base.h:248`).
+   No AI policy exists because the AI never needs one.
+4. **The AI-negotiation tree is one-directional.** `mod_threaten`, `mod_base_swap`,
+   `mod_energy_trade`, `mod_buy_tech` all assert `!is_human(faction2)` (`gui_dialog.cpp:77`) —
+   they only run with a *human* as the proposer. There is **no AI-initiated** buy-tech, loan, or
+   base purchase. Claude proposing a deal is net-new.
+5. **`diplo.treaty_offer` / `surrender` / `tribute` / `map_trade`.** All raw engine pointers with
+   no Thinker override and no `is_human` branch anywhere.
+6. **`econ.energy_sliders` and `faction.se` for a human faction.** Both early-return
+   (`game.cpp:1908`, `faction.cpp:1463`). The AI heuristics exist and are portable — the cheapest
+   fixes on this list.
+7. **`unit.tectonic` / `unit.fungal`.** No caller anywhere; AI factions never fire these.
+8. **`unit.odp_attack`, `unit.obliterate`, `unit.gift`, `unit.disband`, `base.abandon`,
+   `base.hq_escape`, `base.retool`.** Human-dialog-only decisions with real stakes.
+9. **`probe.action` sub-menus.** The human gets ~15 dialogs; the AI collapses to one branch chain
+   with a **hardcoded** sabotage target list (`probe.cpp:1066`).
+
+---
+
+## 5. Rule asymmetries (the fairness ledger)
+
+Not UI differences — **different rules**. This is why a Mode A result is not a fair result
+(see [thinker-adapter-notes.md](thinker-adapter-notes.md) §5.0). Every LLM-routed faction should
+either neutralise these or record them in the world view:
+
+| Asymmetry | Where | Favours |
+|---|---|---|
+| Unit support bonus | base.cpp:1645 | AI |
+| Facility maintenance discount | game.cpp:1846-1859 | AI |
+| Tech cost factor | tech.cpp:1155 | AI |
+| Terraform speed | veh_action.cpp:210 | AI |
+| Mind-control cost | probe.cpp:713 | AI |
+| Combat modifiers | veh_combat.cpp:1558-1567 | AI |
+| Content population | base.cpp:4220 (`content_pop_player` vs `_computer`) | either |
+| Starting units | faction.cpp:1759-1760, 2234-2235 | config |
+| **Retool penalty — AI pays none** | base.cpp:1045, build.cpp:11 | AI |
+| **Global warming — AI below Transcend doesn't accumulate** | base.cpp:3205 | AI |
+| Mineral carry-over cap | base.cpp:3382, 3655 | AI |
+| Project race-blocking | base.cpp:3639-3652 | human |
+| Eco-damage rollback | base.cpp:3118-3124 | AI |
+| Former automation restrictions | move.cpp:1533-1988 | AI |
+
+---
+
+## 6. Config knobs that move ownership
+
+Which side owns a decision is partly configurable (`struct Config`, `main.h:205+`):
+
+| Option | Line | Effect |
+|---|---|---|
+| `manage_player_bases` | main.h:225 | Thinker drives **human** bases (base.cpp:991, build.cpp:55) |
+| `manage_player_units` | main.h:225 | Thinker drives **human** units set to automated (move.cpp:2074) |
+| `factions_enabled` | thinker.ini:90 | Which factions get Thinker's AI at all |
+| `base_hurry` | main.h:233 | 0 = no auto-hurry, 1 = units/facilities, 2 = also projects |
+| `social_ai` / `social_ai_bias` | main.h:230-231 | SE model choice (AI factions only) |
+| `design_units` | main.h:62 | Enables `design_units` (AI factions only) |
+| `skip_gov_facility` | main.h:378 | Per-facility blacklist, **player governor only** |
+| `warn_on_former_replace` | main.h:224 | `0` auto-answers the "MIMIMI" dialog — the only true auto-answer stub |
+| `foreign_treaty_popup` | main.h:228 | Surfaces AI↔AI treaty changes (headless-harness.md §4.2) |
+
+`manage_player_bases` / `manage_player_units` are the two that matter most — they are what make
+**Mode B+** (fair rules *plus* a deterministic tier) possible.
+
+---
+
+## 7. Open questions
+
+1. **Surface ID scheme.** The IDs above are provisional. They should be frozen before the first
+   hook emits one, since the coverage report keys on them.
+2. **Where the coverage report is asserted.** A per-run JSON artifact is easy; deciding *which*
+   surfaces a given canned save must exercise is the real design work.
+3. **Neutralising the fairness ledger.** Patch the handicap branches for LLM-routed factions, or
+   record them in the world view and accept a handicapped baseline? §5 is the full list; the
+   decision affects whether A2 proves anything.
+4. **`enemy_diplomacy` is a black box.** AI↔AI pact and vendetta decisions are unobservable from
+   source. We can see outcomes (`mod_NetMsg_pop`) but not reasoning. Accept, or reimplement?
+5. **Council coverage requires fork work.** With `council_get_vote` uncalled anywhere, giving
+   Claude a vote means writing that path, not intercepting it.
+6. **Completeness.** This map is derived from the Thinker fork. Decisions that live purely in
+   `terranx.exe` with no Thinker reference (much of the diplomacy dialog tree) are listed as
+   gaps, but the list of *those* is necessarily less certain than the rest.

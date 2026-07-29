@@ -264,6 +264,9 @@ model's reasoning text. The `movedlabels` redirect in `mod_BasePop_start` is the
 *replacing* an existing game dialog (e.g. annotating the production picker) without editing the
 original game files.
 
+The full inventory of which decisions have an AI path at all — and which are dialog-only — is in
+**[game-surface.md](game-surface.md)**.
+
 This makes copilot mode (S3) far cheaper than it looks — and it is the same seam that lets us
 render *why* Claude chose something, which is the project's whole legibility pitch.
 

@@ -93,8 +93,60 @@ drill-down model exactly.
 
 ## 5. Adapter design
 
+### 5.0 Which slot Claude occupies (decide this first)
+
+Everything below depends on one bit: `is_human(faction_id)` — `FactionStatus[0] & (1 << faction_id)`
+(`faction.cpp:109-112`). It selects not just the UI but **which rules the faction plays under**.
+Three viable configurations:
+
+| | **Mode A — AI slot** | **Mode B — human slot** | **Mode B+ — human slot, managed** |
+|---|---|---|---|
+| `is_human` | false | true | true |
+| Dialogs | none fire | all fire and block | all fire and block |
+| Deterministic tier | full (Thinker AI) | **none** | bases + units (see below) |
+| Plays by fair rules | **no** — inherits AI handicaps | yes | yes |
+| Good for | unattended autonomous runs | copilot (S3) | **autonomous, fair** |
+
+**Mode A's problem is not cosmetic.** Non-human factions get a systematic handicap layer, not a
+single branch: unit support (`base.cpp:1645`), facility maintenance (`game.cpp:1846-1859`), tech
+cost (`tech.cpp:1155`), terraform speed (`veh_action.cpp:210`), mind-control cost
+(`probe.cpp:713`), combat (`veh_combat.cpp:1558-1567`), content population
+(`content_pop_player` vs `content_pop_computer`, `base.cpp:4220`), starting units
+(`faction.cpp:1759-1760, 2234-2235`). Two are outright rule differences: **AI factions pay no
+retool penalty at all** (`base.cpp:1045`, `build.cpp:11`), and AI factions below Transcend
+**do not accumulate global warming** (`base.cpp:3205`). A Mode A win does not demonstrate what
+VISION §4 claims.
+
+**Mode B+ is the resolution.** Two config switches let a *human* faction borrow Thinker's AI
+brain while keeping human rules:
+
+- `conf.manage_player_bases` (`main.h:225`) — routes human bases through `mod_base_build` /
+  `mod_base_hurry` instead of the engine's `base_reset` (`base.cpp:991`, `build.cpp:55`).
+- `conf.manage_player_units` (`main.h:225`) — lets Thinker drive human units, but only those the
+  player has set to *automated* (`veh->order_auto_type`, `move.cpp:2074-2098`).
+
+So Mode B+ gives fair rules **and** a deterministic tier. Two gaps remain, and the LLM tier must
+own them outright because no AI path executes for a human faction:
+
+- **Energy allocation** — `mod_allocate_energy` returns early for humans (`game.cpp:1908`); the
+  AI heuristic at `game.cpp:1922-2010` exists but never runs. Port it or let Claude decide.
+- **Social engineering** — `mod_social_ai` hard-returns at `faction.cpp:1463`; `conf.social_ai`
+  applies to AI factions only.
+
+Also note `BASE::gov_config()` (`engine_base.h:248`) returns `~0u` for AI but only the ticked
+bits for humans — so in Mode B/B+ the 21 governor permission flags become a real, recurring
+decision surface with **no AI policy to copy**.
+
+**Recommendation: Mode B+ for autonomous play, Mode B for copilot.** Mode A is acceptable only
+for early plumbing spikes, and any result from it should be labelled as handicapped. Full
+surface consequences in [game-surface.md](game-surface.md); dialog handling in
+[headless-harness.md](headless-harness.md) §4.
+
+### 5.1 Tiers and hooks
+
 - **Deterministic tier = Thinker's native AI.** For any decision we don't route to the LLM, the
-  hook returns Thinker's own choice. Free, fast, already good.
+  hook returns Thinker's own choice. Free, fast, already good. (In Mode B/B+ this requires the
+  `manage_player_*` switches above — otherwise there is no deterministic tier at all.)
 - **LLM tier via hooks.** For an LLM-controlled faction, wrap the clean hooks:
   - `mod_base_build` → world view (this base + faction context) + `action_space` (the base's
     buildable items) → orchestrator → apply returned build id. **Best first spike** (A1): one
