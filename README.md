@@ -59,6 +59,12 @@ copilot**.
 | Doubles as a human copilot | ❌ | ❌ | ✅ |
 | Grounded in the game's rules + real strategy, not hard-coded heuristics | ❌ | ❌ | ✅ |
 
+> **On "plays fair":** that's a design commitment, not a freebie. SMAC hands non-human factions
+> a systematic bonus layer — cheaper tech, free unit support, no retool penalty, no global
+> warming below Transcend. Neural Amplifier tracks every one of those in a
+> [fairness ledger](docs/game-surface.md#5-rule-asymmetries-the-fairness-ledger) and either
+> neutralises it or records it in the world view, so a win means something.
+
 The original game's AI is dated and leans on difficulty cheating; the open-source engine has
 **no computer opponents yet**. An LLM already understands Alpha Centauri and can weigh fuzzy,
 long-horizon strategy the way a person does — *and say so out loud*. Neural Amplifier goes
@@ -150,7 +156,8 @@ and the rollout are in the [design doc](docs/knowledge-architecture.md).
 
 > **Status: pre-alpha.** The repo currently holds the vision, architecture, and project
 > scaffold. The component tree below is where the code lands, phase by phase (see
-> [VISION.md](VISION.md) §Roadmap).
+> [VISION.md](VISION.md) §Roadmap). **Track A (Thinker) is the current focus** — it's the
+> complete, balanced game and is controllable today.
 
 ```bash
 git clone https://github.com/scbrown/NeuralAmplifier && cd NeuralAmplifier
@@ -164,11 +171,18 @@ Layout:
 ```text
 orchestrator/       Python brain — the LLM decision loop (Claude Agent SDK) · MIT
 adapters/
-  thinker/          Near-term: DLL bridge to terranx.exe (MIT)
+  thinker/          Current focus: DLL bridge to terranx.exe (MIT)
   glsmac/           Long-term: .gls.js mod + GSE http builtin (AGPL boundary)
-docs/               contract.md, adapter notes, knowledge-architecture.md,
-                    strategy-knowledge.md, ontology/, and the Quipu/Hank integration docs
+docs/               contract.md         the world-view / action-space interface
+                    game-surface.md     every decision the game asks + AI coverage matrix
+                    headless-harness.md game fixture + running unattended
+                    building-and-testing.md, adapter notes, knowledge-architecture.md,
+                    strategy-knowledge.md, ontology/, Quipu/Hank integration docs
 ```
+
+**Want to run a real game?** You bring your own copy of *Alpha Centauri* — see
+[CONTRIBUTING.md](CONTRIBUTING.md#the-game-fixture-bring-your-own-smac). Building, linting, and
+the whole test suite run with **no game present**.
 
 ## 🛠️ Development
 
@@ -189,8 +203,9 @@ documented in **[docs/building-and-testing.md](docs/building-and-testing.md)**.
 
 ## 🤝 Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for setup and guidelines, and [AGENTS.md](AGENTS.md)
-if you're an AI agent working in this repo.
+See [CONTRIBUTING.md](CONTRIBUTING.md) for setup, the game fixture, and how to implement
+against the design. If you're an AI agent working in this repo, start with
+[AGENTS.md](AGENTS.md) — it has a "before you implement" doc map and the design invariants.
 
 ## 📄 License
 

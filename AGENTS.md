@@ -2,10 +2,54 @@
 
 ## Project Overview
 
-An LLM brain for [GLSMAC](https://github.com/afwbkbc/glsmac) (open-source Alpha Centauri).
-Each turn, a thin `.gls.js` mod snapshots the board and sends it — via a small GSE HTTP
-builtin — to an external Python orchestrator that calls Claude and returns validated moves.
-See [VISION.md](VISION.md) for the full design and roadmap.
+An LLM brain for *Sid Meier's Alpha Centauri*. Each turn an engine adapter hands Claude a
+fog-limited **world view** plus a menu of **legal actions**; Claude reasons and returns orders;
+the engine validates and executes them. One platform-agnostic brain, two engine adapters, one
+JSON [contract](docs/contract.md). See [VISION.md](VISION.md) for the full design and roadmap.
+
+**Current focus: the Thinker adapter** (Track A) — the original `terranx.exe` driven through a
+Thinker fork. It is the complete, balanced game and is controllable now. GLSMAC (Track B) is the
+long-term open platform but most of its game systems don't exist yet. Don't assume GLSMAC.
+
+**Status: pre-alpha.** The repo holds design docs and scaffold; no component has landed yet.
+Read the design before writing code — it is source-grounded and will save you a day.
+
+## Before You Implement
+
+| If you're working on… | Read first |
+|---|---|
+| Anything at all | [VISION.md](VISION.md), [docs/contract.md](docs/contract.md) |
+| A Thinker hook, or choosing which faction slot Claude drives | [docs/thinker-adapter-notes.md](docs/thinker-adapter-notes.md) — esp. §5.0 slot modes |
+| Running the game unattended, dialogs, or the SMAC game fixture | [docs/headless-harness.md](docs/headless-harness.md) |
+| Deciding what an AI player must cover, or adding a decision hook | [docs/game-surface.md](docs/game-surface.md) |
+| Tests, CI lanes, or fixtures | [docs/building-and-testing.md](docs/building-and-testing.md) |
+| A GLSMAC mod or the GSE builtin | [docs/glsmac-integration-notes.md](docs/glsmac-integration-notes.md) |
+| Knowledge, memory, or guardrails | [docs/knowledge-architecture.md](docs/knowledge-architecture.md) |
+
+## Design Invariants
+
+Break these and the project stops being what it claims to be. They are not style preferences.
+
+1. **The engine is authoritative.** Claude picks from the engine-supplied `action_space` and
+   never invents an action. An illegal order must be impossible, not merely unlikely.
+2. **One contract.** The orchestrator speaks only [docs/contract.md](docs/contract.md) and must
+   never learn which engine it is driving. Engine specifics stay in the adapter.
+3. **Keep the adapter thin.** Reusable logic belongs in the orchestrator, which is unit-testable
+   with no game. The DLL/mod serializes state and applies a choice — nothing more.
+4. **Assign the tier deliberately.** Every decision is either deterministic tier or LLM tier.
+   Accidental assignment is a bug; record it in [docs/game-surface.md](docs/game-surface.md).
+5. **Emit a surface ID from every decision hook.** Coverage is measured, not assumed — see
+   [docs/game-surface.md](docs/game-surface.md) §1.
+6. **Don't accept the AI handicaps silently.** Non-human factions get a systematic bonus layer
+   (fairness ledger, [docs/game-surface.md](docs/game-surface.md) §5). Either neutralise it or
+   record it in the world view. VISION §4 commits to no cheating.
+7. **Intercept in-game dialogs; never blanket-suppress them.** They are decision points. Only
+   Thinker's *fatal error* `MessageBoxA` should be suppressed
+   ([docs/headless-harness.md](docs/headless-harness.md) §4).
+8. **Never commit game assets.** SMAC data is copyrighted. The repo holds a checksum manifest;
+   the bytes live in `$SMAC_DIR` outside the tree.
+9. **Degrade safely.** A slow, broken, or over-budget model returns the safe fallback. The game
+   never stalls waiting on the brain.
 
 ## Repository Layout
 

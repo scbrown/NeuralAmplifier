@@ -34,9 +34,51 @@ just play thinker GAIANS     # Full loop for an engine (thinker | glsmac)
    its build deps (SDL2, GL/GLU/GLEW, FreeType, yaml-cpp, uuid). Point `just` at it with
    `GLSMAC_DIR=/path/to/glsmac`. Headless logic tests use GLSMAC's own `--gse-tests` path — no
    display needed. See [docs/glsmac-integration-notes.md](docs/glsmac-integration-notes.md).
-6. For the **Thinker adapter**: the Thinker fork and its 32-bit MinGW/MSVC toolchain; runs
-   under Windows or Wine. See [docs/thinker-adapter-notes.md](docs/thinker-adapter-notes.md).
-7. Run `just setup` to install git hooks.
+6. For the **Thinker adapter** (the current focus): the Thinker fork and a 32-bit MinGW
+   toolchain — `apt install build-essential cmake g++-mingw-w64-i686-posix`. Cross-compiles on
+   Linux; the game itself runs under Windows or Wine. See
+   [docs/thinker-adapter-notes.md](docs/thinker-adapter-notes.md).
+7. For **running the actual game**: your own copy of *Alpha Centauri* — see the game fixture
+   below. Not needed to build, lint, or run the test suite.
+8. Run `just setup` to install git hooks.
+
+## The Game Fixture (bring your own SMAC)
+
+Running a real game needs **Alien Crossfire v2.0 `terranx.exe`** — Thinker verifies the binary
+and refuses anything else. The check is one command:
+
+```bash
+sha1sum terranx.exe   # want: 4b19c1fe3266b5ebc4305cd182ed6e864e3a1c4a
+```
+
+Extract your install once to a directory outside the repo and point the harness at it with
+`SMAC_DIR=/path/to/smac`. **Game data is copyrighted and must never be committed** — the repo
+holds only a checksum manifest. Steam's Planetary Pack is the expected source; a physical-media
+ISO works too but ships v1.0 and needs the official v2.0 patch. Full detail, including why the
+ISO path is worth keeping, is in [docs/headless-harness.md](docs/headless-harness.md) §2.
+
+Everything in the default CI lane — orchestrator tests, linting, and the `thinker.dll`
+cross-compile — runs with **no game present**. Only integration runs need the fixture.
+
+## Implementing the Design
+
+The design is written down and source-grounded; please read before building.
+
+- **[AGENTS.md](AGENTS.md)** has a "before you implement" doc map and the nine design
+  invariants. Start there — the invariants are load-bearing, not style preferences.
+- **Work contract-first.** New capability usually means extending
+  [docs/contract.md](docs/contract.md) first, then the adapter, then the orchestrator. The
+  contract is versioned so engines can differ; a field an engine lacks is *omitted*, not faked.
+- **Push tests down.** Most logic belongs in the orchestrator, where it tests against fixtures
+  with no game and no tokens. Reserve real-game runs for harvesting fixtures and catching
+  integration drift — see [docs/building-and-testing.md](docs/building-and-testing.md).
+- **Adding a decision hook?** Give it a stable surface ID and add the row to
+  [docs/game-surface.md](docs/game-surface.md), including its tier and whether an engine AI path
+  exists. That table is how we know what an AI player can and cannot do.
+- **Touching a Cargo/CMake feature or a CI lane?** Wire it into CI in the same change — a
+  feature that ships dark isn't shipped.
+- **Record what you couldn't verify.** These docs cite `file:line` and are explicit about
+  inference vs. fact. Keep that habit; a confident wrong citation costs more than a gap.
 
 ## Pre-Commit Hooks
 
