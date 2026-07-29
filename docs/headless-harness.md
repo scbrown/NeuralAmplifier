@@ -197,6 +197,11 @@ parallel AI decision path, so nothing is only reachable via a dialog.
 for input. This is what **copilot mode** (VISION §7, S3) actually is, and there the dialogs are
 the point.
 
+**Mode B+** — a human slot with `conf.manage_player_bases` / `manage_player_units` enabled —
+keeps fair rules *and* restores a deterministic tier, and is the recommended configuration for
+autonomous play. The slot-mode decision is owned by
+[thinker-adapter-notes.md](thinker-adapter-notes.md) §5.0; treat that as authoritative.
+
 > **Fairness sting — worth resolving early.** AI slots receive difficulty handicaps and bonuses
 > that human slots don't: e.g. `conf.unit_support_bonus[*DiffLevel]` applies only when
 > `!is_human` (`src/base.cpp:1645`), alongside many other `is_human` branches. VISION §4 commits
@@ -320,10 +325,13 @@ cycle, and it de-risks step 3 by removing the toolchain from the list of unknown
 
 ## 7. Open questions
 
-1. **Which slot does Claude occupy, and when?** Mode A (AI slot) is the clean unattended path
-   but inherits AI difficulty bonuses; Mode B (human slot) is fair but every dialog blocks.
-   Likely answer: **Mode A for autonomous play with the handicap branches neutralised**, Mode B
-   for copilot. Resolving §4.1's fairness sting is a prerequisite for A2 meaning anything.
+1. ~~**Which slot does Claude occupy?**~~ **Resolved** — see
+   [thinker-adapter-notes.md](thinker-adapter-notes.md) §5.0. A third option exists: **Mode B+**
+   (human slot with `conf.manage_player_bases` / `manage_player_units`) gives fair rules *and* a
+   deterministic tier. Recommendation is B+ for autonomous, B for copilot, A for plumbing spikes
+   only. What remains open is §4.1's fairness sting itself — whether to neutralise the handicap
+   branches or record them — tracked in
+   [game-surface.md](game-surface.md) §7.3.
 2. **The other human slot.** A normal game still has a human faction. If Claude runs an AI slot
    unattended, does the remaining human slot still raise blocking popups — and what occupies
    it? Investigate `auto_play_callback` (`0x50E890`, `src/engine.cpp:638`), which looks like
