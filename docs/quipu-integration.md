@@ -106,7 +106,9 @@ Run each turn, kept small:
 > The working equivalent is a `||` disjunction — `FILTER(?x = "a" || ?x = "b")` — which
 > `datalinks/quipu.py` builds. `OPTIONAL` and property paths do work. Either the queries below
 > get rewritten as disjunctions, or Quipu grows `VALUES`; until then, treat every `VALUES` and
-> `IN` in this document as pseudocode for the disjunction.
+> `IN` in this document as pseudocode for the disjunction. Filed upstream as
+> [quipu#51](https://github.com/scbrown/quipu/issues/51) and
+> [quipu#52](https://github.com/scbrown/quipu/issues/52).
 
 ## Semantic retrieval is blocked on an embedding model
 
@@ -134,7 +136,7 @@ dimension = 384
 **And the model files have to get there.** `huggingface.co` is not on the Claude Code cloud
 [Trusted allowlist](https://code.claude.com/docs/en/cloud-environments#default-allowed-domains),
 so a fetch from a cloud session times out. Either add it to a **Custom** allowlist or vendor the
-model. Until then `/context` returns zero entities against a knotted graph — it does not error,
+model. Filed upstream as [quipu#53](https://github.com/scbrown/quipu/issues/53). Until then `/context` returns zero entities against a knotted graph — it does not error,
 which is exactly the kind of quiet emptiness worth knowing about in advance.
 
 What is *not* blocked: exact-match action-space grounding (`datalinks/quipu.py`), which uses

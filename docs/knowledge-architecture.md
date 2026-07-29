@@ -223,7 +223,8 @@ tactics are optimization); bound deny-repair retries.
 > The working equivalent is a `||` disjunction — `FILTER(?x = "a" || ?x = "b")` — which
 > `datalinks/quipu.py` builds. `OPTIONAL` and property paths do work. Either the queries below
 > get rewritten as disjunctions, or Quipu grows `VALUES`; until then, treat every `VALUES` and
-> `IN` in this document as pseudocode for the disjunction.
+> `IN` in this document as pseudocode for the disjunction — [quipu#51](https://github.com/scbrown/quipu/issues/51),
+> [quipu#52](https://github.com/scbrown/quipu/issues/52).
 
 ## Honesty — what's blocked or net-new
 
