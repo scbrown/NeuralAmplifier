@@ -242,3 +242,39 @@ def test_the_retriever_satisfies_the_knowledge_seam(links) -> None:  # type: ign
 
     assert result.record.knowledge.quipu_hits == 1
     assert result.record.knowledge.quipu_degraded is False
+
+
+# --- mod detection ---------------------------------------------------------
+
+
+def test_a_mod_announces_itself_in_its_header() -> None:
+    """Thinker ships its own alphax.txt whose tech tree differs from stock.
+    The file is byte-for-byte the same *shape*, so the header is the only
+    signal — and once stored as canonical, nothing downstream can tell them
+    apart. This is the masquerade the tier predicate exists to stop."""
+    from neural_amplifier.datalinks import looks_modded
+
+    modded = (
+        ";\n; *  SMACX Thinker Mod / Default tech tree  *\n;\n"
+        "#TECHNOLOGY\nA, A, 0,0,0,0, None, None, 000000000\n"
+    )
+    assert looks_modded(modded) == "thinker mod"
+
+
+def test_our_synthetic_excerpt_is_not_flagged() -> None:
+    from neural_amplifier.datalinks import looks_modded
+
+    assert looks_modded(EXCERPT.read_text()) is None
+
+
+def test_the_header_stops_at_the_first_section() -> None:
+    """A `;` comment *between* sections is not part of the header, or an
+    unrelated note halfway down the file could trip the mod check."""
+    from neural_amplifier.datalinks.parse import header
+
+    text = (
+        ";\n; Stock rules\n;\n#TECHNOLOGY\n"
+        "; Thinker Mod note in the body\nA, A, 0,0,0,0, None, None, 0\n"
+    )
+    assert "Stock rules" in header(text)
+    assert "Thinker Mod" not in header(text)

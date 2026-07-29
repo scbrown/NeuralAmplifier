@@ -10,6 +10,9 @@ glsmac := env_var_or_default("GLSMAC_DIR", "../glsmac")
 # Path to your own extracted SMAC install (the game fixture — never committed)
 smac := env_var_or_default("SMAC_DIR", "../smac")
 
+# Path to a local Thinker checkout (source of the committed house-rule graph)
+thinker := env_var_or_default("THINKER_DIR", "../thinker")
+
 # Default recipe - show available commands
 default:
     @just --list
@@ -121,12 +124,23 @@ replay log="decisions.jsonl" store="worldviews" exact="false":
 
 # === Datalinks (K1) ===
 
-# Parse your SMAC install's alphax.txt into the smac: RDF graph + static briefing.
-# Deterministic — no model, no tokens. Needs SMAC_DIR.
+# Parse your SMAC install's alphax.txt into the canonical smac: graph + briefing.
+# Deterministic — no model, no tokens. Needs SMAC_DIR. Output is gitignored:
+# it is derived from copyrighted game data.
 ingest out="datalinks/smac.ttl" brief="datalinks/briefing.txt":
     @mkdir -p "$(dirname "{{out}}")"
     @cd orchestrator && uv run neural-amplifier ingest "{{smac}}/alphax.txt" \
         --out "../{{out}}" --briefing "../{{brief}}"
+
+# Regenerate the committed Thinker-sourced graph. Tagged house-rule, NOT
+# canonical — Thinker ships its own tech tree and the ingester refuses to
+# label it otherwise. Needs a thinker checkout (THINKER_DIR).
+ingest-thinker:
+    @mkdir -p datalinks/thinker
+    @cd orchestrator && uv run neural-amplifier ingest "{{thinker}}/docs/alphax.txt" \
+        --engine thinker --tier house-rule \
+        --out ../datalinks/thinker/alphax.ttl \
+        --briefing ../datalinks/thinker/briefing.txt
 
 # === Documentation ===
 

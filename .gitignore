@@ -52,7 +52,10 @@ CLAUDE.local.md
 .beads-credential-key
 .beads/proxieddb/
 
-# Generated from your own alphax.txt — derived game data, never committed.
-# Root-anchored: an unanchored `datalinks/` would also swallow the source
-# package at orchestrator/src/neural_amplifier/datalinks/.
-/datalinks/
+# Graphs generated from YOUR OWN SMAC install are derived copyrighted game
+# data and are never committed. The Thinker-sourced graph under
+# datalinks/thinker/ is committed: it comes from the MIT-licensed fork's
+# public repo and is tagged house-rule, not canonical.
+# Root-anchored so it cannot swallow orchestrator/src/neural_amplifier/datalinks/.
+/datalinks/*
+!/datalinks/thinker/

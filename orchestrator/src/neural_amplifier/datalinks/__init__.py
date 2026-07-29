@@ -3,7 +3,16 @@
 from __future__ import annotations
 
 from .briefing import DatalinksRetriever, briefing, describe
-from .parse import Component, Datalinks, Facility, Row, Technology, parse, parse_file
+from .parse import (
+    Component,
+    Datalinks,
+    Facility,
+    Row,
+    Technology,
+    looks_modded,
+    parse,
+    parse_file,
+)
 from .rdf import Provenance, turtle
 
 __all__ = [
@@ -15,6 +24,7 @@ __all__ = [
     "Row",
     "Technology",
     "briefing",
+    "looks_modded",
     "describe",
     "parse",
     "parse_file",

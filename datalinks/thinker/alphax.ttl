@@ -1,0 +1,2806 @@
+@prefix smac: <http://neuralamplifier.local/ontology/smac/> .
+@prefix tech: <http://neuralamplifier.local/ontology/smac/tech/> .
+@prefix fac:  <http://neuralamplifier.local/ontology/smac/facility/> .
+@prefix src:  <http://neuralamplifier.local/ontology/smac/source/> .
+@prefix xsd:  <http://www.w3.org/2001/XMLSchema#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+
+tech:biogen a smac:Technology ;
+    rdfs:label "Biogenetics" ;
+    smac:abbrev "Biogen" ;
+    smac:aiWeightGrowth 0 ;
+    smac:aiWeightTech 3 ;
+    smac:aiWeightWealth 2 ;
+    smac:aiWeightPower 2 ;
+    smac:flag 6 ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+tech:indust a smac:Technology ;
+    rdfs:label "Industrial Base" ;
+    smac:abbrev "Indust" ;
+    smac:aiWeightGrowth 2 ;
+    smac:aiWeightTech 1 ;
+    smac:aiWeightWealth 3 ;
+    smac:aiWeightPower 0 ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+tech:infnet a smac:Technology ;
+    rdfs:label "Information Networks" ;
+    smac:abbrev "InfNet" ;
+    smac:aiWeightGrowth 0 ;
+    smac:aiWeightTech 3 ;
+    smac:aiWeightWealth 2 ;
+    smac:aiWeightPower 1 ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+tech:physic a smac:Technology ;
+    rdfs:label "Applied Physics" ;
+    smac:abbrev "Physic" ;
+    smac:aiWeightGrowth 4 ;
+    smac:aiWeightTech 2 ;
+    smac:aiWeightWealth 1 ;
+    smac:aiWeightPower 0 ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+tech:psych a smac:Technology ;
+    rdfs:label "Social Psych" ;
+    smac:abbrev "Psych" ;
+    smac:aiWeightGrowth 0 ;
+    smac:aiWeightTech 1 ;
+    smac:aiWeightWealth 3 ;
+    smac:aiWeightPower 2 ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+tech:mobile a smac:Technology ;
+    rdfs:label "Doctrine: Mobility" ;
+    smac:abbrev "Mobile" ;
+    smac:aiWeightGrowth 2 ;
+    smac:aiWeightTech 0 ;
+    smac:aiWeightWealth 0 ;
+    smac:aiWeightPower 3 ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+tech:ecology a smac:Technology ;
+    rdfs:label "Centauri Ecology" ;
+    smac:abbrev "Ecology" ;
+    smac:aiWeightGrowth 0 ;
+    smac:aiWeightTech 1 ;
+    smac:aiWeightWealth 2 ;
+    smac:aiWeightPower 3 ;
+    smac:flag 9 ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+tech:super a smac:Technology ;
+    rdfs:label "Superconductor" ;
+    smac:abbrev "Super" ;
+    smac:aiWeightGrowth 4 ;
+    smac:aiWeightTech 2 ;
+    smac:aiWeightWealth 0 ;
+    smac:aiWeightPower 0 ;
+    smac:requiresTech tech:optcomp ;
+    smac:requiresTech tech:indust ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+tech:chaos a smac:Technology ;
+    rdfs:label "Nonlinear Mathematics" ;
+    smac:abbrev "Chaos" ;
+    smac:aiWeightGrowth 4 ;
+    smac:aiWeightTech 3 ;
+    smac:aiWeightWealth 0 ;
+    smac:aiWeightPower 0 ;
+    smac:requiresTech tech:physic ;
+    smac:requiresTech tech:infnet ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+tech:e-mc2 a smac:Technology ;
+    rdfs:label "Applied Relativity" ;
+    smac:abbrev "E=Mc2" ;
+    smac:aiWeightGrowth 1 ;
+    smac:aiWeightTech 3 ;
+    smac:aiWeightWealth 2 ;
+    smac:aiWeightPower 0 ;
+    smac:requiresTech tech:super ;
+    smac:requiresTech tech:subat ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+tech:fusion a smac:Technology ;
+    rdfs:label "Fusion Power" ;
+    smac:abbrev "Fusion" ;
+    smac:aiWeightGrowth 3 ;
+    smac:aiWeightTech 4 ;
+    smac:aiWeightWealth 3 ;
+    smac:aiWeightPower 1 ;
+    smac:requiresTech tech:algor ;
+    smac:requiresTech tech:super ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+tech:alloys a smac:Technology ;
+    rdfs:label "Silksteel Alloys" ;
+    smac:abbrev "Alloys" ;
+    smac:aiWeightGrowth 3 ;
+    smac:aiWeightTech 0 ;
+    smac:aiWeightWealth 4 ;
+    smac:aiWeightPower 2 ;
+    smac:requiresTech tech:subat ;
+    smac:requiresTech tech:indauto ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+tech:subat a smac:Technology ;
+    rdfs:label "Advanced Subatomic Theory" ;
+    smac:abbrev "Subat" ;
+    smac:aiWeightGrowth 2 ;
+    smac:aiWeightTech 3 ;
+    smac:aiWeightWealth 2 ;
+    smac:aiWeightPower 0 ;
+    smac:requiresTech tech:chemist ;
+    smac:requiresTech tech:poly ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+tech:chemist a smac:Technology ;
+    rdfs:label "High Energy Chemistry" ;
+    smac:abbrev "Chemist" ;
+    smac:aiWeightGrowth 3 ;
+    smac:aiWeightTech 1 ;
+    smac:aiWeightWealth 2 ;
+    smac:aiWeightPower 0 ;
+    smac:requiresTech tech:indust ;
+    smac:requiresTech tech:physic ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+tech:surface a smac:Technology ;
+    rdfs:label "Frictionless Surfaces" ;
+    smac:abbrev "Surface" ;
+    smac:aiWeightGrowth 1 ;
+    smac:aiWeightTech 3 ;
+    smac:aiWeightWealth 2 ;
+    smac:aiWeightPower 0 ;
+    smac:requiresTech tech:unified ;
+    smac:requiresTech tech:indrob ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+tech:metal a smac:Technology ;
+    rdfs:label "Nanometallurgy" ;
+    smac:abbrev "Metal" ;
+    smac:aiWeightGrowth 1 ;
+    smac:aiWeightTech 1 ;
+    smac:aiWeightWealth 0 ;
+    smac:aiWeightPower 3 ;
+    smac:requiresTech tech:probmec ;
+    smac:requiresTech tech:docinit ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+tech:string a smac:Technology ;
+    rdfs:label "Superstring Theory" ;
+    smac:abbrev "String" ;
+    smac:aiWeightGrowth 3 ;
+    smac:aiWeightTech 2 ;
+    smac:aiWeightWealth 0 ;
+    smac:aiWeightPower 1 ;
+    smac:requiresTech tech:chaos ;
+    smac:requiresTech tech:cyber ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+tech:milalg a smac:Technology ;
+    rdfs:label "Advanced Military Algorithms" ;
+    smac:abbrev "MilAlg" ;
+    smac:aiWeightGrowth 3 ;
+    smac:aiWeightTech 0 ;
+    smac:aiWeightWealth 1 ;
+    smac:aiWeightPower 2 ;
+    smac:requiresTech tech:adapdoc ;
+    smac:requiresTech tech:optcomp ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+tech:magnets a smac:Technology ;
+    rdfs:label "Monopole Magnets" ;
+    smac:abbrev "Magnets" ;
+    smac:aiWeightGrowth 1 ;
+    smac:aiWeightTech 1 ;
+    smac:aiWeightWealth 5 ;
+    smac:aiWeightPower 0 ;
+    smac:requiresTech tech:string ;
+    smac:requiresTech tech:alloys ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+tech:matcomp a smac:Technology ;
+    rdfs:label "Matter Compression" ;
+    smac:abbrev "MatComp" ;
+    smac:aiWeightGrowth 3 ;
+    smac:aiWeightTech 1 ;
+    smac:aiWeightWealth 2 ;
+    smac:aiWeightPower 0 ;
+    smac:requiresTech tech:metal ;
+    smac:requiresTech tech:nanomin ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+tech:unified a smac:Technology ;
+    rdfs:label "Unified Field Theory" ;
+    smac:abbrev "Unified" ;
+    smac:aiWeightGrowth 4 ;
+    smac:aiWeightTech 3 ;
+    smac:aiWeightWealth 0 ;
+    smac:aiWeightPower 1 ;
+    smac:requiresTech tech:magnets ;
+    smac:requiresTech tech:e-mc2 ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+tech:gravity a smac:Technology ;
+    rdfs:label "Graviton Theory" ;
+    smac:abbrev "Gravity" ;
+    smac:aiWeightGrowth 3 ;
+    smac:aiWeightTech 1 ;
+    smac:aiWeightWealth 0 ;
+    smac:aiWeightPower 3 ;
+    smac:requiresTech tech:quanmac ;
+    smac:requiresTech tech:mindmac ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+tech:poly a smac:Technology ;
+    rdfs:label "Polymorphic Software" ;
+    smac:abbrev "Poly" ;
+    smac:aiWeightGrowth 2 ;
+    smac:aiWeightTech 3 ;
+    smac:aiWeightWealth 1 ;
+    smac:aiWeightPower 0 ;
+    smac:requiresTech tech:indust ;
+    smac:requiresTech tech:infnet ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+tech:agrav a smac:Technology ;
+    rdfs:label "Applied Gravitonics" ;
+    smac:abbrev "AGrav" ;
+    smac:aiWeightGrowth 3 ;
+    smac:aiWeightTech 1 ;
+    smac:aiWeightWealth 0 ;
+    smac:aiWeightPower 4 ;
+    smac:requiresTech tech:gravity ;
+    smac:requiresTech tech:digsent ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+tech:deleted a smac:Technology ;
+    rdfs:label "deleted" ;
+    smac:abbrev "deleted" ;
+    smac:aiWeightGrowth 0 ;
+    smac:aiWeightTech 0 ;
+    smac:aiWeightWealth 5 ;
+    smac:aiWeightPower 0 ;
+    smac:disabled true ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+tech:quantum a smac:Technology ;
+    rdfs:label "Quantum Power" ;
+    smac:abbrev "Quantum" ;
+    smac:aiWeightGrowth 3 ;
+    smac:aiWeightTech 4 ;
+    smac:aiWeightWealth 3 ;
+    smac:aiWeightPower 0 ;
+    smac:requiresTech tech:surface ;
+    smac:requiresTech tech:plaecon ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+tech:singmec a smac:Technology ;
+    rdfs:label "Singularity Mechanics" ;
+    smac:abbrev "SingMec" ;
+    smac:aiWeightGrowth 1 ;
+    smac:aiWeightTech 4 ;
+    smac:aiWeightWealth 3 ;
+    smac:aiWeightPower 0 ;
+    smac:requiresTech tech:create ;
+    smac:requiresTech tech:hal9000 ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+tech:consing a smac:Technology ;
+    rdfs:label "Controlled Singularity" ;
+    smac:abbrev "ConSing" ;
+    smac:aiWeightGrowth 4 ;
+    smac:aiWeightTech 1 ;
+    smac:aiWeightWealth 2 ;
+    smac:aiWeightPower 0 ;
+    smac:requiresTech tech:singmec ;
+    smac:requiresTech tech:agrav ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+tech:tempmec a smac:Technology ;
+    rdfs:label "Temporal Mechanics" ;
+    smac:abbrev "TempMec" ;
+    smac:aiWeightGrowth 0 ;
+    smac:aiWeightTech 1 ;
+    smac:aiWeightWealth 3 ;
+    smac:aiWeightPower 2 ;
+    smac:requiresTech tech:eudaim ;
+    smac:requiresTech tech:matter ;
+    smac:flag 7 ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+tech:probmec a smac:Technology ;
+    rdfs:label "Probability Mechanics" ;
+    smac:abbrev "ProbMec" ;
+    smac:aiWeightGrowth 1 ;
+    smac:aiWeightTech 1 ;
+    smac:aiWeightWealth 3 ;
+    smac:aiWeightPower 2 ;
+    smac:requiresTech tech:docsec ;
+    smac:requiresTech tech:algor ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+tech:algor a smac:Technology ;
+    rdfs:label "Pre-Sentient Algorithms" ;
+    smac:abbrev "Algor" ;
+    smac:aiWeightGrowth 2 ;
+    smac:aiWeightTech 4 ;
+    smac:aiWeightWealth 3 ;
+    smac:aiWeightPower 2 ;
+    smac:requiresTech tech:milalg ;
+    smac:requiresTech tech:cyber ;
+    smac:flag 2 ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+tech:solids a smac:Technology ;
+    rdfs:label "Super Tensile Solids" ;
+    smac:abbrev "Solids" ;
+    smac:aiWeightGrowth 1 ;
+    smac:aiWeightTech 0 ;
+    smac:aiWeightWealth 5 ;
+    smac:aiWeightPower 2 ;
+    smac:requiresTech tech:matcomp ;
+    smac:requiresTech tech:space ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+tech:planets a smac:Technology ;
+    rdfs:label "Planetary Networks" ;
+    smac:abbrev "PlaNets" ;
+    smac:aiWeightGrowth 0 ;
+    smac:aiWeightTech 4 ;
+    smac:aiWeightWealth 3 ;
+    smac:aiWeightPower 1 ;
+    smac:requiresTech tech:infnet ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+tech:digsent a smac:Technology ;
+    rdfs:label "Digital Sentience" ;
+    smac:abbrev "DigSent" ;
+    smac:aiWeightGrowth 0 ;
+    smac:aiWeightTech 4 ;
+    smac:aiWeightWealth 3 ;
+    smac:aiWeightPower 2 ;
+    smac:requiresTech tech:indrob ;
+    smac:requiresTech tech:mindmac ;
+    smac:flag 2 ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+tech:hal9000 a smac:Technology ;
+    rdfs:label "Self-Aware Machines" ;
+    smac:abbrev "HAL9000" ;
+    smac:aiWeightGrowth 0 ;
+    smac:aiWeightTech 4 ;
+    smac:aiWeightWealth 3 ;
+    smac:aiWeightPower 3 ;
+    smac:requiresTech tech:newmiss ;
+    smac:requiresTech tech:digsent ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+tech:docinit a smac:Technology ;
+    rdfs:label "Doctrine: Initiative" ;
+    smac:abbrev "DocInit" ;
+    smac:aiWeightGrowth 2 ;
+    smac:aiWeightTech 0 ;
+    smac:aiWeightWealth 0 ;
+    smac:aiWeightPower 4 ;
+    smac:requiresTech tech:docflex ;
+    smac:requiresTech tech:indauto ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+tech:docflex a smac:Technology ;
+    rdfs:label "Doctrine: Flexibility" ;
+    smac:abbrev "DocFlex" ;
+    smac:aiWeightGrowth 2 ;
+    smac:aiWeightTech 0 ;
+    smac:aiWeightWealth 1 ;
+    smac:aiWeightPower 4 ;
+    smac:requiresTech tech:mobile ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+tech:integ a smac:Technology ;
+    rdfs:label "Intellectual Integrity" ;
+    smac:abbrev "Integ" ;
+    smac:aiWeightGrowth 0 ;
+    smac:aiWeightTech 1 ;
+    smac:aiWeightWealth 3 ;
+    smac:aiWeightPower 4 ;
+    smac:requiresTech tech:ethcalc ;
+    smac:requiresTech tech:docloy ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+tech:fossil a smac:Technology ;
+    rdfs:label "Synthetic Fossil Fuels" ;
+    smac:abbrev "Fossil" ;
+    smac:aiWeightGrowth 1 ;
+    smac:aiWeightTech 0 ;
+    smac:aiWeightWealth 2 ;
+    smac:aiWeightPower 4 ;
+    smac:requiresTech tech:chemist ;
+    smac:requiresTech tech:gene ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+tech:docair a smac:Technology ;
+    rdfs:label "Doctrine: Air Power" ;
+    smac:abbrev "DocAir" ;
+    smac:aiWeightGrowth 3 ;
+    smac:aiWeightTech 0 ;
+    smac:aiWeightWealth 3 ;
+    smac:aiWeightPower 4 ;
+    smac:requiresTech tech:fossil ;
+    smac:requiresTech tech:docflex ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+tech:docsec a smac:Technology ;
+    rdfs:label "Photon/Wave Mechanics" ;
+    smac:abbrev "DocSec" ;
+    smac:aiWeightGrowth 3 ;
+    smac:aiWeightTech 2 ;
+    smac:aiWeightWealth 2 ;
+    smac:aiWeightPower 0 ;
+    smac:requiresTech tech:e-mc2 ;
+    smac:requiresTech tech:alloys ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+tech:mindmac a smac:Technology ;
+    rdfs:label "Mind/Machine Interface" ;
+    smac:abbrev "MindMac" ;
+    smac:aiWeightGrowth 4 ;
+    smac:aiWeightTech 0 ;
+    smac:aiWeightWealth 2 ;
+    smac:aiWeightPower 2 ;
+    smac:requiresTech tech:docair ;
+    smac:requiresTech tech:neural ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+tech:nanomin a smac:Technology ;
+    rdfs:label "Nanominiaturization" ;
+    smac:abbrev "NanoMin" ;
+    smac:aiWeightGrowth 1 ;
+    smac:aiWeightTech 0 ;
+    smac:aiWeightWealth 4 ;
+    smac:aiWeightPower 3 ;
+    smac:requiresTech tech:magnets ;
+    smac:requiresTech tech:suplube ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+tech:docloy a smac:Technology ;
+    rdfs:label "Doctrine: Loyalty" ;
+    smac:abbrev "DocLoy" ;
+    smac:aiWeightGrowth 3 ;
+    smac:aiWeightTech 0 ;
+    smac:aiWeightWealth 2 ;
+    smac:aiWeightPower 2 ;
+    smac:requiresTech tech:mobile ;
+    smac:requiresTech tech:psych ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+tech:ethcalc a smac:Technology ;
+    rdfs:label "Ethical Calculus" ;
+    smac:abbrev "EthCalc" ;
+    smac:aiWeightGrowth 0 ;
+    smac:aiWeightTech 1 ;
+    smac:aiWeightWealth 3 ;
+    smac:aiWeightPower 3 ;
+    smac:requiresTech tech:psych ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+tech:indecon a smac:Technology ;
+    rdfs:label "Industrial Economics" ;
+    smac:abbrev "IndEcon" ;
+    smac:aiWeightGrowth 0 ;
+    smac:aiWeightTech 0 ;
+    smac:aiWeightWealth 5 ;
+    smac:aiWeightPower 2 ;
+    smac:requiresTech tech:indust ;
+    smac:flag 3 ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+tech:indauto a smac:Technology ;
+    rdfs:label "Industrial Automation" ;
+    smac:abbrev "IndAuto" ;
+    smac:aiWeightGrowth 0 ;
+    smac:aiWeightTech 1 ;
+    smac:aiWeightWealth 4 ;
+    smac:aiWeightPower 3 ;
+    smac:requiresTech tech:indecon ;
+    smac:requiresTech tech:planets ;
+    smac:flag 3 ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+tech:centmed a smac:Technology ;
+    rdfs:label "Centauri Meditation" ;
+    smac:abbrev "CentMed" ;
+    smac:aiWeightGrowth 0 ;
+    smac:aiWeightTech 0 ;
+    smac:aiWeightWealth 2 ;
+    smac:aiWeightPower 4 ;
+    smac:requiresTech tech:ecoeng ;
+    smac:requiresTech tech:centemp ;
+    smac:flag 7 ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+tech:brain a smac:Technology ;
+    rdfs:label "Secrets of the Human Brain" ;
+    smac:abbrev "Brain" ;
+    smac:aiWeightGrowth 1 ;
+    smac:aiWeightTech 5 ;
+    smac:aiWeightWealth 0 ;
+    smac:aiWeightPower 3 ;
+    smac:requiresTech tech:psych ;
+    smac:requiresTech tech:biogen ;
+    smac:flag 1 ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+tech:gene a smac:Technology ;
+    rdfs:label "Gene Splicing" ;
+    smac:abbrev "Gene" ;
+    smac:aiWeightGrowth 0 ;
+    smac:aiWeightTech 2 ;
+    smac:aiWeightWealth 4 ;
+    smac:aiWeightPower 3 ;
+    smac:requiresTech tech:biogen ;
+    smac:requiresTech tech:ethcalc ;
+    smac:flag 6 ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+tech:bioeng a smac:Technology ;
+    rdfs:label "Bio-Engineering" ;
+    smac:abbrev "BioEng" ;
+    smac:aiWeightGrowth 0 ;
+    smac:aiWeightTech 2 ;
+    smac:aiWeightWealth 3 ;
+    smac:aiWeightPower 2 ;
+    smac:requiresTech tech:gene ;
+    smac:requiresTech tech:neural ;
+    smac:flag 6 ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+tech:biomac a smac:Technology ;
+    rdfs:label "Biomachinery" ;
+    smac:abbrev "BioMac" ;
+    smac:aiWeightGrowth 3 ;
+    smac:aiWeightTech 1 ;
+    smac:aiWeightWealth 4 ;
+    smac:aiWeightPower 1 ;
+    smac:requiresTech tech:mindmac ;
+    smac:requiresTech tech:viral ;
+    smac:flag 6 ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+tech:neural a smac:Technology ;
+    rdfs:label "Neural Grafting" ;
+    smac:abbrev "Neural" ;
+    smac:aiWeightGrowth 3 ;
+    smac:aiWeightTech 1 ;
+    smac:aiWeightWealth 1 ;
+    smac:aiWeightPower 1 ;
+    smac:requiresTech tech:brain ;
+    smac:requiresTech tech:indauto ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+tech:cyber a smac:Technology ;
+    rdfs:label "Cyberethics" ;
+    smac:abbrev "Cyber" ;
+    smac:aiWeightGrowth 1 ;
+    smac:aiWeightTech 3 ;
+    smac:aiWeightWealth 4 ;
+    smac:aiWeightPower 0 ;
+    smac:requiresTech tech:planets ;
+    smac:requiresTech tech:integ ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+tech:eudaim a smac:Technology ;
+    rdfs:label "Eudaimonia" ;
+    smac:abbrev "Eudaim" ;
+    smac:aiWeightGrowth 0 ;
+    smac:aiWeightTech 0 ;
+    smac:aiWeightWealth 3 ;
+    smac:aiWeightPower 4 ;
+    smac:requiresTech tech:senteco ;
+    smac:requiresTech tech:willpow ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+tech:willpow a smac:Technology ;
+    rdfs:label "The Will to Power" ;
+    smac:abbrev "WillPow" ;
+    smac:aiWeightGrowth 0 ;
+    smac:aiWeightTech 3 ;
+    smac:aiWeightWealth 1 ;
+    smac:aiWeightPower 4 ;
+    smac:requiresTech tech:homosup ;
+    smac:requiresTech tech:centpsi ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+tech:thresh a smac:Technology ;
+    rdfs:label "Threshold of Transcendence" ;
+    smac:abbrev "Thresh" ;
+    smac:aiWeightGrowth 0 ;
+    smac:aiWeightTech 1 ;
+    smac:aiWeightWealth 3 ;
+    smac:aiWeightPower 4 ;
+    smac:requiresTech tech:secmani ;
+    smac:requiresTech tech:tempmec ;
+    smac:flag 8 ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+tech:matter a smac:Technology ;
+    rdfs:label "Matter Transmission" ;
+    smac:abbrev "Matter" ;
+    smac:aiWeightGrowth 1 ;
+    smac:aiWeightTech 0 ;
+    smac:aiWeightWealth 3 ;
+    smac:aiWeightPower 2 ;
+    smac:requiresTech tech:nanedit ;
+    smac:requiresTech tech:alphcen ;
+    smac:flag 8 ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+tech:centemp a smac:Technology ;
+    rdfs:label "Centauri Empathy" ;
+    smac:abbrev "CentEmp" ;
+    smac:aiWeightGrowth 0 ;
+    smac:aiWeightTech 1 ;
+    smac:aiWeightWealth 0 ;
+    smac:aiWeightPower 6 ;
+    smac:requiresTech tech:brain ;
+    smac:requiresTech tech:ecology ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+tech:envecon a smac:Technology ;
+    rdfs:label "Environmental Economics" ;
+    smac:abbrev "EnvEcon" ;
+    smac:aiWeightGrowth 0 ;
+    smac:aiWeightTech 0 ;
+    smac:aiWeightWealth 4 ;
+    smac:aiWeightPower 3 ;
+    smac:requiresTech tech:indecon ;
+    smac:requiresTech tech:ecoeng ;
+    smac:flag 3 ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+tech:ecoeng a smac:Technology ;
+    rdfs:label "Ecological Engineering" ;
+    smac:abbrev "EcoEng" ;
+    smac:aiWeightGrowth 0 ;
+    smac:aiWeightTech 0 ;
+    smac:aiWeightWealth 3 ;
+    smac:aiWeightPower 4 ;
+    smac:requiresTech tech:ecology ;
+    smac:requiresTech tech:gene ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+tech:plaecon a smac:Technology ;
+    rdfs:label "Planetary Economics" ;
+    smac:abbrev "PlaEcon" ;
+    smac:aiWeightGrowth 0 ;
+    smac:aiWeightTech 0 ;
+    smac:aiWeightWealth 4 ;
+    smac:aiWeightPower 3 ;
+    smac:requiresTech tech:adapeco ;
+    smac:requiresTech tech:integ ;
+    smac:flag 3 ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+tech:ecoeng2 a smac:Technology ;
+    rdfs:label "Adv. Ecological Engineering" ;
+    smac:abbrev "EcoEng2" ;
+    smac:aiWeightGrowth 0 ;
+    smac:aiWeightTech 0 ;
+    smac:aiWeightWealth 4 ;
+    smac:aiWeightPower 2 ;
+    smac:requiresTech tech:fusion ;
+    smac:requiresTech tech:envecon ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+tech:centpsi a smac:Technology ;
+    rdfs:label "Centauri Psi" ;
+    smac:abbrev "CentPsi" ;
+    smac:aiWeightGrowth 0 ;
+    smac:aiWeightTech 1 ;
+    smac:aiWeightWealth 1 ;
+    smac:aiWeightPower 6 ;
+    smac:requiresTech tech:centgen ;
+    smac:requiresTech tech:ecoeng2 ;
+    smac:flag 9 ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+tech:alphcen a smac:Technology ;
+    rdfs:label "Secrets of Alpha Centauri" ;
+    smac:abbrev "AlphCen" ;
+    smac:aiWeightGrowth 0 ;
+    smac:aiWeightTech 4 ;
+    smac:aiWeightWealth 0 ;
+    smac:aiWeightPower 2 ;
+    smac:requiresTech tech:centpsi ;
+    smac:requiresTech tech:senteco ;
+    smac:flag 7 ;
+    smac:flag 4 ;
+    smac:flag 1 ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+tech:create a smac:Technology ;
+    rdfs:label "Secrets of Creation" ;
+    smac:abbrev "Create" ;
+    smac:aiWeightGrowth 1 ;
+    smac:aiWeightTech 4 ;
+    smac:aiWeightWealth 1 ;
+    smac:aiWeightPower 0 ;
+    smac:requiresTech tech:unified ;
+    smac:requiresTech tech:willpow ;
+    smac:flag 1 ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+tech:space a smac:Technology ;
+    rdfs:label "Advanced Spaceflight" ;
+    smac:abbrev "Space" ;
+    smac:aiWeightGrowth 2 ;
+    smac:aiWeightTech 4 ;
+    smac:aiWeightWealth 2 ;
+    smac:aiWeightPower 3 ;
+    smac:requiresTech tech:orbital ;
+    smac:requiresTech tech:suplube ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+tech:homosup a smac:Technology ;
+    rdfs:label "Homo Superior" ;
+    smac:abbrev "HomoSup" ;
+    smac:aiWeightGrowth 3 ;
+    smac:aiWeightTech 2 ;
+    smac:aiWeightWealth 1 ;
+    smac:aiWeightPower 4 ;
+    smac:requiresTech tech:biomac ;
+    smac:requiresTech tech:docinit ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+tech:suplube a smac:Technology ;
+    rdfs:label "Organic Superlubricant" ;
+    smac:abbrev "SupLube" ;
+    smac:aiWeightGrowth 3 ;
+    smac:aiWeightTech 1 ;
+    smac:aiWeightWealth 2 ;
+    smac:aiWeightPower 0 ;
+    smac:requiresTech tech:fusion ;
+    smac:requiresTech tech:fossil ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+tech:quanmac a smac:Technology ;
+    rdfs:label "Quantum Machinery" ;
+    smac:abbrev "QuanMac" ;
+    smac:aiWeightGrowth 3 ;
+    smac:aiWeightTech 1 ;
+    smac:aiWeightWealth 4 ;
+    smac:aiWeightPower 0 ;
+    smac:requiresTech tech:quantum ;
+    smac:requiresTech tech:metal ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+tech:nanedit a smac:Technology ;
+    rdfs:label "Matter Editation" ;
+    smac:abbrev "NanEdit" ;
+    smac:aiWeightGrowth 1 ;
+    smac:aiWeightTech 2 ;
+    smac:aiWeightWealth 3 ;
+    smac:aiWeightPower 1 ;
+    smac:requiresTech tech:hal9000 ;
+    smac:requiresTech tech:solids ;
+    smac:flag 6 ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+tech:optcomp a smac:Technology ;
+    rdfs:label "Optical Computers" ;
+    smac:abbrev "OptComp" ;
+    smac:aiWeightGrowth 2 ;
+    smac:aiWeightTech 4 ;
+    smac:aiWeightWealth 1 ;
+    smac:aiWeightPower 0 ;
+    smac:requiresTech tech:physic ;
+    smac:requiresTech tech:poly ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+tech:indrob a smac:Technology ;
+    rdfs:label "Industrial Nanorobotics" ;
+    smac:abbrev "IndRob" ;
+    smac:aiWeightGrowth 3 ;
+    smac:aiWeightTech 1 ;
+    smac:aiWeightWealth 8 ;
+    smac:aiWeightPower 1 ;
+    smac:requiresTech tech:nanomin ;
+    smac:requiresTech tech:indauto ;
+    smac:flag 3 ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+tech:centgen a smac:Technology ;
+    rdfs:label "Centauri Genetics" ;
+    smac:abbrev "CentGen" ;
+    smac:aiWeightGrowth 0 ;
+    smac:aiWeightTech 2 ;
+    smac:aiWeightWealth 0 ;
+    smac:aiWeightPower 5 ;
+    smac:requiresTech tech:centmed ;
+    smac:requiresTech tech:viral ;
+    smac:flag 8 ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+tech:senteco a smac:Technology ;
+    rdfs:label "Sentient Econometrics" ;
+    smac:abbrev "SentEco" ;
+    smac:aiWeightGrowth 1 ;
+    smac:aiWeightTech 1 ;
+    smac:aiWeightWealth 3 ;
+    smac:aiWeightPower 4 ;
+    smac:requiresTech tech:plaecon ;
+    smac:requiresTech tech:digsent ;
+    smac:flag 3 ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+tech:viral a smac:Technology ;
+    rdfs:label "Retroviral Engineering" ;
+    smac:abbrev "Viral" ;
+    smac:aiWeightGrowth 4 ;
+    smac:aiWeightTech 2 ;
+    smac:aiWeightWealth 0 ;
+    smac:aiWeightPower 2 ;
+    smac:requiresTech tech:bioeng ;
+    smac:requiresTech tech:milalg ;
+    smac:flag 6 ;
+    smac:flag 5 ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+tech:orbital a smac:Technology ;
+    rdfs:label "Orbital Spaceflight" ;
+    smac:abbrev "Orbital" ;
+    smac:aiWeightGrowth 0 ;
+    smac:aiWeightTech 4 ;
+    smac:aiWeightWealth 3 ;
+    smac:aiWeightPower 3 ;
+    smac:requiresTech tech:docair ;
+    smac:requiresTech tech:algor ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+tech:prpsych a smac:Technology ;
+    rdfs:label "Progenitor Psych" ;
+    smac:abbrev "PrPsych" ;
+    smac:aiWeightGrowth 0 ;
+    smac:aiWeightTech 2 ;
+    smac:aiWeightWealth 3 ;
+    smac:aiWeightPower 4 ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+tech:fldmod a smac:Technology ;
+    rdfs:label "Field Modulation" ;
+    smac:abbrev "FldMod" ;
+    smac:aiWeightGrowth 4 ;
+    smac:aiWeightTech 2 ;
+    smac:aiWeightWealth 0 ;
+    smac:aiWeightPower 2 ;
+    smac:requiresTech tech:prpsych ;
+    smac:requiresTech tech:ecology ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+tech:adapdoc a smac:Technology ;
+    rdfs:label "Adaptive Doctrine" ;
+    smac:abbrev "AdapDoc" ;
+    smac:aiWeightGrowth 5 ;
+    smac:aiWeightTech 2 ;
+    smac:aiWeightWealth 0 ;
+    smac:aiWeightPower 0 ;
+    smac:requiresTech tech:poly ;
+    smac:requiresTech tech:docflex ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+tech:adapeco a smac:Technology ;
+    rdfs:label "Adaptive Economics" ;
+    smac:abbrev "AdapEco" ;
+    smac:aiWeightGrowth 0 ;
+    smac:aiWeightTech 1 ;
+    smac:aiWeightWealth 5 ;
+    smac:aiWeightPower 2 ;
+    smac:requiresTech tech:prpsych ;
+    smac:requiresTech tech:indecon ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+tech:bioadap a smac:Technology ;
+    rdfs:label "Bioadaptive Resonance" ;
+    smac:abbrev "Bioadap" ;
+    smac:aiWeightGrowth 5 ;
+    smac:aiWeightTech 2 ;
+    smac:aiWeightWealth 0 ;
+    smac:aiWeightPower 0 ;
+    smac:requiresTech tech:fldmod ;
+    smac:requiresTech tech:centemp ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+tech:sentres a smac:Technology ;
+    rdfs:label "Sentient Resonance" ;
+    smac:abbrev "SentRes" ;
+    smac:aiWeightGrowth 5 ;
+    smac:aiWeightTech 2 ;
+    smac:aiWeightWealth 0 ;
+    smac:aiWeightPower 0 ;
+    smac:requiresTech tech:bioadap ;
+    smac:requiresTech tech:centpsi ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+tech:secmani a smac:Technology ;
+    rdfs:label "Secrets of the Manifolds" ;
+    smac:abbrev "SecMani" ;
+    smac:aiWeightGrowth 0 ;
+    smac:aiWeightTech 5 ;
+    smac:aiWeightWealth 4 ;
+    smac:aiWeightPower 2 ;
+    smac:requiresTech tech:sentres ;
+    smac:requiresTech tech:alphcen ;
+    smac:flag 1 ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+tech:newmiss a smac:Technology ;
+    rdfs:label "N-Space Compression" ;
+    smac:abbrev "NewMiss" ;
+    smac:aiWeightGrowth 4 ;
+    smac:aiWeightTech 0 ;
+    smac:aiWeightWealth 2 ;
+    smac:aiWeightPower 0 ;
+    smac:requiresTech tech:orbital ;
+    smac:requiresTech tech:biomac ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+tech:bfg9000 a smac:Technology ;
+    rdfs:label "String Resonance" ;
+    smac:abbrev "BFG9000" ;
+    smac:aiWeightGrowth 8 ;
+    smac:aiWeightTech 0 ;
+    smac:aiWeightWealth 0 ;
+    smac:aiWeightPower 0 ;
+    smac:requiresTech tech:secmani ;
+    smac:requiresTech tech:consing ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+tech:user a smac:Technology ;
+    rdfs:label "User Technology" ;
+    smac:abbrev "User" ;
+    smac:aiWeightGrowth 0 ;
+    smac:aiWeightTech 2 ;
+    smac:aiWeightWealth 0 ;
+    smac:aiWeightPower 0 ;
+    smac:disabled true ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+tech:trant a smac:Technology ;
+    rdfs:label "Transcendent Thought" ;
+    smac:abbrev "TranT" ;
+    smac:aiWeightGrowth 0 ;
+    smac:aiWeightTech 2 ;
+    smac:aiWeightWealth 0 ;
+    smac:aiWeightPower 0 ;
+    smac:requiresTech tech:thresh ;
+    smac:requiresTech tech:consing ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+fac:headquarters a smac:Facility ;
+    rdfs:label "Headquarters" ;
+    smac:cost 5 ;
+    smac:maintenance 0 ;
+    smac:effectText "Efficiency" ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+fac:children-s-creche a smac:Facility ;
+    rdfs:label "Children's Creche" ;
+    smac:cost 5 ;
+    smac:maintenance 1 ;
+    smac:effectText "Growth/Effic/Morale" ;
+    smac:requiresTech tech:ethcalc ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+fac:recycling-tanks a smac:Facility ;
+    rdfs:label "Recycling Tanks" ;
+    smac:cost 4 ;
+    smac:maintenance 0 ;
+    smac:effectText "Bonus Resources" ;
+    smac:freeWithTech tech:ecoeng2 ;
+    smac:requiresTech tech:biogen ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+fac:perimeter-defense a smac:Facility ;
+    rdfs:label "Perimeter Defense" ;
+    smac:cost 5 ;
+    smac:maintenance 0 ;
+    smac:effectText "Defense +100%" ;
+    smac:requiresTech tech:docloy ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+fac:tachyon-field a smac:Facility ;
+    rdfs:label "Tachyon Field" ;
+    smac:cost 12 ;
+    smac:maintenance 2 ;
+    smac:effectText "All Defense +100%" ;
+    smac:requiresTech tech:probmec ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+fac:recreation-commons a smac:Facility ;
+    rdfs:label "Recreation Commons" ;
+    smac:cost 4 ;
+    smac:maintenance 1 ;
+    smac:effectText "Fewer Drones" ;
+    smac:freeWithTech tech:senteco ;
+    smac:requiresTech tech:psych ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+fac:energy-bank a smac:Facility ;
+    rdfs:label "Energy Bank" ;
+    smac:cost 8 ;
+    smac:maintenance 1 ;
+    smac:effectText "Economy Bonus" ;
+    smac:requiresTech tech:indecon ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+fac:network-node a smac:Facility ;
+    rdfs:label "Network Node" ;
+    smac:cost 8 ;
+    smac:maintenance 1 ;
+    smac:effectText "Labs Bonus" ;
+    smac:requiresTech tech:infnet ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+fac:biology-lab a smac:Facility ;
+    rdfs:label "Biology Lab" ;
+    smac:cost 6 ;
+    smac:maintenance 1 ;
+    smac:effectText "Research and PSI" ;
+    smac:requiresTech tech:centemp ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+fac:skunkworks a smac:Facility ;
+    rdfs:label "Skunkworks" ;
+    smac:cost 6 ;
+    smac:maintenance 1 ;
+    smac:effectText "Prototypes Free" ;
+    smac:requiresTech tech:subat ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+fac:hologram-theatre a smac:Facility ;
+    rdfs:label "Hologram Theatre" ;
+    smac:cost 6 ;
+    smac:maintenance 3 ;
+    smac:effectText "Psych and Fewer Drones" ;
+    smac:requiresTech tech:planets ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+fac:paradise-garden a smac:Facility ;
+    rdfs:label "Paradise Garden" ;
+    smac:cost 12 ;
+    smac:maintenance 4 ;
+    smac:effectText "+2 Talents" ;
+    smac:requiresTech tech:senteco ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+fac:tree-farm a smac:Facility ;
+    rdfs:label "Tree Farm" ;
+    smac:cost 12 ;
+    smac:maintenance 3 ;
+    smac:effectText "Econ/Psych/Forest" ;
+    smac:requiresTech tech:envecon ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+fac:hybrid-forest a smac:Facility ;
+    rdfs:label "Hybrid Forest" ;
+    smac:cost 24 ;
+    smac:maintenance 4 ;
+    smac:effectText "Econ/Psych/Forest" ;
+    smac:requiresTech tech:plaecon ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+fac:fusion-lab a smac:Facility ;
+    rdfs:label "Fusion Lab" ;
+    smac:cost 12 ;
+    smac:maintenance 3 ;
+    smac:effectText "Econ and Labs Bonus" ;
+    smac:requiresTech tech:fusion ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+fac:quantum-lab a smac:Facility ;
+    rdfs:label "Quantum Lab" ;
+    smac:cost 24 ;
+    smac:maintenance 4 ;
+    smac:effectText "Econ and Labs Bonus" ;
+    smac:requiresTech tech:quantum ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+fac:research-hospital a smac:Facility ;
+    rdfs:label "Research Hospital" ;
+    smac:cost 12 ;
+    smac:maintenance 3 ;
+    smac:effectText "Labs and Psych Bonus" ;
+    smac:requiresTech tech:gene ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+fac:nanohospital a smac:Facility ;
+    rdfs:label "Nanohospital" ;
+    smac:cost 24 ;
+    smac:maintenance 4 ;
+    smac:effectText "Labs and Psych Bonus" ;
+    smac:requiresTech tech:homosup ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+fac:robotic-assembly-plant a smac:Facility ;
+    rdfs:label "Robotic Assembly Plant" ;
+    smac:cost 20 ;
+    smac:maintenance 4 ;
+    smac:effectText "Minerals Bonus" ;
+    smac:requiresTech tech:indrob ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+fac:nanoreplicator a smac:Facility ;
+    rdfs:label "Nanoreplicator" ;
+    smac:cost 32 ;
+    smac:maintenance 6 ;
+    smac:effectText "Minerals Bonus" ;
+    smac:requiresTech tech:nanedit ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+fac:quantum-converter a smac:Facility ;
+    rdfs:label "Quantum Converter" ;
+    smac:cost 20 ;
+    smac:maintenance 5 ;
+    smac:effectText "Minerals Bonus" ;
+    smac:requiresTech tech:quanmac ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+fac:genejack-factory a smac:Facility ;
+    rdfs:label "Genejack Factory" ;
+    smac:cost 10 ;
+    smac:maintenance 2 ;
+    smac:effectText "Minerals; More Drones" ;
+    smac:requiresTech tech:viral ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+fac:punishment-sphere a smac:Facility ;
+    rdfs:label "Punishment Sphere" ;
+    smac:cost 10 ;
+    smac:maintenance 2 ;
+    smac:effectText "No Drones/-50% Tech" ;
+    smac:requiresTech tech:milalg ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+fac:hab-complex a smac:Facility ;
+    rdfs:label "Hab Complex" ;
+    smac:cost 8 ;
+    smac:maintenance 2 ;
+    smac:effectText "Increase Population Limit" ;
+    smac:requiresTech tech:indauto ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+fac:habitation-dome a smac:Facility ;
+    rdfs:label "Habitation Dome" ;
+    smac:cost 16 ;
+    smac:maintenance 4 ;
+    smac:effectText "Increase Population Limit" ;
+    smac:requiresTech tech:solids ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+fac:pressure-dome a smac:Facility ;
+    rdfs:label "Pressure Dome" ;
+    smac:cost 8 ;
+    smac:maintenance 0 ;
+    smac:effectText "Submersion/Resources" ;
+    smac:requiresTech tech:docflex ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+fac:command-center a smac:Facility ;
+    rdfs:label "Command Center" ;
+    smac:cost 4 ;
+    smac:maintenance 1 ;
+    smac:effectText "+2 Morale:Land" ;
+    smac:requiresTech tech:mobile ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+fac:naval-yard a smac:Facility ;
+    rdfs:label "Naval Yard" ;
+    smac:cost 8 ;
+    smac:maintenance 2 ;
+    smac:effectText "+2 Morale:Sea, Sea Def +100%" ;
+    smac:requiresTech tech:docinit ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+fac:aerospace-complex a smac:Facility ;
+    rdfs:label "Aerospace Complex" ;
+    smac:cost 8 ;
+    smac:maintenance 2 ;
+    smac:effectText "+2 Morale:Air, Air Def +100%" ;
+    smac:requiresTech tech:docair ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+fac:bioenhancement-center a smac:Facility ;
+    rdfs:label "Bioenhancement Center" ;
+    smac:cost 10 ;
+    smac:maintenance 2 ;
+    smac:effectText "+2 Morale:ALL" ;
+    smac:requiresTech tech:neural ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+fac:centauri-preserve a smac:Facility ;
+    rdfs:label "Centauri Preserve" ;
+    smac:cost 10 ;
+    smac:maintenance 2 ;
+    smac:effectText "Ecology Bonus" ;
+    smac:requiresTech tech:centmed ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+fac:temple-of-planet a smac:Facility ;
+    rdfs:label "Temple of Planet" ;
+    smac:cost 20 ;
+    smac:maintenance 3 ;
+    smac:effectText "Ecology Bonus" ;
+    smac:requiresTech tech:alphcen ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+fac:psi-gate a smac:Facility ;
+    rdfs:label "Psi Gate" ;
+    smac:cost 10 ;
+    smac:maintenance 2 ;
+    smac:effectText "Teleport" ;
+    smac:requiresTech tech:matter ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+fac:covert-ops-center a smac:Facility ;
+    rdfs:label "Covert Ops Center" ;
+    smac:cost 10 ;
+    smac:maintenance 2 ;
+    smac:effectText "Stronger Probe Teams" ;
+    smac:requiresTech tech:algor ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+fac:brood-pit a smac:Facility ;
+    rdfs:label "Brood Pit" ;
+    smac:cost 8 ;
+    smac:maintenance 2 ;
+    smac:effectText "Police/Morale" ;
+    smac:requiresTech tech:centgen ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+fac:aquafarm a smac:Facility ;
+    rdfs:label "Aquafarm" ;
+    smac:cost 8 ;
+    smac:maintenance 1 ;
+    smac:effectText "Sea Nutrients" ;
+    smac:requiresTech tech:prpsych ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+fac:subsea-trunkline a smac:Facility ;
+    rdfs:label "Subsea Trunkline" ;
+    smac:cost 12 ;
+    smac:maintenance 4 ;
+    smac:effectText "Sea Minerals" ;
+    smac:requiresTech tech:plaecon ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+fac:thermocline-transducer a smac:Facility ;
+    rdfs:label "Thermocline Transducer" ;
+    smac:cost 8 ;
+    smac:maintenance 0 ;
+    smac:effectText "Sea Energy" ;
+    smac:requiresTech tech:adapeco ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+fac:flechette-defense-system a smac:Facility ;
+    rdfs:label "Flechette Defense System" ;
+    smac:cost 12 ;
+    smac:maintenance 2 ;
+    smac:effectText "Missile Defense" ;
+    smac:requiresTech tech:newmiss ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+fac:subspace-generator a smac:Facility ;
+    rdfs:label "Subspace Generator" ;
+    smac:cost 60 ;
+    smac:maintenance 5 ;
+    smac:effectText "Alien Victory" ;
+    smac:requiresTech tech:singmec ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+fac:geosynchronous-survey-pod a smac:Facility ;
+    rdfs:label "Geosynchronous Survey Pod" ;
+    smac:cost 16 ;
+    smac:maintenance 4 ;
+    smac:effectText "Increase sight\\sensor bonus" ;
+    smac:requiresTech tech:newmiss ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+fac:empty-facility-42 a smac:Facility ;
+    rdfs:label "Empty Facility 42" ;
+    smac:cost 10 ;
+    smac:maintenance 2 ;
+    smac:effectText "Do Not Build Me" ;
+    smac:disabled true ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+fac:empty-facility-43 a smac:Facility ;
+    rdfs:label "Empty Facility 43" ;
+    smac:cost 10 ;
+    smac:maintenance 2 ;
+    smac:effectText "Do Not Build Me" ;
+    smac:disabled true ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+fac:empty-facility-44 a smac:Facility ;
+    rdfs:label "Empty Facility 44" ;
+    smac:cost 10 ;
+    smac:maintenance 2 ;
+    smac:effectText "Do Not Build Me" ;
+    smac:disabled true ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+fac:empty-facility-45 a smac:Facility ;
+    rdfs:label "Empty Facility 45" ;
+    smac:cost 10 ;
+    smac:maintenance 2 ;
+    smac:effectText "Do Not Build Me" ;
+    smac:disabled true ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+fac:empty-facility-46 a smac:Facility ;
+    rdfs:label "Empty Facility 46" ;
+    smac:cost 10 ;
+    smac:maintenance 2 ;
+    smac:effectText "Do Not Build Me" ;
+    smac:disabled true ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+fac:empty-facility-47 a smac:Facility ;
+    rdfs:label "Empty Facility 47" ;
+    smac:cost 10 ;
+    smac:maintenance 2 ;
+    smac:effectText "Do Not Build Me" ;
+    smac:disabled true ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+fac:empty-facility-48 a smac:Facility ;
+    rdfs:label "Empty Facility 48" ;
+    smac:cost 10 ;
+    smac:maintenance 2 ;
+    smac:effectText "Do Not Build Me" ;
+    smac:disabled true ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+fac:empty-facility-49 a smac:Facility ;
+    rdfs:label "Empty Facility 49" ;
+    smac:cost 10 ;
+    smac:maintenance 2 ;
+    smac:effectText "Do Not Build Me" ;
+    smac:disabled true ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+fac:empty-facility-50 a smac:Facility ;
+    rdfs:label "Empty Facility 50" ;
+    smac:cost 10 ;
+    smac:maintenance 2 ;
+    smac:effectText "Do Not Build Me" ;
+    smac:disabled true ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+fac:empty-facility-51 a smac:Facility ;
+    rdfs:label "Empty Facility 51" ;
+    smac:cost 10 ;
+    smac:maintenance 2 ;
+    smac:effectText "Do Not Build Me" ;
+    smac:disabled true ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+fac:empty-facility-52 a smac:Facility ;
+    rdfs:label "Empty Facility 52" ;
+    smac:cost 10 ;
+    smac:maintenance 2 ;
+    smac:effectText "Do Not Build Me" ;
+    smac:disabled true ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+fac:empty-facility-53 a smac:Facility ;
+    rdfs:label "Empty Facility 53" ;
+    smac:cost 10 ;
+    smac:maintenance 2 ;
+    smac:effectText "Do Not Build Me" ;
+    smac:disabled true ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+fac:empty-facility-54 a smac:Facility ;
+    rdfs:label "Empty Facility 54" ;
+    smac:cost 10 ;
+    smac:maintenance 2 ;
+    smac:effectText "Do Not Build Me" ;
+    smac:disabled true ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+fac:empty-facility-55 a smac:Facility ;
+    rdfs:label "Empty Facility 55" ;
+    smac:cost 10 ;
+    smac:maintenance 2 ;
+    smac:effectText "Do Not Build Me" ;
+    smac:disabled true ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+fac:empty-facility-56 a smac:Facility ;
+    rdfs:label "Empty Facility 56" ;
+    smac:cost 10 ;
+    smac:maintenance 2 ;
+    smac:effectText "Do Not Build Me" ;
+    smac:disabled true ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+fac:empty-facility-57 a smac:Facility ;
+    rdfs:label "Empty Facility 57" ;
+    smac:cost 10 ;
+    smac:maintenance 2 ;
+    smac:effectText "Do Not Build Me" ;
+    smac:disabled true ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+fac:empty-facility-58 a smac:Facility ;
+    rdfs:label "Empty Facility 58" ;
+    smac:cost 10 ;
+    smac:maintenance 2 ;
+    smac:effectText "Do Not Build Me" ;
+    smac:disabled true ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+fac:empty-facility-59 a smac:Facility ;
+    rdfs:label "Empty Facility 59" ;
+    smac:cost 10 ;
+    smac:maintenance 2 ;
+    smac:effectText "Do Not Build Me" ;
+    smac:disabled true ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+fac:empty-facility-60 a smac:Facility ;
+    rdfs:label "Empty Facility 60" ;
+    smac:cost 10 ;
+    smac:maintenance 2 ;
+    smac:effectText "Do Not Build Me" ;
+    smac:disabled true ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+fac:empty-facility-61 a smac:Facility ;
+    rdfs:label "Empty Facility 61" ;
+    smac:cost 10 ;
+    smac:maintenance 2 ;
+    smac:effectText "Do Not Build Me" ;
+    smac:disabled true ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+fac:empty-facility-62 a smac:Facility ;
+    rdfs:label "Empty Facility 62" ;
+    smac:cost 10 ;
+    smac:maintenance 2 ;
+    smac:effectText "Do Not Build Me" ;
+    smac:disabled true ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+fac:empty-facility-63 a smac:Facility ;
+    rdfs:label "Empty Facility 63" ;
+    smac:cost 10 ;
+    smac:maintenance 2 ;
+    smac:effectText "Do Not Build Me" ;
+    smac:disabled true ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+fac:empty-facility-64 a smac:Facility ;
+    rdfs:label "Empty Facility 64" ;
+    smac:cost 10 ;
+    smac:maintenance 2 ;
+    smac:effectText "Do Not Build Me" ;
+    smac:disabled true ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+fac:sky-hydroponics-lab a smac:Facility ;
+    rdfs:label "Sky Hydroponics Lab" ;
+    smac:cost 12 ;
+    smac:maintenance 0 ;
+    smac:effectText "+1 Nutrient ALL BASES" ;
+    smac:requiresTech tech:orbital ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+fac:nessus-mining-station a smac:Facility ;
+    rdfs:label "Nessus Mining Station" ;
+    smac:cost 12 ;
+    smac:maintenance 0 ;
+    smac:effectText "+1 Minerals ALL BASES" ;
+    smac:requiresTech tech:hal9000 ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+fac:orbital-power-transmitter a smac:Facility ;
+    rdfs:label "Orbital Power Transmitter" ;
+    smac:cost 12 ;
+    smac:maintenance 0 ;
+    smac:effectText "+1 Energy ALL BASES" ;
+    smac:requiresTech tech:space ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+fac:orbital-defense-pod a smac:Facility ;
+    rdfs:label "Orbital Defense Pod" ;
+    smac:cost 12 ;
+    smac:maintenance 0 ;
+    smac:effectText "Missile Defense" ;
+    smac:requiresTech tech:hal9000 ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+fac:stockpile-energy a smac:Facility ;
+    rdfs:label "Stockpile Energy" ;
+    smac:cost 0 ;
+    smac:maintenance 0 ;
+    smac:effectText "Minerals to Energy" ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+fac:the-human-genome-project a smac:SecretProject ;
+    rdfs:label "The Human Genome Project" ;
+    smac:cost 20 ;
+    smac:maintenance 0 ;
+    smac:effectText "+1 Talent Each Base" ;
+    smac:requiresTech tech:biogen ;
+    smac:aiPriorityFight -1 ;
+    smac:aiPriorityPower 0 ;
+    smac:aiPriorityTech 1 ;
+    smac:aiPriorityWealth 1 ;
+    smac:aiPriorityGrowth 2 ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+fac:the-command-nexus a smac:SecretProject ;
+    rdfs:label "The Command Nexus" ;
+    smac:cost 20 ;
+    smac:maintenance 0 ;
+    smac:effectText "Command Center Each Base" ;
+    smac:requiresTech tech:docloy ;
+    smac:aiPriorityFight 1 ;
+    smac:aiPriorityPower 2 ;
+    smac:aiPriorityTech 0 ;
+    smac:aiPriorityWealth 0 ;
+    smac:aiPriorityGrowth 0 ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+fac:the-weather-paradigm a smac:SecretProject ;
+    rdfs:label "The Weather Paradigm" ;
+    smac:cost 20 ;
+    smac:maintenance 0 ;
+    smac:effectText "Terraform Rate +50%" ;
+    smac:requiresTech tech:ecology ;
+    smac:aiPriorityFight 0 ;
+    smac:aiPriorityPower 0 ;
+    smac:aiPriorityTech 0 ;
+    smac:aiPriorityWealth 2 ;
+    smac:aiPriorityGrowth 2 ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+fac:the-merchant-exchange a smac:SecretProject ;
+    rdfs:label "The Merchant Exchange" ;
+    smac:cost 20 ;
+    smac:maintenance 0 ;
+    smac:effectText "+1 Energy Each Square Here" ;
+    smac:requiresTech tech:indust ;
+    smac:aiPriorityFight -1 ;
+    smac:aiPriorityPower 0 ;
+    smac:aiPriorityTech 0 ;
+    smac:aiPriorityWealth 1 ;
+    smac:aiPriorityGrowth 0 ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+fac:the-empath-guild a smac:SecretProject ;
+    rdfs:label "The Empath Guild" ;
+    smac:cost 20 ;
+    smac:maintenance 0 ;
+    smac:effectText "Commlink For Every Faction" ;
+    smac:requiresTech tech:centemp ;
+    smac:aiPriorityFight -2 ;
+    smac:aiPriorityPower 0 ;
+    smac:aiPriorityTech 0 ;
+    smac:aiPriorityWealth 1 ;
+    smac:aiPriorityGrowth 2 ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+fac:the-citizens-defense-force a smac:SecretProject ;
+    rdfs:label "The Citizens' Defense Force" ;
+    smac:cost 30 ;
+    smac:maintenance 0 ;
+    smac:effectText "Perimeter Defense Each Base" ;
+    smac:requiresTech tech:integ ;
+    smac:aiPriorityFight 0 ;
+    smac:aiPriorityPower 2 ;
+    smac:aiPriorityTech 0 ;
+    smac:aiPriorityWealth 1 ;
+    smac:aiPriorityGrowth 0 ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+fac:the-virtual-world a smac:SecretProject ;
+    rdfs:label "The Virtual World" ;
+    smac:cost 30 ;
+    smac:maintenance 0 ;
+    smac:effectText "Network Nodes Help Drones" ;
+    smac:requiresTech tech:planets ;
+    smac:aiPriorityFight 0 ;
+    smac:aiPriorityPower 0 ;
+    smac:aiPriorityTech 2 ;
+    smac:aiPriorityWealth 1 ;
+    smac:aiPriorityGrowth 0 ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+fac:the-planetary-transit-system a smac:SecretProject ;
+    rdfs:label "The Planetary Transit System" ;
+    smac:cost 30 ;
+    smac:maintenance 0 ;
+    smac:effectText "New Bases Begin At Size 3" ;
+    smac:requiresTech tech:indauto ;
+    smac:aiPriorityFight 0 ;
+    smac:aiPriorityPower 0 ;
+    smac:aiPriorityTech 0 ;
+    smac:aiPriorityWealth 2 ;
+    smac:aiPriorityGrowth 2 ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+fac:the-xenoempathy-dome a smac:SecretProject ;
+    rdfs:label "The Xenoempathy Dome" ;
+    smac:cost 30 ;
+    smac:maintenance 0 ;
+    smac:effectText "Fungus Movement Bonus" ;
+    smac:requiresTech tech:centmed ;
+    smac:aiPriorityFight 0 ;
+    smac:aiPriorityPower 1 ;
+    smac:aiPriorityTech 0 ;
+    smac:aiPriorityWealth 0 ;
+    smac:aiPriorityGrowth 2 ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+fac:the-neural-amplifier a smac:SecretProject ;
+    rdfs:label "The Neural Amplifier" ;
+    smac:cost 30 ;
+    smac:maintenance 0 ;
+    smac:effectText "Psi Defense +50%" ;
+    smac:requiresTech tech:neural ;
+    smac:aiPriorityFight 0 ;
+    smac:aiPriorityPower 2 ;
+    smac:aiPriorityTech 0 ;
+    smac:aiPriorityWealth 0 ;
+    smac:aiPriorityGrowth 1 ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+fac:the-maritime-control-center a smac:SecretProject ;
+    rdfs:label "The Maritime Control Center" ;
+    smac:cost 30 ;
+    smac:maintenance 0 ;
+    smac:effectText "Naval Movement +2; Naval Bases" ;
+    smac:requiresTech tech:docinit ;
+    smac:aiPriorityFight 1 ;
+    smac:aiPriorityPower 2 ;
+    smac:aiPriorityTech 0 ;
+    smac:aiPriorityWealth 0 ;
+    smac:aiPriorityGrowth 0 ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+fac:the-planetary-datalinks a smac:SecretProject ;
+    rdfs:label "The Planetary Datalinks" ;
+    smac:cost 30 ;
+    smac:maintenance 0 ;
+    smac:effectText "Any Tech Known To 3 Others" ;
+    smac:requiresTech tech:cyber ;
+    smac:aiPriorityFight 0 ;
+    smac:aiPriorityPower 0 ;
+    smac:aiPriorityTech 1 ;
+    smac:aiPriorityWealth 0 ;
+    smac:aiPriorityGrowth 1 ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+fac:the-supercollider a smac:SecretProject ;
+    rdfs:label "The Supercollider" ;
+    smac:cost 30 ;
+    smac:maintenance 0 ;
+    smac:effectText "Labs +100% At This Base" ;
+    smac:requiresTech tech:e-mc2 ;
+    smac:aiPriorityFight 0 ;
+    smac:aiPriorityPower 0 ;
+    smac:aiPriorityTech 2 ;
+    smac:aiPriorityWealth 0 ;
+    smac:aiPriorityGrowth 0 ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+fac:the-ascetic-virtues a smac:SecretProject ;
+    rdfs:label "The Ascetic Virtues" ;
+    smac:cost 30 ;
+    smac:maintenance 0 ;
+    smac:effectText "Pop. Limit Relaxed; +1 POLICE" ;
+    smac:requiresTech tech:plaecon ;
+    smac:aiPriorityFight 0 ;
+    smac:aiPriorityPower 0 ;
+    smac:aiPriorityTech 0 ;
+    smac:aiPriorityWealth 1 ;
+    smac:aiPriorityGrowth 2 ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+fac:the-longevity-vaccine a smac:SecretProject ;
+    rdfs:label "The Longevity Vaccine" ;
+    smac:cost 30 ;
+    smac:maintenance 0 ;
+    smac:effectText "Fewer Drones or More Profits" ;
+    smac:requiresTech tech:bioeng ;
+    smac:aiPriorityFight 0 ;
+    smac:aiPriorityPower 0 ;
+    smac:aiPriorityTech 0 ;
+    smac:aiPriorityWealth 2 ;
+    smac:aiPriorityGrowth 1 ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+fac:the-hunter-seeker-algorithm a smac:SecretProject ;
+    rdfs:label "The Hunter-Seeker Algorithm" ;
+    smac:cost 30 ;
+    smac:maintenance 0 ;
+    smac:effectText "Immunity to Probe Teams" ;
+    smac:requiresTech tech:algor ;
+    smac:aiPriorityFight 0 ;
+    smac:aiPriorityPower 2 ;
+    smac:aiPriorityTech 2 ;
+    smac:aiPriorityWealth 0 ;
+    smac:aiPriorityGrowth 0 ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+fac:the-pholus-mutagen a smac:SecretProject ;
+    rdfs:label "The Pholus Mutagen" ;
+    smac:cost 40 ;
+    smac:maintenance 0 ;
+    smac:effectText "Ecology Bonus; Lifecycle Bonus" ;
+    smac:requiresTech tech:centgen ;
+    smac:aiPriorityFight 0 ;
+    smac:aiPriorityPower 0 ;
+    smac:aiPriorityTech 1 ;
+    smac:aiPriorityWealth 0 ;
+    smac:aiPriorityGrowth 1 ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+fac:the-cyborg-factory a smac:SecretProject ;
+    rdfs:label "The Cyborg Factory" ;
+    smac:cost 40 ;
+    smac:maintenance 0 ;
+    smac:effectText "Bioenh. Center Every Base" ;
+    smac:requiresTech tech:mindmac ;
+    smac:aiPriorityFight 1 ;
+    smac:aiPriorityPower 1 ;
+    smac:aiPriorityTech 0 ;
+    smac:aiPriorityWealth 0 ;
+    smac:aiPriorityGrowth 0 ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+fac:the-theory-of-everything a smac:SecretProject ;
+    rdfs:label "The Theory of Everything" ;
+    smac:cost 40 ;
+    smac:maintenance 0 ;
+    smac:effectText "Labs +100% At This Base" ;
+    smac:requiresTech tech:unified ;
+    smac:aiPriorityFight 0 ;
+    smac:aiPriorityPower 0 ;
+    smac:aiPriorityTech 2 ;
+    smac:aiPriorityWealth 0 ;
+    smac:aiPriorityGrowth 0 ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+fac:the-dream-twister a smac:SecretProject ;
+    rdfs:label "The Dream Twister" ;
+    smac:cost 40 ;
+    smac:maintenance 0 ;
+    smac:effectText "Psi Attack +50%" ;
+    smac:requiresTech tech:willpow ;
+    smac:aiPriorityFight 0 ;
+    smac:aiPriorityPower 2 ;
+    smac:aiPriorityTech 0 ;
+    smac:aiPriorityWealth 0 ;
+    smac:aiPriorityGrowth 1 ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+fac:the-universal-translator a smac:SecretProject ;
+    rdfs:label "The Universal Translator" ;
+    smac:cost 40 ;
+    smac:maintenance 0 ;
+    smac:effectText "Two Free Techs" ;
+    smac:requiresTech tech:homosup ;
+    smac:aiPriorityFight 0 ;
+    smac:aiPriorityPower 0 ;
+    smac:aiPriorityTech 2 ;
+    smac:aiPriorityWealth 0 ;
+    smac:aiPriorityGrowth 0 ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+fac:the-network-backbone a smac:SecretProject ;
+    rdfs:label "The Network Backbone" ;
+    smac:cost 40 ;
+    smac:maintenance 0 ;
+    smac:effectText "+1 Lab Per Commerce/Net Node" ;
+    smac:requiresTech tech:digsent ;
+    smac:aiPriorityFight 0 ;
+    smac:aiPriorityPower 0 ;
+    smac:aiPriorityTech 2 ;
+    smac:aiPriorityWealth 0 ;
+    smac:aiPriorityGrowth 0 ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+fac:the-nano-factory a smac:SecretProject ;
+    rdfs:label "The Nano Factory" ;
+    smac:cost 40 ;
+    smac:maintenance 0 ;
+    smac:effectText "Repair Units; Low Upgrade Costs" ;
+    smac:requiresTech tech:indrob ;
+    smac:aiPriorityFight 1 ;
+    smac:aiPriorityPower 2 ;
+    smac:aiPriorityTech 0 ;
+    smac:aiPriorityWealth 0 ;
+    smac:aiPriorityGrowth 0 ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+fac:the-living-refinery a smac:SecretProject ;
+    rdfs:label "The Living Refinery" ;
+    smac:cost 40 ;
+    smac:maintenance 0 ;
+    smac:effectText "+2 SUPPORT (social)" ;
+    smac:requiresTech tech:space ;
+    smac:aiPriorityFight 0 ;
+    smac:aiPriorityPower 1 ;
+    smac:aiPriorityTech 0 ;
+    smac:aiPriorityWealth 1 ;
+    smac:aiPriorityGrowth 1 ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+fac:the-cloning-vats a smac:SecretProject ;
+    rdfs:label "The Cloning Vats" ;
+    smac:cost 50 ;
+    smac:maintenance 0 ;
+    smac:effectText "Population Boom At All Bases" ;
+    smac:requiresTech tech:biomac ;
+    smac:aiPriorityFight 0 ;
+    smac:aiPriorityPower 1 ;
+    smac:aiPriorityTech 1 ;
+    smac:aiPriorityWealth 1 ;
+    smac:aiPriorityGrowth 2 ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+fac:the-self-aware-colony a smac:SecretProject ;
+    rdfs:label "The Self-Aware Colony" ;
+    smac:cost 50 ;
+    smac:maintenance 0 ;
+    smac:effectText "Maintenance Halved; Extra Police" ;
+    smac:requiresTech tech:hal9000 ;
+    smac:aiPriorityFight 0 ;
+    smac:aiPriorityPower 1 ;
+    smac:aiPriorityTech 0 ;
+    smac:aiPriorityWealth 2 ;
+    smac:aiPriorityGrowth 0 ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+fac:clinical-immortality a smac:SecretProject ;
+    rdfs:label "Clinical Immortality" ;
+    smac:cost 50 ;
+    smac:maintenance 0 ;
+    smac:effectText "Extra Talent Every Base" ;
+    smac:requiresTech tech:nanedit ;
+    smac:aiPriorityFight 0 ;
+    smac:aiPriorityPower 0 ;
+    smac:aiPriorityTech 1 ;
+    smac:aiPriorityWealth 1 ;
+    smac:aiPriorityGrowth 1 ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+fac:the-space-elevator a smac:SecretProject ;
+    rdfs:label "The Space Elevator" ;
+    smac:cost 50 ;
+    smac:maintenance 0 ;
+    smac:effectText "Energy +100%/Orbital Cost Halved" ;
+    smac:requiresTech tech:solids ;
+    smac:aiPriorityFight 0 ;
+    smac:aiPriorityPower 0 ;
+    smac:aiPriorityTech 2 ;
+    smac:aiPriorityWealth 2 ;
+    smac:aiPriorityGrowth 0 ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+fac:the-singularity-inductor a smac:SecretProject ;
+    rdfs:label "The Singularity Inductor" ;
+    smac:cost 60 ;
+    smac:maintenance 0 ;
+    smac:effectText "Quantum Converter Every Base" ;
+    smac:requiresTech tech:consing ;
+    smac:aiPriorityFight 0 ;
+    smac:aiPriorityPower 1 ;
+    smac:aiPriorityTech 1 ;
+    smac:aiPriorityWealth 1 ;
+    smac:aiPriorityGrowth 0 ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+fac:the-bulk-matter-transmitter a smac:SecretProject ;
+    rdfs:label "The Bulk Matter Transmitter" ;
+    smac:cost 60 ;
+    smac:maintenance 0 ;
+    smac:effectText "+50% Minerals Every Base" ;
+    smac:requiresTech tech:matter ;
+    smac:aiPriorityFight 0 ;
+    smac:aiPriorityPower 1 ;
+    smac:aiPriorityTech 1 ;
+    smac:aiPriorityWealth 1 ;
+    smac:aiPriorityGrowth 0 ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+fac:the-telepathic-matrix a smac:SecretProject ;
+    rdfs:label "The Telepathic Matrix" ;
+    smac:cost 60 ;
+    smac:maintenance 0 ;
+    smac:effectText "No More Drone Riots; +2 PROBE" ;
+    smac:requiresTech tech:eudaim ;
+    smac:aiPriorityFight 0 ;
+    smac:aiPriorityPower 1 ;
+    smac:aiPriorityTech 1 ;
+    smac:aiPriorityWealth 1 ;
+    smac:aiPriorityGrowth 1 ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+fac:the-voice-of-planet a smac:SecretProject ;
+    rdfs:label "The Voice of Planet" ;
+    smac:cost 60 ;
+    smac:maintenance 0 ;
+    smac:effectText "Begins Ascent To Transcendence" ;
+    smac:requiresTech tech:thresh ;
+    smac:aiPriorityFight -2 ;
+    smac:aiPriorityPower 0 ;
+    smac:aiPriorityTech 2 ;
+    smac:aiPriorityWealth 1 ;
+    smac:aiPriorityGrowth 2 ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+fac:the-ascent-to-transcendence a smac:SecretProject ;
+    rdfs:label "The Ascent to Transcendence" ;
+    smac:cost 200 ;
+    smac:maintenance 0 ;
+    smac:effectText "End of Singular Sentience Era" ;
+    smac:requiresTech tech:thresh ;
+    smac:aiPriorityFight 0 ;
+    smac:aiPriorityPower 0 ;
+    smac:aiPriorityTech 2 ;
+    smac:aiPriorityWealth 2 ;
+    smac:aiPriorityGrowth 2 ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+fac:the-manifold-harmonics a smac:SecretProject ;
+    rdfs:label "The Manifold Harmonics" ;
+    smac:cost 50 ;
+    smac:maintenance 0 ;
+    smac:effectText "Bonus Resources In Fungus" ;
+    smac:requiresTech tech:secmani ;
+    smac:aiPriorityFight 0 ;
+    smac:aiPriorityPower 0 ;
+    smac:aiPriorityTech 1 ;
+    smac:aiPriorityWealth 2 ;
+    smac:aiPriorityGrowth 2 ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+fac:the-nethack-terminus a smac:SecretProject ;
+    rdfs:label "The Nethack Terminus" ;
+    smac:cost 40 ;
+    smac:maintenance 0 ;
+    smac:effectText "Stronger Probe Teams" ;
+    smac:requiresTech tech:hal9000 ;
+    smac:aiPriorityFight 0 ;
+    smac:aiPriorityPower 2 ;
+    smac:aiPriorityTech 1 ;
+    smac:aiPriorityWealth 0 ;
+    smac:aiPriorityGrowth 0 ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+fac:the-cloudbase-academy a smac:SecretProject ;
+    rdfs:label "The Cloudbase Academy" ;
+    smac:cost 30 ;
+    smac:maintenance 0 ;
+    smac:effectText "Faster/Stronger Air Units" ;
+    smac:requiresTech tech:mindmac ;
+    smac:aiPriorityFight 1 ;
+    smac:aiPriorityPower 2 ;
+    smac:aiPriorityTech 0 ;
+    smac:aiPriorityWealth 2 ;
+    smac:aiPriorityGrowth 0 ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+fac:the-planetary-energy-grid a smac:SecretProject ;
+    rdfs:label "The Planetary Energy Grid" ;
+    smac:cost 30 ;
+    smac:maintenance 0 ;
+    smac:effectText "Energy Bank At Every Base" ;
+    smac:requiresTech tech:adapeco ;
+    smac:aiPriorityFight -1 ;
+    smac:aiPriorityPower 0 ;
+    smac:aiPriorityTech 1 ;
+    smac:aiPriorityWealth 2 ;
+    smac:aiPriorityGrowth 1 ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+fac:empty-secret-project-38 a smac:SecretProject ;
+    rdfs:label "Empty Secret Project 38" ;
+    smac:cost 20 ;
+    smac:maintenance 0 ;
+    smac:effectText "End of Real Secret Projects" ;
+    smac:disabled true ;
+    smac:aiPriorityFight 0 ;
+    smac:aiPriorityPower 0 ;
+    smac:aiPriorityTech 2 ;
+    smac:aiPriorityWealth 2 ;
+    smac:aiPriorityGrowth 2 ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+fac:empty-secret-project-39 a smac:SecretProject ;
+    rdfs:label "Empty Secret Project 39" ;
+    smac:cost 20 ;
+    smac:maintenance 0 ;
+    smac:effectText "End of Real Secret Projects" ;
+    smac:disabled true ;
+    smac:aiPriorityFight 0 ;
+    smac:aiPriorityPower 0 ;
+    smac:aiPriorityTech 2 ;
+    smac:aiPriorityWealth 2 ;
+    smac:aiPriorityGrowth 2 ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+fac:empty-secret-project-40 a smac:SecretProject ;
+    rdfs:label "Empty Secret Project 40" ;
+    smac:cost 20 ;
+    smac:maintenance 0 ;
+    smac:effectText "End of Real Secret Projects" ;
+    smac:disabled true ;
+    smac:aiPriorityFight 0 ;
+    smac:aiPriorityPower 0 ;
+    smac:aiPriorityTech 2 ;
+    smac:aiPriorityWealth 2 ;
+    smac:aiPriorityGrowth 2 ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+fac:empty-secret-project-41 a smac:SecretProject ;
+    rdfs:label "Empty Secret Project 41" ;
+    smac:cost 20 ;
+    smac:maintenance 0 ;
+    smac:effectText "End of Real Secret Projects" ;
+    smac:disabled true ;
+    smac:aiPriorityFight 0 ;
+    smac:aiPriorityPower 0 ;
+    smac:aiPriorityTech 2 ;
+    smac:aiPriorityWealth 2 ;
+    smac:aiPriorityGrowth 2 ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+fac:empty-secret-project-42 a smac:SecretProject ;
+    rdfs:label "Empty Secret Project 42" ;
+    smac:cost 20 ;
+    smac:maintenance 0 ;
+    smac:effectText "End of Real Secret Projects" ;
+    smac:disabled true ;
+    smac:aiPriorityFight 0 ;
+    smac:aiPriorityPower 0 ;
+    smac:aiPriorityTech 2 ;
+    smac:aiPriorityWealth 2 ;
+    smac:aiPriorityGrowth 2 ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+fac:empty-secret-project-43 a smac:SecretProject ;
+    rdfs:label "Empty Secret Project 43" ;
+    smac:cost 20 ;
+    smac:maintenance 0 ;
+    smac:effectText "End of Real Secret Projects" ;
+    smac:disabled true ;
+    smac:aiPriorityFight 0 ;
+    smac:aiPriorityPower 0 ;
+    smac:aiPriorityTech 2 ;
+    smac:aiPriorityWealth 2 ;
+    smac:aiPriorityGrowth 2 ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+fac:empty-secret-project-44 a smac:SecretProject ;
+    rdfs:label "Empty Secret Project 44" ;
+    smac:cost 20 ;
+    smac:maintenance 0 ;
+    smac:effectText "End of Real Secret Projects" ;
+    smac:disabled true ;
+    smac:aiPriorityFight 0 ;
+    smac:aiPriorityPower 0 ;
+    smac:aiPriorityTech 2 ;
+    smac:aiPriorityWealth 2 ;
+    smac:aiPriorityGrowth 2 ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+fac:empty-secret-project-45 a smac:SecretProject ;
+    rdfs:label "Empty Secret Project 45" ;
+    smac:cost 20 ;
+    smac:maintenance 0 ;
+    smac:effectText "End of Real Secret Projects" ;
+    smac:disabled true ;
+    smac:aiPriorityFight 0 ;
+    smac:aiPriorityPower 0 ;
+    smac:aiPriorityTech 2 ;
+    smac:aiPriorityWealth 2 ;
+    smac:aiPriorityGrowth 2 ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+fac:empty-secret-project-46 a smac:SecretProject ;
+    rdfs:label "Empty Secret Project 46" ;
+    smac:cost 20 ;
+    smac:maintenance 0 ;
+    smac:effectText "End of Real Secret Projects" ;
+    smac:disabled true ;
+    smac:aiPriorityFight 0 ;
+    smac:aiPriorityPower 0 ;
+    smac:aiPriorityTech 2 ;
+    smac:aiPriorityWealth 2 ;
+    smac:aiPriorityGrowth 2 ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+fac:empty-secret-project-47 a smac:SecretProject ;
+    rdfs:label "Empty Secret Project 47" ;
+    smac:cost 20 ;
+    smac:maintenance 0 ;
+    smac:effectText "End of Real Secret Projects" ;
+    smac:disabled true ;
+    smac:aiPriorityFight 0 ;
+    smac:aiPriorityPower 0 ;
+    smac:aiPriorityTech 2 ;
+    smac:aiPriorityWealth 2 ;
+    smac:aiPriorityGrowth 2 ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+fac:empty-secret-project-48 a smac:SecretProject ;
+    rdfs:label "Empty Secret Project 48" ;
+    smac:cost 20 ;
+    smac:maintenance 0 ;
+    smac:effectText "End of Real Secret Projects" ;
+    smac:disabled true ;
+    smac:aiPriorityFight 0 ;
+    smac:aiPriorityPower 0 ;
+    smac:aiPriorityTech 2 ;
+    smac:aiPriorityWealth 2 ;
+    smac:aiPriorityGrowth 2 ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+fac:empty-secret-project-49 a smac:SecretProject ;
+    rdfs:label "Empty Secret Project 49" ;
+    smac:cost 20 ;
+    smac:maintenance 0 ;
+    smac:effectText "End of Real Secret Projects" ;
+    smac:disabled true ;
+    smac:aiPriorityFight 0 ;
+    smac:aiPriorityPower 0 ;
+    smac:aiPriorityTech 2 ;
+    smac:aiPriorityWealth 2 ;
+    smac:aiPriorityGrowth 2 ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+fac:empty-secret-project-50 a smac:SecretProject ;
+    rdfs:label "Empty Secret Project 50" ;
+    smac:cost 20 ;
+    smac:maintenance 0 ;
+    smac:effectText "End of Real Secret Projects" ;
+    smac:disabled true ;
+    smac:aiPriorityFight 0 ;
+    smac:aiPriorityPower 0 ;
+    smac:aiPriorityTech 2 ;
+    smac:aiPriorityWealth 2 ;
+    smac:aiPriorityGrowth 2 ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+fac:empty-secret-project-51 a smac:SecretProject ;
+    rdfs:label "Empty Secret Project 51" ;
+    smac:cost 20 ;
+    smac:maintenance 0 ;
+    smac:effectText "End of Real Secret Projects" ;
+    smac:disabled true ;
+    smac:aiPriorityFight 0 ;
+    smac:aiPriorityPower 0 ;
+    smac:aiPriorityTech 2 ;
+    smac:aiPriorityWealth 2 ;
+    smac:aiPriorityGrowth 2 ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+fac:empty-secret-project-52 a smac:SecretProject ;
+    rdfs:label "Empty Secret Project 52" ;
+    smac:cost 20 ;
+    smac:maintenance 0 ;
+    smac:effectText "End of Real Secret Projects" ;
+    smac:disabled true ;
+    smac:aiPriorityFight 0 ;
+    smac:aiPriorityPower 0 ;
+    smac:aiPriorityTech 2 ;
+    smac:aiPriorityWealth 2 ;
+    smac:aiPriorityGrowth 2 ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+fac:empty-secret-project-53 a smac:SecretProject ;
+    rdfs:label "Empty Secret Project 53" ;
+    smac:cost 20 ;
+    smac:maintenance 0 ;
+    smac:effectText "End of Real Secret Projects" ;
+    smac:disabled true ;
+    smac:aiPriorityFight 0 ;
+    smac:aiPriorityPower 0 ;
+    smac:aiPriorityTech 2 ;
+    smac:aiPriorityWealth 2 ;
+    smac:aiPriorityGrowth 2 ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+fac:empty-secret-project-54 a smac:SecretProject ;
+    rdfs:label "Empty Secret Project 54" ;
+    smac:cost 20 ;
+    smac:maintenance 0 ;
+    smac:effectText "End of Real Secret Projects" ;
+    smac:disabled true ;
+    smac:aiPriorityFight 0 ;
+    smac:aiPriorityPower 0 ;
+    smac:aiPriorityTech 2 ;
+    smac:aiPriorityWealth 2 ;
+    smac:aiPriorityGrowth 2 ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+fac:empty-secret-project-55 a smac:SecretProject ;
+    rdfs:label "Empty Secret Project 55" ;
+    smac:cost 20 ;
+    smac:maintenance 0 ;
+    smac:effectText "End of Real Secret Projects" ;
+    smac:disabled true ;
+    smac:aiPriorityFight 0 ;
+    smac:aiPriorityPower 0 ;
+    smac:aiPriorityTech 2 ;
+    smac:aiPriorityWealth 2 ;
+    smac:aiPriorityGrowth 2 ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+fac:empty-secret-project-56 a smac:SecretProject ;
+    rdfs:label "Empty Secret Project 56" ;
+    smac:cost 20 ;
+    smac:maintenance 0 ;
+    smac:effectText "End of Real Secret Projects" ;
+    smac:disabled true ;
+    smac:aiPriorityFight 0 ;
+    smac:aiPriorityPower 0 ;
+    smac:aiPriorityTech 2 ;
+    smac:aiPriorityWealth 2 ;
+    smac:aiPriorityGrowth 2 ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+fac:empty-secret-project-57 a smac:SecretProject ;
+    rdfs:label "Empty Secret Project 57" ;
+    smac:cost 20 ;
+    smac:maintenance 0 ;
+    smac:effectText "End of Real Secret Projects" ;
+    smac:disabled true ;
+    smac:aiPriorityFight 0 ;
+    smac:aiPriorityPower 0 ;
+    smac:aiPriorityTech 2 ;
+    smac:aiPriorityWealth 2 ;
+    smac:aiPriorityGrowth 2 ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+fac:empty-secret-project-58 a smac:SecretProject ;
+    rdfs:label "Empty Secret Project 58" ;
+    smac:cost 20 ;
+    smac:maintenance 0 ;
+    smac:effectText "End of Real Secret Projects" ;
+    smac:disabled true ;
+    smac:aiPriorityFight 0 ;
+    smac:aiPriorityPower 0 ;
+    smac:aiPriorityTech 2 ;
+    smac:aiPriorityWealth 2 ;
+    smac:aiPriorityGrowth 2 ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+fac:empty-secret-project-59 a smac:SecretProject ;
+    rdfs:label "Empty Secret Project 59" ;
+    smac:cost 20 ;
+    smac:maintenance 0 ;
+    smac:effectText "End of Real Secret Projects" ;
+    smac:disabled true ;
+    smac:aiPriorityFight 0 ;
+    smac:aiPriorityPower 0 ;
+    smac:aiPriorityTech 2 ;
+    smac:aiPriorityWealth 2 ;
+    smac:aiPriorityGrowth 2 ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+fac:empty-secret-project-60 a smac:SecretProject ;
+    rdfs:label "Empty Secret Project 60" ;
+    smac:cost 20 ;
+    smac:maintenance 0 ;
+    smac:effectText "End of Real Secret Projects" ;
+    smac:disabled true ;
+    smac:aiPriorityFight 0 ;
+    smac:aiPriorityPower 0 ;
+    smac:aiPriorityTech 2 ;
+    smac:aiPriorityWealth 2 ;
+    smac:aiPriorityGrowth 2 ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+fac:empty-secret-project-61 a smac:SecretProject ;
+    rdfs:label "Empty Secret Project 61" ;
+    smac:cost 20 ;
+    smac:maintenance 0 ;
+    smac:effectText "End of Real Secret Projects" ;
+    smac:disabled true ;
+    smac:aiPriorityFight 0 ;
+    smac:aiPriorityPower 0 ;
+    smac:aiPriorityTech 2 ;
+    smac:aiPriorityWealth 2 ;
+    smac:aiPriorityGrowth 2 ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+fac:empty-secret-project-62 a smac:SecretProject ;
+    rdfs:label "Empty Secret Project 62" ;
+    smac:cost 20 ;
+    smac:maintenance 0 ;
+    smac:effectText "End of Real Secret Projects" ;
+    smac:disabled true ;
+    smac:aiPriorityFight 0 ;
+    smac:aiPriorityPower 0 ;
+    smac:aiPriorityTech 2 ;
+    smac:aiPriorityWealth 2 ;
+    smac:aiPriorityGrowth 2 ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+fac:empty-secret-project-63 a smac:SecretProject ;
+    rdfs:label "Empty Secret Project 63" ;
+    smac:cost 20 ;
+    smac:maintenance 0 ;
+    smac:effectText "End of Real Secret Projects" ;
+    smac:disabled true ;
+    smac:aiPriorityFight 0 ;
+    smac:aiPriorityPower 0 ;
+    smac:aiPriorityTech 2 ;
+    smac:aiPriorityWealth 2 ;
+    smac:aiPriorityGrowth 2 ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+fac:empty-secret-project-64 a smac:SecretProject ;
+    rdfs:label "Empty Secret Project 64" ;
+    smac:cost 20 ;
+    smac:maintenance 0 ;
+    smac:effectText "End of Real Secret Projects" ;
+    smac:disabled true ;
+    smac:aiPriorityFight 0 ;
+    smac:aiPriorityPower 0 ;
+    smac:aiPriorityTech 2 ;
+    smac:aiPriorityWealth 2 ;
+    smac:aiPriorityGrowth 2 ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .

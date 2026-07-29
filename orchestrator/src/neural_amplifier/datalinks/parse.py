@@ -49,6 +49,38 @@ class Row:
             return default
 
 
+#: Substrings that mark a file as a *mod's* rules rather than stock SMAC.
+#: Thinker ships its own alphax.txt whose header reads "SMACX Thinker Mod";
+#: ingesting it as `canonical` is precisely the masquerade the tier predicates
+#: exist to prevent, and the file looks identical in every other respect.
+MOD_MARKERS = ("thinker mod", "smac-in-smacx", "mod /", "modded")
+
+
+def header(text: str) -> str:
+    """The leading comment block, which is where a mod announces itself."""
+    lines: list[str] = []
+    for raw in text.splitlines():
+        line = raw.strip()
+        if line.startswith("#"):
+            break
+        if line.startswith(";"):
+            lines.append(line.lstrip("; ").rstrip())
+    return "\n".join(lines)
+
+
+def looks_modded(text: str) -> str | None:
+    """The header marker that says this is not stock SMAC, if any.
+
+    Advisory, not a parser concern — but the caller tagging provenance needs
+    it, because nothing else in the file distinguishes a mod's rules.
+    """
+    top = header(text).lower()
+    for marker in MOD_MARKERS:
+        if marker in top:
+            return marker
+    return None
+
+
 def sections(text: str) -> Iterator[Row]:
     """Split the file into ``#SECTION`` blocks and comma-separated rows.
 

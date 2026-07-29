@@ -53,7 +53,21 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     if args.command == "ingest":
-        from .datalinks import Provenance, briefing, parse_file, turtle
+        from .datalinks import Provenance, briefing, looks_modded, parse_file, turtle
+
+        text = args.alphax.read_text(encoding="latin-1")
+        marker = looks_modded(text)
+        if marker and args.tier == "canonical":
+            # The whole point of the tier predicate. A mod's alphax.txt is
+            # byte-for-byte the same shape as stock, so nothing downstream can
+            # tell them apart once it is stored as canonical.
+            print(
+                f"FAIL: {args.alphax} announces itself as a mod ({marker!r} in its header) "
+                "but --tier is 'canonical'. Re-run with --engine thinker --tier house-rule, "
+                "or point at your own install's stock alphax.txt.",
+                file=sys.stderr,
+            )
+            return 1
 
         links = parse_file(args.alphax)
         counts: dict[str, object] = {
@@ -62,6 +76,9 @@ def main(argv: list[str] | None = None) -> int:
             "secret_projects": len(links.secret_projects),
             "components": len(links.components),
             "disabled_facilities": sum(1 for f in links.facilities.values() if f.disabled),
+            "engine": args.engine,
+            "tier": args.tier,
+            "modded_source": marker,
         }
         if args.out:
             provenance = Provenance(engine=args.engine, tier=args.tier, source=args.alphax.name)
