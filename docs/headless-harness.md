@@ -141,12 +141,14 @@ scripted decisions should produce the same autosave sequence.
 
 ### 3.3 Hazards to design around now
 
-- **`MessageBoxA` is a deadlock in disguise.** Thinker reports fatal errors through modal
-  dialogs (`exit_fail` at `src/main.cpp:429-441`; startup failures at `:451-468`). Under Xvfb
-  with nobody to click OK, that is a
-  process hung *forever*, not a failed test. The harness needs a **hard timeout**, and the
-  fork should gain a flag routing fatal errors to stderr + non-zero exit. Small change, high
-  value — without it this failure mode costs a debugging session to diagnose the first time.
+- **`MessageBoxA` is a deadlock in disguise.** Thinker reports *fatal errors* through Win32
+  modal dialogs (`exit_fail` at `src/main.cpp:429-441`; startup failures at `:451-468`). Under
+  Xvfb with nobody to click OK, that is a process hung *forever*, not a failed test. The
+  harness needs a **hard timeout**, and the fork should gain a flag routing fatal errors to
+  stderr + non-zero exit. Small change, high value — without it this failure mode costs a
+  debugging session to diagnose the first time.
+  - This applies **only** to Thinker's error dialogs. The game's own in-game dialogs are a
+    different thing entirely and must *not* be suppressed — see §4.
 - **Run windowed.** Set `video_mode = VM_Window` (`src/main.h:179,206`, flag `-windowed`).
   Fullscreen mode-setting is handled poorly under Wine + Xvfb.
 - **Never block the message pump.** Thinker installs a low-CPU idle hook (`ModPeekMessage`,
@@ -157,7 +159,117 @@ scripted decisions should produce the same autosave sequence.
 
 ---
 
-## 4. Why this lane pays for itself: fixture harvesting
+## 4. Dialogs, diplomacy, and custom UI
+
+"Suppress the modal dialogs" is the wrong instinct. SMAC's dialogs are not chrome — they are
+**decision points and information channels**, and several are exactly what we want Claude to
+answer. Three distinct classes, which must be handled differently:
+
+| Class | Examples | Unattended posture |
+|---|---|---|
+| **Thinker error dialogs** | `exit_fail`, ini/DLL startup failures (`src/main.cpp:429-441,451-468`) | **Suppress** → stderr + exit (§3.3) |
+| **SMAC in-game dialogs** | `popp`, `pop_ask*`, `X_pop_*`, `NetMsg_pop` — council votes, tech choice, events, diplomacy | **Intercept**, never suppress — these are contract decision points |
+| **Our own dialogs** | Copilot advice, order approval, drill-down explanation | **Add** — see §4.3 |
+
+### 4.1 `is_human` is the master switch
+
+Everything turns on one predicate:
+
+```cpp
+bool is_human(int faction_id) {          // src/faction.cpp:109-112
+    return FactionStatus[0] & (1 << faction_id);   // FactionStatus @ 0x9A64E8
+}
+```
+
+The engine branches on it in dozens of places, and it decides **whether a faction talks to a
+human through dialogs or resolves decisions through AI functions**. That gives two operating
+modes, and they are genuinely different products:
+
+**Mode A — Claude drives an AI slot (`is_human == false`).** The game routes decisions to the
+AI functions Thinker has already carved out: `mod_base_build` (`src/base.cpp:1145`),
+`mod_enemy_move`, `mod_faction_upkeep`, `mod_tech_ai`, `mod_social_ai`, `design_units`
+(`src/plan.cpp:103-104`, which early-returns on `is_human`), `council_get_vote`
+(`src/engine.cpp:683`), `enemy_diplomacy`. **No dialogs fire for that faction at all.** This is
+the clean unattended path for autonomous play (A2) — and note that SMAC has a *complete*
+parallel AI decision path, so nothing is only reachable via a dialog.
+
+**Mode B — Claude drives the human slot (`is_human == true`).** Every popup fires and blocks
+for input. This is what **copilot mode** (VISION §7, S3) actually is, and there the dialogs are
+the point.
+
+> **Fairness sting — worth resolving early.** AI slots receive difficulty handicaps and bonuses
+> that human slots don't: e.g. `conf.unit_support_bonus[*DiffLevel]` applies only when
+> `!is_human` (`src/base.cpp:1645`), alongside many other `is_human` branches. VISION §4 commits
+> to **"no cheating"** — so putting Claude on an AI slot means it silently inherits the AI's
+> advantages, and a win proves less than it appears. Either neutralise those branches for
+> LLM-routed factions or record the handicap explicitly in the world view. **This is a
+> correctness issue for the experiment, not a detail.**
+
+### 4.2 Conversations between other computer players
+
+These already happen, and Thinker already intercepts them.
+
+- **Where AI-to-AI diplomacy is decided:** `enemy_diplomacy(faction_id)` (`0x55F930`,
+  `src/engine.cpp:808`), called per faction from `mod_faction_upkeep` (`src/game.cpp:1574`).
+  It is a *decision routine*, not a conversation UI — so it is interceptable exactly like the
+  other AI hooks.
+- **Where the outcomes surface:** the engine broadcasts them as `NetMessage` popups —
+  `enemies_treaty` (three call sites) and `enemies_war` — and Thinker already redirects all of
+  them through `mod_NetMsg_pop` (`src/gui.cpp:1490-1506`, hooks at `src/patch.cpp:1114-1119`)
+  to implement its `foreign_treaty_popup` option, **including per-turn de-duplication**.
+- **So the feed we want already exists.** Pointing `mod_NetMsg_pop` at the contract's `deltas`
+  — in addition to, or instead of, a popup — gives Claude "the Hive and the University just
+  signed a pact" with no new engine archaeology.
+- **The mutation primitives**, for both observing and eventually injecting: `net_treaty_on` /
+  `net_treaty_off` / `net_set_treaty`, `net_tech`, `net_energy`, `net_loan`, `net_maps`,
+  `net_cede_base`, `net_double_cross`, `net_pact_ends` (`src/engine.h:871-884`), plus
+  `propose_pact` / `propose_treaty` / `call_off_vendetta` / `buy_council_vote`.
+
+> **Fog caveat.** `foreign_treaty_popup` surfaces *all* foreign treaty changes. A faction
+> should not legitimately know about pacts between factions it has never met, so this feed must
+> be gated on contact/visibility before it enters the world view — otherwise it is an
+> information cheat wearing a feature's clothes.
+
+### 4.3 Custom dialogs are already a solved, data-driven pattern
+
+Thinker ships its own dialogs today, and the mechanism is pleasantly cheap: **a section in a
+text file plus one call**. `docs/modmenu.txt` (285 lines) defines them:
+
+```text
+#OPTIONS
+#xs 480
+#caption Thinker Mod Options
+^^Mod Version: {$MSG0}
+^^Total bases: $NUM0
+#itemlist
+Use new random map generator.
+__Set map generator emphasis on larger continents.
+```
+
+Sections are addressed by label, `#xs` sets width, `^^` lines are body text, `{$MSG0}` / `$NUM0`
+interpolate strings and numbers, `__` nests list items, and `#itemlist` makes it a selectable
+list. The call returns the chosen index:
+
+| Need | Call | Example |
+|---|---|---|
+| Message / menu, returns choice | `popp(file, label, 0, "img.pcx", 0)` | `src/gui.cpp:1205,1221`; `src/base.cpp:1181` |
+| Checkbox list | `X_pop_9(file, label, -1, 0, PopDialogCheckbox\|PopDialogBtnCancel, 0)` | `src/gui.cpp:1140` |
+| Numeric input | `pop_ask_number_4(file, label, value, 0)` | `src/gui.cpp:706,759` |
+| **Override a stock game dialog** | `mod_BasePop_start` + a `movedlabels` set redirects a stock label to your own file | `src/gui.cpp:1507-1513` |
+| Real Win32 menu entries | `pfncMainMenuAddSubMenu` / `AddBaseMenu` / `AddSeparator` | `src/gui.cpp:131-135` |
+
+So a **Neural Amplifier advisory dialog** — copilot mode showing Claude's proposed orders and
+reasoning for approval — is a `na.txt` section plus a `popp` call, with `{$MSG0}` carrying the
+model's reasoning text. The `movedlabels` redirect in `mod_BasePop_start` is the pattern for
+*replacing* an existing game dialog (e.g. annotating the production picker) without editing the
+original game files.
+
+This makes copilot mode (S3) far cheaper than it looks — and it is the same seam that lets us
+render *why* Claude chose something, which is the project's whole legibility pitch.
+
+---
+
+## 5. Why this lane pays for itself: fixture harvesting
 
 A slow game run whose only output is "it worked" is not worth its cost. **The output that
 matters is recorded world-view JSON.**
@@ -179,7 +291,7 @@ The resulting cadence:
 
 ---
 
-## 5. Proposed sequencing
+## 6. Proposed sequencing
 
 Ordered so each step is verifiable **without the next one existing**, and the slow lane is
 built last. Maps onto [VISION.md](../VISION.md) §7.
@@ -203,18 +315,28 @@ cycle, and it de-risks step 3 by removing the toolchain from the list of unknown
 
 ---
 
-## 6. Open questions
+## 7. Open questions
 
-1. **Minimum file set.** How much of the install does a headless run actually need? A trimmed
+1. **Which slot does Claude occupy, and when?** Mode A (AI slot) is the clean unattended path
+   but inherits AI difficulty bonuses; Mode B (human slot) is fair but every dialog blocks.
+   Likely answer: **Mode A for autonomous play with the handicap branches neutralised**, Mode B
+   for copilot. Resolving §4.1's fairness sting is a prerequisite for A2 meaning anything.
+2. **The other human slot.** A normal game still has a human faction. If Claude runs an AI slot
+   unattended, does the remaining human slot still raise blocking popups — and what occupies
+   it? Investigate `auto_play_callback` (`0x50E890`, `src/engine.cpp:638`), which looks like
+   SMAC's own autoplay hook and may be the intended unattended driver.
+3. **Fog-gating the foreign-diplomacy feed.** `mod_NetMsg_pop` sees all foreign treaty changes;
+   the world view must filter to what the faction has legitimately contacted (§4.2).
+4. **Minimum file set.** How much of the install does a headless run actually need? A trimmed
    fixture is faster to mount and easier to verify. Determine empirically at step 3.
-2. **Steam binary version.** Expected v2.0, unconfirmed until the checksum is run against a
+5. **Steam binary version.** Expected v2.0, unconfirmed until the checksum is run against a
    real install. If it differs, the ISO + official v2.0 patch becomes the primary path.
-3. **Canned-save provenance.** Generated by hand once and committed (saves are small and are
+6. **Canned-save provenance.** Generated by hand once and committed (saves are small and are
    our own game state, not game assets), or regenerated by script? Affects how reproducible
    the harness is for a new contributor.
-4. **Turn-count exit.** Does `-na-exit-turn` cleanly unwind the game loop, or is a harder
+7. **Turn-count exit.** Does `-na-exit-turn` cleanly unwind the game loop, or is a harder
    process kill after the final autosave the pragmatic answer?
-5. **Wine determinism.** How reproducible is a run across Wine versions? Pin the Wine version
+8. **Wine determinism.** How reproducible is a run across Wine versions? Pin the Wine version
    in the harness image regardless.
-6. **Where the harness image lives.** A committed `Dockerfile` (Wine + Xvfb + MinGW, no game)
+9. **Where the harness image lives.** A committed `Dockerfile` (Wine + Xvfb + MinGW, no game)
    that mounts `$SMAC_DIR` at run time keeps the assets out of the image entirely.
