@@ -344,7 +344,10 @@ if no template fires).
 }
 ```
 
-The `VALUES` clause is scoped to *this turn's* researched techs + threat, mirroring the
+> The query above uses `VALUES` and `FILTER IN` as shorthand; Quipu implements neither, so the
+> real query is a `||` disjunction (see [quipu-integration.md](quipu-integration.md)).
+
+The tech/threat filter is scoped to *this turn's* researched techs + threat, mirroring the
 action-space-bounded fetch discipline. A firing template becomes a design suggestion the
 LLM can accept, tweak, or reject.
 

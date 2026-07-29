@@ -80,7 +80,7 @@ Run each turn, kept small:
 - **`quipu_context` on a situation string.** A natural-language digest of the current
   turn (`world_view` summary) → ranked facts. One call; NL→ranked entities with
   relevance scores.
-- **Action-space grounding — one batched SPARQL query.** A **single** SPARQL `VALUES`
+- **Action-space grounding — one batched SPARQL query.** A **single** SPARQL disjunction
   query enumerating *only* the items in this turn's `action_space`, so the model gets
   the canonical rule fact behind each legal move (cost, prerequisites, effect) without
   a per-item round-trip. Scope is exactly the `action_space` — nothing wider.
@@ -96,10 +96,17 @@ Run each turn, kept small:
 {
   "tool": "quipu_query",
   "input": {
-    "query": "SELECT ?item ?cost ?req WHERE { VALUES ?item { smac:Former smac:RecyclingTanks } ?item smac:cost ?cost . OPTIONAL { ?item smac:requiresTech ?req } . ?item smac:appliesToEngine ?e . FILTER(?e IN ('smac','thinker')) }"
+    "query": "SELECT ?item ?cost ?req WHERE { ?item smac:cost ?cost . OPTIONAL { ?item smac:requiresTech ?req } . ?item smac:appliesToEngine ?e . FILTER((?item = smac:Former || ?item = smac:RecyclingTanks) && (?e = 'smac' || ?e = 'thinker')) }"
   }
 }
 ```
+
+> **Quipu's SPARQL engine implements neither `VALUES` nor `FILTER(?x IN (…))`.** Both return
+> `unsupported graph pattern` / `unsupported FILTER expression` (verified against quipu 0.3.11).
+> The working equivalent is a `||` disjunction — `FILTER(?x = "a" || ?x = "b")` — which
+> `datalinks/quipu.py` builds. `OPTIONAL` and property paths do work. Either the queries below
+> get rewritten as disjunctions, or Quipu grows `VALUES`; until then, treat every `VALUES` and
+> `IN` in this document as pseudocode for the disjunction.
 
 ## Token budget discipline
 

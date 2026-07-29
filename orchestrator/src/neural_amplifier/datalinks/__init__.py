@@ -13,6 +13,7 @@ from .parse import (
     parse,
     parse_file,
 )
+from .quipu import QuipuRetriever, build_query
 from .rdf import Provenance, turtle
 
 __all__ = [
@@ -21,9 +22,11 @@ __all__ = [
     "DatalinksRetriever",
     "Facility",
     "Provenance",
+    "QuipuRetriever",
     "Row",
     "Technology",
     "briefing",
+    "build_query",
     "looks_modded",
     "describe",
     "parse",

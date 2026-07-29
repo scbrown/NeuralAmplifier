@@ -199,7 +199,7 @@ Hank bookends the turn: it ingests the board before retrieval and guards the ord
 2. **Hank ingests** → hot per-faction state graph (COW overlay; in-memory, no round-trip).
 3. **Quipu retrieval annotates the prompt:** a cached-once static briefing (engine-filtered
    datalinks digest + opponent dossiers, prompt-cached at game start) + per-turn `quipu_context`
-   (situation string → ranked facts) + action-space grounding (one batched SPARQL `VALUES` query
+   (situation string → ranked facts) + action-space grounding (one batched SPARQL query
    over exactly the items in this turn's `action_space`) + `quipu_hybrid_search` tactics (k≈3,
    confidence-gated).
 4. **LLM proposes orders** (already constrained to `action_space`).
@@ -217,6 +217,13 @@ contradicts once its confidence crosses threshold). **Budget discipline:** the s
 is cached and paid once; per-turn calls are
 bounded to action-space scope; under budget, drop tactics before rules (rules are correctness,
 tactics are optimization); bound deny-repair retries.
+
+> **Quipu's SPARQL engine implements neither `VALUES` nor `FILTER(?x IN (…))`.** Both return
+> `unsupported graph pattern` / `unsupported FILTER expression` (verified against quipu 0.3.11).
+> The working equivalent is a `||` disjunction — `FILTER(?x = "a" || ?x = "b")` — which
+> `datalinks/quipu.py` builds. `OPTIONAL` and property paths do work. Either the queries below
+> get rewritten as disjunctions, or Quipu grows `VALUES`; until then, treat every `VALUES` and
+> `IN` in this document as pseudocode for the disjunction.
 
 ## Honesty — what's blocked or net-new
 

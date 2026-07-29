@@ -34,6 +34,20 @@ def build_brain() -> Brain:
     return ScriptedBrain()
 
 
+def _build_retriever() -> object | None:
+    """Quipu-backed grounding, opt-in via NA_QUIPU_URL.
+
+    Absent means an ungrounded decision, never a failed start — the
+    knowledge layer is an optimisation (``knowledge.py``).
+    """
+    url = os.environ.get("NA_QUIPU_URL")
+    if not url:
+        return None
+    from .datalinks import QuipuRetriever
+
+    return QuipuRetriever(url, engine=os.environ.get("NA_ENGINE", "thinker"))
+
+
 def _otel_requested() -> bool:
     return os.environ.get("NA_OTEL", "").lower() in {"1", "true", "yes"}
 
@@ -65,6 +79,7 @@ def create_app(
         log=resolved_log,
         sinks=resolved_sinks,
         store=WorldViewStore(store_path) if store_path else None,
+        retriever=_build_retriever(),  # type: ignore[arg-type]
     )
     app.state.orchestrator = orchestrator
 

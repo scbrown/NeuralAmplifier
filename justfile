@@ -157,6 +157,11 @@ quipu-load db=".quipu/na.db" ttl="datalinks/thinker/alphax.ttl":
 quipu-ask sparql db=".quipu/na.db":
     @quipu read '{{sparql}}' --db "{{db}}"
 
+# Point the orchestrator at it with NA_QUIPU_URL=http://127.0.0.1:3030.
+# Serve the local Quipu store over REST for grounded retrieval
+quipu-serve db=".quipu/na.db" bind="127.0.0.1:3030":
+    quipu-server --db "{{db}}" --bind "{{bind}}"
+
 # === Documentation ===
 
 # Documentation: just docs <cmd>
