@@ -236,24 +236,44 @@ Because the profile is in the world view, **Claude can see its own handicaps** a
 them. That is deliberate: it is more honest than hiding them, and a model that knows tech is
 cheap for it should say so out loud.
 
-The ledger:
+### 5.1 Two categories, and only one is a user choice
+
+Roughly half the ledger **is** the difficulty setting — that is what difficulty *means* in SMAC,
+and a player who selects Transcend is deliberately asking for a stronger opponent. When Claude is
+the computer opponent (VISION's autonomous mode), inheriting those is correct product behaviour,
+not cheating.
+
+The rest are **structural**: flat `is_human` branches that apply at *every* difficulty, including
+Citizen. Nobody chose those, so they can't be justified by the difficulty argument. The `fairness`
+block carries `selected_by` per entry so the two never get conflated in a result.
+
+**Difficulty-selected** — scale with `*DiffLevel`; a user choice:
 
 | Asymmetry | Where | Favours |
 |---|---|---|
-| Unit support bonus | base.cpp:1645 | AI |
-| Facility maintenance discount | game.cpp:1846-1859 | AI |
-| Tech cost factor | tech.cpp:1155 | AI |
-| Terraform speed | veh_action.cpp:210 | AI |
+| Unit support bonus | base.cpp:1645 (`unit_support_bonus[*DiffLevel]`) | AI |
+| Facility maintenance discount | game.cpp:1846-1859 (`*DiffLevel >= DIFF_THINKER`) | AI |
+| Tech cost factor | tech.cpp:1155 (`tech_cost_factor[*DiffLevel]`) | AI |
+| Terraform speed | veh_action.cpp:210 (difficulty > 3) | AI |
 | Mind-control cost | probe.cpp:713 | AI |
 | Combat modifiers | veh_combat.cpp:1558-1567 | AI |
-| Content population | base.cpp:4220 (`content_pop_player` vs `_computer`) | either |
-| Starting units | faction.cpp:1759-1760, 2234-2235 | config |
-| **Retool penalty — AI pays none** | base.cpp:1045, build.cpp:11 | AI |
-| **Global warming — AI below Transcend doesn't accumulate** | base.cpp:3205 | AI |
+
+**Structural** — flat `is_human` or separate config; present at every difficulty:
+
+| Asymmetry | Where | Favours |
+|---|---|---|
+| **Retool penalty — AI pays none, ever** | base.cpp:1045, build.cpp:11 | AI |
+| **Global warming — AI exempt below difficulty 4** | base.cpp:3205 | AI |
 | Mineral carry-over cap | base.cpp:3382, 3655 | AI |
-| Project race-blocking | base.cpp:3639-3652 | human |
 | Eco-damage rollback | base.cpp:3118-3124 | AI |
 | Former automation restrictions | move.cpp:1533-1988 | AI |
+| Content population | base.cpp:4220 (`content_pop_player` vs `_computer`) | config |
+| Starting units | faction.cpp:1759-1760, 2234-2235 | config |
+| Colony-pod base disbanding | base.cpp:3325 (AI returns early) | AI |
+| Project race-blocking | base.cpp:3639-3652 | **human** |
+
+Note the last one favours the *human* — the ledger is not uniformly tilted, which is another
+reason to record rather than hand-wave.
 
 ---
 

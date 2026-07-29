@@ -38,8 +38,10 @@ omitted (the orchestrator treats missing sections as "not available on this engi
     "slot": "ai",                   // "ai" | "human"  (is_human for this faction)
     "difficulty": "transcend",
     "handicaps": [
-      { "id": "retool_penalty",  "favours": "self", "detail": "AI pays no retool penalty" },
-      { "id": "tech_cost_factor", "favours": "self", "detail": "tech cost x0.8 at this level" }
+      { "id": "retool_penalty",   "favours": "self", "selected_by": "structural",
+        "detail": "AI pays no retool penalty at any difficulty" },
+      { "id": "tech_cost_factor", "favours": "self", "selected_by": "difficulty",
+        "detail": "tech cost x0.8 at transcend" }
     ]
   },
   "economy": {                      // omitted on engines without it (e.g. GLSMAC today)
@@ -133,7 +135,10 @@ factions a systematic bonus layer; the project's decision is to **record** it ra
 it out ([game-surface.md](game-surface.md) §5). An empty `handicaps` list means the faction plays
 by unmodified rules — the expected case on a human slot.
 
-The orchestrator does not act on this field as a rule engine; it passes it into the prompt (so
+`selected_by` distinguishes **`difficulty`** (scales with `*DiffLevel` — a deliberate user
+choice, and what difficulty means in SMAC) from **`structural`** (flat `is_human` branches
+present at every difficulty, which no one selected). Only the structural set needs defending in
+a result. The orchestrator does not act on this field as a rule engine; it passes it into the prompt (so
 Claude reasons honestly about its own advantages) and onto the decision record (so a result is
 interpretable after the fact). `slot: "human"` with an empty list is the only configuration that
 supports an unqualified fair-play claim.
