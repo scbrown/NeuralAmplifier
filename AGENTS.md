@@ -68,6 +68,34 @@ A platform-agnostic brain + two engine adapters, joined by one JSON contract.
   measurement), and the adapter notes (`thinker-adapter-notes.md`,
   `glsmac-integration-notes.md`).
 
+## Task Tracking — Beads
+
+Work is tracked in **[beads](https://github.com/steveyegge/beads)** (`bd`), not in markdown
+TODO lists. Issues live in a local Dolt database; **`.beads/issues.jsonl` is the git-tracked
+artifact** and `.beads/embeddeddolt/` is local working state (already gitignored).
+
+```bash
+bd ready                     # unblocked work, highest priority first — start here
+bd show <id>                 # full detail, including why something is blocked
+bd update <id> --claim       # claim before starting
+bd close <id> "what landed"  # close with an outcome, not just a status
+bd create "Title" -p 1 -t task -d "..."
+bd dep add <blocked> <blocker>
+bd export -o .beads/issues.jsonl   # refresh the tracked artifact before committing
+```
+
+Conventions for this repo:
+
+- **Re-export before you commit.** Auto-export is throttled, so `.beads/issues.jsonl` can lag
+  the database. `bd export -o .beads/issues.jsonl` is the step that makes your work visible to
+  everyone else — an unexported bead may as well not exist.
+- **Never commit `.beads/embeddeddolt/`.** It is per-machine state and would conflict on every
+  merge. `.beads/.gitignore` already handles this; don't override it.
+- **Put the *why* in the description**, with a `file:line` or a doc section. A bead that only
+  restates its title is not worth the round trip.
+- **Model real blockers as dependencies** so `bd ready` stays trustworthy. If everything is
+  ready, nothing is prioritised.
+
 ## Conventions
 
 - **Always use `just` instead of raw commands.** The justfile is the single entry point and
@@ -83,6 +111,10 @@ A platform-agnostic brain + two engine adapters, joined by one JSON contract.
   the adapter. Don't leak Thinker/GLSMAC details into the orchestrator.
 
 ## Build Commands
+
+Tooling you need to install first — and the two cross-compile gotchas — is in
+[CONTRIBUTING.md](CONTRIBUTING.md#tooling). Core tooling (`just`, `uv`, `pre-commit`, Node,
+`bd`) needs no game and no cross-compiler.
 
 ```bash
 just --list          # Show available commands

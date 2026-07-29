@@ -16,3 +16,10 @@ ignores:
   - "**/node_modules/**"
   - "**/.venv/**"
   - "**/site-packages/**"
+  # Agent-local and tool-generated files (gitignored, but markdownlint globs
+  # the working tree regardless — an untracked CLAUDE.md would fail the gate).
+  - "CLAUDE.md"
+  - "CLAUDE.local.md"
+  - "**/.beads/**"
+  # Vendored by `bd init` — third-party content we don't own or edit.
+  - "**/.agents/**"
