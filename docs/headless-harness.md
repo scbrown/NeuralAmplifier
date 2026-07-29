@@ -234,6 +234,14 @@ These already happen, and Thinker already intercepts them.
 > should not legitimately know about pacts between factions it has never met, so this feed must
 > be gated on contact/visibility before it enters the world view — otherwise it is an
 > information cheat wearing a feature's clothes.
+>
+> **Gated in the orchestrator too.** The adapter should filter at source, but a thin DLL and
+> a good intention are not a control, so `fog.redact()` drops any delta naming a faction
+> outside the world view's `contacts` list **before the brain call** — a redaction applied
+> after the prompt would be theatre. Deltas naming no parties are public news and survive.
+> Removals are counted on the decision record (`redacted_deltas`), and a world view that
+> omits `contacts` sets `fog_enforced: false` rather than being reported as clean: we cannot
+> tell a legitimate delta from a leaked one, and absence of evidence gets recorded as such.
 
 ### 4.3 Custom dialogs are already a solved, data-driven pattern
 
@@ -333,9 +341,16 @@ cycle, and it de-risks step 3 by removing the toolchain from the list of unknown
    branches or record them — tracked in
    [game-surface.md](game-surface.md) §7.3.
 2. **The other human slot.** A normal game still has a human faction. If Claude runs an AI slot
-   unattended, does the remaining human slot still raise blocking popups — and what occupies
-   it? Investigate `auto_play_callback` (`0x50E890`, `src/engine.cpp:638`), which looks like
-   SMAC's own autoplay hook and may be the intended unattended driver.
+   unattended, does the remaining human slot still raise blocking popups — and what occupies it?
+
+   **`auto_play_callback` is not the answer.** It has **zero call sites** in the fork
+   (`engine.cpp:638` declares the pointer and nothing invokes it), and its address `0x50E890`
+   sits inside a contiguous block of `void(int)` **GUI timer callbacks** — `mandate_color`
+   (`0x50E820`), then `blink_timer` (`0x50EA40`), `blink2_timer`, `line_timer`, `turn_timer`
+   (whose `int` is annotated *unused*), `go_timer`. Its siblings are patched at GUI offsets and
+   reimplemented in `gui.cpp` (`mod_blink_timer`, `mod_turn_timer` at `patch.cpp:445,1158`), so
+   this is SMAC's attract-mode/animation tick, not an unattended AI driver. The name is
+   misleading. Drive the run from `load_daemon` + `cmd_parse` + `mod_auto_save` (§3) instead.
 3. **Fog-gating the foreign-diplomacy feed.** `mod_NetMsg_pop` sees all foreign treaty changes;
    the world view must filter to what the faction has legitimately contacted (§4.2).
 4. **Minimum file set.** How much of the install does a headless run actually need? A trimmed

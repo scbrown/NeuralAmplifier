@@ -81,6 +81,10 @@ class WorldView(_Model):
     action_space: list[Action] = Field(default_factory=list)
     memory: str | None = None
 
+    #: Factions this faction has legitimately met. ``None`` means the adapter
+    #: does not report contact, so the fog gate cannot run — see ``fog.py``.
+    contacts: list[str] | None = None
+
     # Engine-dependent sections, passed through to the prompt untouched.
     scores: dict[str, Any] | None = None
     economy: dict[str, Any] | None = None

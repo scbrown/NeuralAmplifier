@@ -74,6 +74,12 @@ class DecisionRecord(BaseModel):
     #: empty list is the claim "won under unmodified rules".
     fairness_profile: list[str] = Field(default_factory=list)
 
+    #: Deltas the fog gate removed before the brain saw them, and whether it
+    #: could run at all (``docs/headless-harness.md`` §4.2). A leaking adapter
+    #: is otherwise invisible — the run just looks unusually well-informed.
+    redacted_deltas: int = 0
+    fog_enforced: bool = True
+
     #: Orders that referenced an action the engine never offered. Structurally
     #: impossible by design, so any non-zero value is a broken invariant.
     adherence_violations: int = 0

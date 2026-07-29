@@ -26,6 +26,8 @@ class Report:
     unknown_surface_ids: set[str] = field(default_factory=set)
     missing_surface_id: int = 0
     handicaps: set[str] = field(default_factory=set)
+    redacted_deltas: int = 0
+    ungated_decisions: int = 0
 
     @property
     def degrade_rate(self) -> float:
@@ -60,6 +62,16 @@ class Report:
         """
         return not self.handicaps
 
+    @property
+    def fog_enforced(self) -> bool:
+        """Whether every decision was fog-gated.
+
+        False means at least one world view arrived with no ``contacts``, so
+        a leaked pact could not have been detected. Not proof of a cheat —
+        proof that we could not have seen one.
+        """
+        return self.ungated_decisions == 0
+
     def covered(self) -> set[str]:
         return set(self.fired)
 
@@ -83,6 +95,8 @@ class Report:
             "handicaps": sorted(self.handicaps),
             "structural_handicaps": sorted(self.structural_handicaps),
             "fair_play": self.fair_play,
+            "redacted_deltas": self.redacted_deltas,
+            "fog_enforced": self.fog_enforced,
         }
 
 
@@ -95,6 +109,9 @@ def report(records: Iterable[DecisionRecord]) -> Report:
             out.degraded += 1
         out.adherence_violations += record.adherence_violations
         out.handicaps.update(record.fairness_profile)
+        out.redacted_deltas += record.redacted_deltas
+        if not record.fog_enforced:
+            out.ungated_decisions += 1
 
         surface_id = record.surface_id
         if surface_id is None:

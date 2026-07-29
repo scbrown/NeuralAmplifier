@@ -77,6 +77,7 @@ omitted (the orchestrator treats missing sections as "not available on this engi
     { "id": "a3", "action": "set_production", "base": "Gaia's Landing", "item": "Former" },
     { "id": "a4", "action": "end_turn" }
   ],
+  "contacts": ["HIVE", "UNIVERSITY"],  // factions met — gates the diplomacy feed
   "memory": "Builder game; watching the Hive to my east."
 }
 ```

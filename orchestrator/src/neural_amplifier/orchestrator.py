@@ -17,6 +17,7 @@ from dataclasses import dataclass
 from .brain import Brain, BrainError
 from .contract import Orders, WorldView
 from .decisions import DecisionLog, DecisionRecord, world_view_hash
+from .fog import Redaction, redact
 from .telemetry import Emitter, Sink
 from .validate import validate
 
@@ -50,6 +51,12 @@ class Orchestrator:
         started = time.monotonic()
         degrade_reason: str | None = None
 
+        # Gate the foreign-diplomacy feed before the brain sees it. The adapter
+        # is supposed to have filtered already; doing it here too is the
+        # difference between a policy and a control.
+        fog = redact(world_view)
+        world_view = fog.world_view
+
         try:
             orders = self.brain.decide(world_view)
         except BrainError as exc:
@@ -82,6 +89,7 @@ class Orchestrator:
             degrade_reason=degrade_reason,
             latency_ms=int((time.monotonic() - started) * 1000),
             unknown=len(checked.unknown),
+            fog=fog,
         )
         # One emit call. Every layer is a projection of *this* object — see the
         # module docstring in ``telemetry.py`` for why that is load-bearing.
@@ -112,6 +120,7 @@ class Orchestrator:
         degrade_reason: str | None,
         latency_ms: int,
         unknown: int,
+        fog: Redaction,
     ) -> DecisionRecord:
         fairness = world_view.fairness
         return DecisionRecord(
@@ -134,4 +143,6 @@ class Orchestrator:
             model=getattr(self.brain, "model", None) or self.brain.name,
             latency_ms=latency_ms,
             adherence_violations=unknown,
+            redacted_deltas=fog.removed,
+            fog_enforced=fog.enforced,
         )

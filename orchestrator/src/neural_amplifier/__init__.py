@@ -10,6 +10,7 @@ from .contract import Action, Choice, Fairness, Orders, WorldView
 from .coverage import Report, report
 from .decisions import DecisionLog, DecisionRecord
 from .fairness import fairness_profile, handicap_drift
+from .fog import redact
 from .orchestrator import Orchestrator, Result
 from .telemetry import Emitter, OtelSink, Sink, sinks_for
 from .validate import validate
@@ -34,6 +35,7 @@ __all__ = [
     "WorldView",
     "fairness_profile",
     "handicap_drift",
+    "redact",
     "report",
     "sinks_for",
     "validate",
