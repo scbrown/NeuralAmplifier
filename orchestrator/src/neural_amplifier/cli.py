@@ -85,7 +85,10 @@ def main(argv: list[str] | None = None) -> int:
             args.out.write_text(turtle(links, provenance), encoding="utf-8")
             counts["turtle"] = str(args.out)
         if args.briefing:
-            args.briefing.write_text(briefing(links, args.engine), encoding="utf-8")
+            # Trailing newline: the file is committed for the Thinker graph, and
+            # without it end-of-file-fixer rewrites it on every regeneration,
+            # so `just ingest-thinker && just check` never comes out clean.
+            args.briefing.write_text(briefing(links, args.engine) + "\n", encoding="utf-8")
             counts["briefing"] = str(args.briefing)
         print(json.dumps(counts, indent=2))
         return 0

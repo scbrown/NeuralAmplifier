@@ -26,14 +26,20 @@ just play thinker GAIANS     # Full loop for an engine (thinker | glsmac)
 
 ## Tooling
 
-Two tiers. **Core** is everything you need to build, lint, test, and track work — no game and
-no cross-compiler. **Per-component** is only needed if you touch that component.
+**Fastest route: [`scripts/setup-environment.sh`](scripts/setup-environment.sh)** installs
+everything below, is idempotent, and prints a per-tool verification table at the end. Point a
+Claude Code web environment's setup script at it, or run it on a fresh box. Each lane fails
+independently, so a partial run still leaves you able to work.
+
+Otherwise, install by tier. **Core** is everything you need to build, lint, test, and track
+work — no game, no cross-compiler, no knowledge graph. **Per-component** is only needed if you
+touch that component.
 
 ### Core (always)
 
 | Tool | Install | Used for |
 |---|---|---|
-| [just](https://github.com/casey/just) | `cargo install just`, `brew install just`, or a [release binary](https://github.com/casey/just/releases) | The single entry point for every command |
+| [just](https://github.com/casey/just) | `npm install -g rust-just` (seconds; `cargo install just` also works but takes minutes) | The single entry point for every command |
 | [uv](https://github.com/astral-sh/uv) | `curl -LsSf https://astral.sh/uv/install.sh \| sh` | Python env + deps for `orchestrator/` |
 | [pre-commit](https://pre-commit.com/) | `pip install pre-commit` | The quality gate (`just check`) |
 | [Node](https://nodejs.org/) 22+ | your platform's installer | markdown + `.gls.js` tooling via `npx` |
@@ -58,7 +64,8 @@ just test      # every component's tests
 | `orchestrator/` telemetry | Nothing extra — `opentelemetry-sdk` is in the dev group so the exporter is tested in the default lane. At runtime it's the `otel` extra (`uv sync --extra otel`), enabled with `NA_OTEL=1`; layer 1 (JSONL) has no dependencies. |
 | `adapters/thinker/` | A 32-bit MinGW toolchain and **CMake ≥ 3.31** — see below |
 | `adapters/glsmac/` | A [GLSMAC](https://github.com/afwbkbc/glsmac) checkout + its build deps (SDL2, GL/GLU/GLEW, FreeType, yaml-cpp, uuid). Point `just` at it with `GLSMAC_DIR=/path/to/glsmac`. Headless logic tests use GLSMAC's own `--gse-tests` path — no display. [Notes](docs/glsmac-integration-notes.md). |
-| Running a real game | Your own copy of *Alpha Centauri* — see the game fixture below |
+| Running a real game | Your own copy of *Alpha Centauri* (see the game fixture below), plus **Wine + Xvfb** — see below |
+| Quipu retrieval (K2) | A `quipu` build with `--features shacl,onnx` — see below |
 | The datalinks graph (K1) | Nothing extra. `just ingest` parses **your** `alphax.txt` into `datalinks/` (gitignored — it is derived game data). Deterministic: no model, no tokens, no API key. |
 
 **Thinker cross-compile (works on Linux, no game required):**
@@ -78,6 +85,53 @@ Two things that will bite you, both verified the hard way:
 
 CI runs this lane on every push and uploads `thinker.dll` as an artifact — so a build break is
 caught without anyone needing SMAC installed.
+
+**Wine + Xvfb (only for running a real game):**
+
+`terranx.exe` is a 32-bit Windows GUI binary, so this needs `wine32` via i386 multiarch. Xvfb
+gives it a virtual display — the game still renders, it just has nobody watching
+([headless-harness.md](docs/headless-harness.md) §1).
+
+```bash
+sudo dpkg --add-architecture i386 && sudo apt update
+sudo apt install libgd3:i386            # <- FIRST. See below.
+sudo apt install wine wine32:i386 xvfb
+WINEARCH=win32 WINEPREFIX=~/.wine32 wineboot -i   # 32-bit prefix, not the default
+```
+
+Two traps, both hit on this image:
+
+- **Install `libgd3:i386` first.** On Ubuntu noble, `wine32:i386` pulls in
+  `libgphoto2-6t64:i386`, which depends on `libgd3:i386` that apt declines to auto-install. The
+  transaction then dies with `E: Unable to correct problems, you have held broken packages` and
+  names no package at all. Installing `libgd3:i386` explicitly clears it.
+- **The prefix must be `WINEARCH=win32`.** A default 64-bit prefix will not run a 32-bit
+  `terranx.exe`, and the prefix architecture cannot be changed after creation — delete and
+  recreate.
+
+**Quipu (the knowledge layer, K2 onward):**
+
+```bash
+cargo install --locked --git https://github.com/scbrown/quipu \
+    --features shacl,onnx --bin quipu --bin quipu-server
+```
+
+- **There is no prebuilt binary.** The repo's releases are release-plz *source* tags with empty
+  asset lists, so this compiles from scratch — budget ~15 minutes cold on 4 cores. Rust ≥ 1.85.
+- **`--features shacl,onnx` is mandatory, not a preference.** `shacl` enforces the
+  anti-masquerade tier predicates at write time; without it a Thinker house-rule stores as
+  canonical SMAC, silently — the exact failure
+  [knowledge-architecture.md](docs/knowledge-architecture.md) exists to prevent. `onnx` supplies
+  the embedding runtime; without it `quipu_context` and `quipu_hybrid_search` degrade to SPARQL
+  `CONTAINS`.
+- **Name both binaries explicitly.** `quipu-server` declares `required-features`, and a plain
+  `cargo build` *silently skips it* — exit 0, no warning, leaving whatever binary was there
+  before. Quipu ships `scripts/build-deploy-server.sh` for exactly this reason.
+- ONNX Runtime is loaded dynamically, so a missing native library fails at the first embedding
+  call rather than at build time.
+
+**Not needed:** `rusty-beads`. It requires a newer Rust than the container ships, falls back to
+a slow source build, and `bd` from npm does the same job.
 
 ## Task Tracking
 

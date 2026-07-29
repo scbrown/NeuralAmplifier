@@ -109,38 +109,53 @@ play engine="thinker" faction="GAIANS":
 
 # === Coverage ===
 
-# Summarise a decision log: which surfaces fired, fallback rate, adherence.
 # Fails if the brain was largely absent or an illegal action slipped through.
+# Summarise a decision log: surfaces fired, fallback rate, adherence
 coverage log="decisions.jsonl" max_degrade_rate="0.05":
     @cd orchestrator && uv run neural-amplifier coverage "../{{log}}" \
         --max-degrade-rate {{max_degrade_rate}}
 
-# Replay a recorded log through the current orchestrator — no game, no tokens.
 # Needs a world-view store from the run (set NA_WORLD_VIEW_STORE when recording).
-# exact=true additionally requires identical decisions; only valid for scripted runs.
+# exact=true additionally requires identical decisions; scripted runs only.
+# Replay a recorded log through the current orchestrator — no game, no tokens
 replay log="decisions.jsonl" store="worldviews" exact="false":
     @cd orchestrator && uv run neural-amplifier replay "../{{log}}" \
         --store "../{{store}}" {{ if exact == "true" { "--exact" } else { "" } }}
 
 # === Datalinks (K1) ===
 
-# Parse your SMAC install's alphax.txt into the canonical smac: graph + briefing.
-# Deterministic — no model, no tokens. Needs SMAC_DIR. Output is gitignored:
-# it is derived from copyrighted game data.
+# Deterministic — no model, no tokens. Needs SMAC_DIR. Output is gitignored,
+# being derived from copyrighted game data.
+# Parse your SMAC install's alphax.txt into the canonical smac: graph
 ingest out="datalinks/smac.ttl" brief="datalinks/briefing.txt":
     @mkdir -p "$(dirname "{{out}}")"
     @cd orchestrator && uv run neural-amplifier ingest "{{smac}}/alphax.txt" \
         --out "../{{out}}" --briefing "../{{brief}}"
 
-# Regenerate the committed Thinker-sourced graph. Tagged house-rule, NOT
-# canonical — Thinker ships its own tech tree and the ingester refuses to
-# label it otherwise. Needs a thinker checkout (THINKER_DIR).
+# Tagged house-rule, NOT canonical — Thinker ships its own tech tree and the
+# ingester refuses to label it otherwise. Needs THINKER_DIR.
+# Regenerate the committed Thinker-sourced datalinks graph
 ingest-thinker:
     @mkdir -p datalinks/thinker
     @cd orchestrator && uv run neural-amplifier ingest "{{thinker}}/docs/alphax.txt" \
         --engine thinker --tier house-rule \
         --out ../datalinks/thinker/alphax.ttl \
         --briefing ../datalinks/thinker/briefing.txt
+
+# === Quipu (knowledge graph) ===
+
+# Needs `quipu` built with --features shacl,onnx (scripts/setup-environment.sh).
+# Loads the committed house-rule graph; add your own canonical one separately.
+# Load the datalinks graph into a local Quipu store
+quipu-load db=".quipu/na.db" ttl="datalinks/thinker/alphax.ttl":
+    @mkdir -p "$(dirname "{{db}}")"
+    quipu knot "{{ttl}}" --db "{{db}}"
+    @quipu stats --db "{{db}}"
+
+# Handy sanity query: everything a technology unlocks, with its tier.
+# Query the local Quipu store: just quipu-ask '<sparql>'
+quipu-ask sparql db=".quipu/na.db":
+    @quipu read '{{sparql}}' --db "{{db}}"
 
 # === Documentation ===
 

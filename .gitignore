@@ -59,3 +59,6 @@ CLAUDE.local.md
 # Root-anchored so it cannot swallow orchestrator/src/neural_amplifier/datalinks/.
 /datalinks/*
 !/datalinks/thinker/
+
+# Local Quipu store — rebuildable with `just quipu-load`.
+/.quipu/
