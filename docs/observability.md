@@ -91,6 +91,15 @@ Both layers are fed from **one emit call**, never assembled twice. If they can d
 will. The JSONL field names are deliberately OTel-shaped so the exporter is a projection rather
 than a translation.
 
+**Landed.** `telemetry.Emitter` takes an already-built record and hands *the same instance* to
+every sink, so "assembled once" is structural rather than a convention — the test asserts object
+identity, not field equality. `DecisionLog` is just the first sink, and it is written **first**,
+so an exporter failure still leaves the record of truth on disk. Sinks never raise into the
+decision loop (the same invariant #9 that governs brain failures); failures are counted on
+`Emitter.failures` and surfaced at `GET /health`, because a silently dead exporter is the
+observability twin of the all-fallback run. Enable layer 2 with `NA_OTEL=1` and the `otel` extra
+— asking for it without the dependency raises at startup rather than serving a blind run.
+
 ---
 
 ## 4. Trace model, and where it lives
@@ -221,6 +230,14 @@ The `tier.split` metric is worth calling out: VISION's two-tier model promises C
 consulted "a few times a turn, not for every twitch." That is a falsifiable claim, and this
 metric falsifies it.
 
+The exporter emits `na.decision.latency`, `na.decision.count`, `na.action_space.size`, and
+`na.tokens`, dimensioned by `surface_id`, `scope`, `tier`, `engine`, and `degraded` — so
+`degrade.rate`, `tier.split`, and `cache.hit_rate` are all queries over those rather than
+separate instruments. Metric attributes are deliberately a **subset** of span attributes:
+`game_id`, `turn`, and `world_view_hash` identify a single decision and would give every decision
+its own time series, so they ride on the span only. Degradation is also set as span **status**,
+which makes an all-fallback run read as red in any tracing UI without anyone writing a query.
+
 ---
 
 ## 7. Legibility — the product surface
@@ -255,6 +272,10 @@ Each step is useful on its own and none requires a running game until the last.
 | **5** | Adapter stamps `surface_id` + `traceparent` | ✅ |
 | **6** | OTel exporter; spans across orchestrator → Quipu → Hank | ❌ |
 | **7** | Replay mode + determinism diffing in the harness | ✅ |
+
+Steps 1–4 and 6 have **landed** in the orchestrator; 5 and 7 wait on the adapter and the harness.
+Step 6's span-per-decision, the §6 metrics, and W3C context continuation are all tested against
+an in-memory tracer, so the exporter is verified with no collector and no game.
 
 Steps 1–4 land the entire testing payload **with no game and no adapter** — they are orchestrator
 work, they run in existing CI, and they are the cheapest high-value work available right now.

@@ -120,8 +120,9 @@ no assets) is the cleanest check to build on.
 
 - **S1:** full orchestrator + contract suite on fixtures — the bulk of tests, no game. **Landed:**
   contract types, `POST /decide`, action-space validation, safe degradation, the decision record
-  and JSONL log, the coverage report (`just coverage`), and the derived fairness ledger with
-  drift detection against an adapter's stamp.
+  and JSONL log, the coverage report (`just coverage`), the derived fairness ledger with drift
+  detection against an adapter's stamp, and the OTel exporter — spans, ops metrics, and W3C
+  context continuation, all asserted against an in-memory tracer with no collector.
 - **A0–A2 (Thinker):** DLL builds; loop runs under Wine with fake Claude; a faction plays.
 - **B0 (GLSMAC):** `http` builtin smoke via `--gse-tests`; mod logic tested headless once mocks
   are extended.

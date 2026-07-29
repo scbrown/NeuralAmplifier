@@ -92,6 +92,25 @@ class WorldView(_Model):
     def action_ids(self) -> set[str]:
         return {a.id for a in self.action_space}
 
+    def traceparent(self) -> str | None:
+        """The adapter's W3C trace context, if it sent one.
+
+        Tolerates a raw dict as well as a :class:`Trace`. ``model_copy`` skips
+        validation, so a caller can legitimately hold a world view whose
+        ``trace`` never went through the parser — and this is read *after* the
+        decision, where an ``AttributeError`` would stall the game rather than
+        degrade (invariant #9).
+        """
+        trace = self.trace
+        if trace is None:
+            return None
+        if isinstance(trace, Trace):
+            return trace.traceparent
+        if isinstance(trace, dict):
+            value = trace.get("traceparent")
+            return value if isinstance(value, str) else None
+        return None
+
     def fallback_action_id(self) -> str | None:
         """The safe degradation target: ``end_turn`` where present, else the
         first legal action, else nothing."""

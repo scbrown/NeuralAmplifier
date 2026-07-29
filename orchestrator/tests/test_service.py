@@ -26,6 +26,30 @@ def test_health_reports_the_brain_in_use() -> None:
     assert body["brain"] == "scripted"
 
 
+def test_health_exposes_telemetry_state(tmp_path: Path) -> None:
+    """A run whose exporter is quietly failing looks identical to a healthy one
+    from the outside — unless /health says so."""
+    log = DecisionLog(tmp_path / "d.jsonl")
+    client = TestClient(create_app(brain=ScriptedBrain(), log=log, sinks=[]))
+    telemetry = client.get("/health").json()["telemetry"]
+
+    assert telemetry["sinks"] == ["DecisionLog"]
+    assert telemetry["healthy"] is True
+
+
+def test_health_surfaces_a_broken_sink() -> None:
+    class Broken:
+        def write(self, record: object) -> None:
+            raise RuntimeError("collector unreachable")
+
+    client = TestClient(create_app(brain=ScriptedBrain(), sinks=[Broken()]))  # type: ignore[list-item]
+    client.post("/decide", json=_payload("thinker_base_production"))
+    telemetry = client.get("/health").json()["telemetry"]
+
+    assert telemetry["healthy"] is False
+    assert "collector unreachable" in telemetry["failures"][0]
+
+
 def test_decide_returns_orders_from_the_action_space() -> None:
     brain = ScriptedBrain([Orders(choices=[Choice(action_id="a1", reason="economy first")])])
     client = TestClient(create_app(brain=brain))

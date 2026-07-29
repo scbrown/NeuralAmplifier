@@ -11,11 +11,13 @@ from __future__ import annotations
 
 import time
 import uuid
+from collections.abc import Sequence
 from dataclasses import dataclass
 
 from .brain import Brain, BrainError
 from .contract import Orders, WorldView
 from .decisions import DecisionLog, DecisionRecord, world_view_hash
+from .telemetry import Emitter, Sink
 from .validate import validate
 
 
@@ -35,10 +37,14 @@ class Orchestrator:
         brain: Brain,
         log: DecisionLog | None = None,
         game_id: str | None = None,
+        sinks: Sequence[Sink] = (),
     ) -> None:
         self.brain = brain
         self.log = log
         self.game_id = game_id or f"game-{uuid.uuid4().hex[:8]}"
+        # Record of truth first: if a downstream exporter fails, the JSONL line
+        # is already written (``docs/observability.md`` §3).
+        self.telemetry = Emitter(*([log] if log is not None else []), *sinks)
 
     def decide(self, world_view: WorldView) -> Result:
         started = time.monotonic()
@@ -77,8 +83,9 @@ class Orchestrator:
             latency_ms=int((time.monotonic() - started) * 1000),
             unknown=len(checked.unknown),
         )
-        if self.log is not None:
-            self.log.write(record)
+        # One emit call. Every layer is a projection of *this* object — see the
+        # module docstring in ``telemetry.py`` for why that is load-bearing.
+        self.telemetry.emit(record)
 
         return Result(orders=final, record=record)
 
@@ -108,7 +115,7 @@ class Orchestrator:
     ) -> DecisionRecord:
         fairness = world_view.fairness
         return DecisionRecord(
-            trace_id=world_view.trace.traceparent if world_view.trace else None,
+            trace_id=world_view.traceparent(),
             game_id=self.game_id,
             turn=world_view.turn,
             year=world_view.year,

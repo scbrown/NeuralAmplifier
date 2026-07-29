@@ -11,6 +11,7 @@ from .coverage import Report, report
 from .decisions import DecisionLog, DecisionRecord
 from .fairness import fairness_profile, handicap_drift
 from .orchestrator import Orchestrator, Result
+from .telemetry import Emitter, OtelSink, Sink, sinks_for
 from .validate import validate
 
 __all__ = [
@@ -21,16 +22,20 @@ __all__ = [
     "ClaudeBrain",
     "DecisionLog",
     "DecisionRecord",
+    "Emitter",
     "Fairness",
     "Orchestrator",
     "Orders",
+    "OtelSink",
     "Report",
     "Result",
     "ScriptedBrain",
+    "Sink",
     "WorldView",
     "fairness_profile",
     "handicap_drift",
     "report",
+    "sinks_for",
     "validate",
 ]
 
