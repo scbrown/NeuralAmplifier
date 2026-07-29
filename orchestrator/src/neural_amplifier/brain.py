@@ -9,6 +9,7 @@ lazy and lives in the optional ``claude`` extra.
 
 from __future__ import annotations
 
+import os
 from collections.abc import Callable, Sequence
 from typing import Protocol
 
@@ -16,7 +17,18 @@ from .contract import Choice, Orders, WorldView
 
 #: Default model. Chosen deliberately — see docs/observability.md for the cost
 #: and latency signals that should drive any change here.
-DEFAULT_MODEL = "claude-opus-5"
+DEFAULT_MODEL = os.environ.get("NA_BRAIN_MODEL") or "claude-opus-5"
+
+#: Model for **non-gameplay** inference — K3's postgame extraction of `mem:`
+#: episodes from a decision log, and anything else that summarises rather than
+#: plays. Deliberately a separate, cheaper dial from the brain's: extraction is
+#: bulk, offline, and tagged as *learned* rather than canonical, so it does not
+#: need the model that has to win a game. Note the datalinks ingester (K1) uses
+#: **no** model at all — parsing a fixed-arity CSV is deterministic work, and a
+#: hallucinated tech prerequisite tagged `canonical` is the worst failure
+#: available to us (``docs/knowledge-architecture.md`` §Why extraction uses no
+#: model).
+EXTRACTION_MODEL = os.environ.get("NA_EXTRACTION_MODEL") or "claude-haiku-4-5"
 
 
 class BrainError(RuntimeError):

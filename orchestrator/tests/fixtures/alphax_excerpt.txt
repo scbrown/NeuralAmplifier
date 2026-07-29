@@ -1,0 +1,32 @@
+;
+; SYNTHETIC alphax.txt excerpt — hand-written for tests, not game data.
+;
+; The real alphax.txt is copyrighted and is never committed (CONTRIBUTING.md
+; §"The Game Fixture"). This file mimics its *shape* and deliberately contains
+; every parsing trap the real one does, with invented values:
+;
+;   - a line-initial comment (this block) before any section
+;   - a `;` inside effect text, which must not be treated as a comment
+;   - a `,` inside effect text, which breaks fixed-column parsing
+;   - `None` (no prerequisite) vs `Disable` (excluded from the game)
+;   - secret-project rows carrying five trailing AI-priority ints
+;   - trailing commas
+;   - a right-to-left flag bit string
+;
+#TECHNOLOGY
+Sample Genetics,            Sampl,   0, 3, 2, 2, None,    None,    000100000
+Sample Industry,            SamInd,  2, 1, 3, 0, None,    None,    000000000
+Sample Fusion,              SamFus,  4, 2, 0, 0, Sampl,   SamInd,  100000000
+Removed Tech,               Removed, 0, 0, 0, 0, Disable, Disable, 000000000
+#WEAPONS
+Sample Laser,         SamLas,         2, 0, 2, -1, Sampl,
+Removed Weapon,       RemWep,         9, 0, 9, -1, Disable,
+#DEFENSES
+Sample Armour,        SamArm,         2, 0, 2, -1, SamInd,
+#FACILITIES
+Sample Tanks,                  4, 0, Sampl,   SamFus,   Bonus Resources
+Sample Dock,                   8, 2, SamInd,  Disable,  +2 Morale:Sea, Sea Def +100%
+Sample Nexus,                  6, 1, SamInd,  Disable,  Naval Movement +2; Naval Bases
+Removed Facility,              5, 0, Disable, Disable,  Does Nothing
+The Sample Project,           20, 0, Sampl,   Disable,  +1 Talent Each Base,             -1, 0, 1, 1, 2,
+The Removed Project,          20, 0, Disable, Disable,  Nothing At All,                   0, 0, 0, 0, 0,

@@ -59,6 +59,7 @@ just test      # every component's tests
 | `adapters/thinker/` | A 32-bit MinGW toolchain and **CMake ≥ 3.31** — see below |
 | `adapters/glsmac/` | A [GLSMAC](https://github.com/afwbkbc/glsmac) checkout + its build deps (SDL2, GL/GLU/GLEW, FreeType, yaml-cpp, uuid). Point `just` at it with `GLSMAC_DIR=/path/to/glsmac`. Headless logic tests use GLSMAC's own `--gse-tests` path — no display. [Notes](docs/glsmac-integration-notes.md). |
 | Running a real game | Your own copy of *Alpha Centauri* — see the game fixture below |
+| The datalinks graph (K1) | Nothing extra. `just ingest` parses **your** `alphax.txt` into `datalinks/` (gitignored — it is derived game data). Deterministic: no model, no tokens, no API key. |
 
 **Thinker cross-compile (works on Linux, no game required):**
 

@@ -264,10 +264,30 @@ fixes the three things that are expensive to retrofit:
 Bounded deny-repair (≤2 retries) is specified above but **not** implemented — the current
 behaviour is strip-then-degrade. Tracked as its own bead.
 
-The phases below are the intended order; none is built.
+The phases below are the intended order.
 
-- **K1 — Datalinks read path (Thinker).** `smac:` shapes + an `alphax.txt`→episode ingester +
-  a Quipu-sourced static briefing. *Exit: a Thinker static briefing is Quipu-sourced.*
+### Why extraction uses no model
+
+`alphax.txt` is fixed-arity CSV with its own column documentation inline. A parser reads it
+exactly, for free, and identically every run. A model would cost tokens to give a
+*probabilistic* answer to a deterministic question, and its failure mode is the worst one
+available here: a hallucinated tech prerequisite is indistinguishable from a real one
+downstream, on exactly the facts tagged `canonical` — the tier readers trust most.
+Composing the briefing is templating for the same reason.
+
+Where a model *is* the right tool is **K3**, postgame extraction of `mem:` episodes from a
+decision log: genuinely inferential, genuinely fuzzy, and tagged as learned rather than
+canonical. That is the job to spend a cheap model on — `NA_EXTRACTION_MODEL`, defaulting to
+Haiku, kept separate from the brain's model so the two can be priced independently.
+
+- **K1 — Datalinks read path (Thinker). Landed, less the Quipu round-trip.**
+  `orchestrator/src/neural_amplifier/datalinks/` parses `alphax.txt`, emits the `smac:` graph
+  with all three provenance predicates on every node, and serves a static briefing plus
+  action-space-scoped grounding through the `Retriever` seam (`just ingest`). Verified
+  against a real 1281-line `alphax.txt`: 88 technologies, 133 facilities (50 `Disable`d),
+  64 secret-project rows, 2 579 triples that round-trip through rdflib.
+  **No model is involved, deliberately** — see below. What remains is loading the graph into
+  a running Quipu and serving retrieval from it rather than from the parsed structs.
 - **K2 — Per-turn retrieval.** `quipu_context` + action-space grounding + budgeting + degradation.
 - **K3 — Memory write/recall.** Postgame extraction → `mem:` episodes; bitemporal per-game/durable;
   tactics into the prompt. *Exit: a tactic learned in game N surfaces in game N+1.*

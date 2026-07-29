@@ -1,0 +1,110 @@
+"""The datalinks retriever — K1's exit criterion.
+
+Two shapes, matching ``docs/quipu-integration.md``:
+
+- **The static briefing**, paid once and prompt-cached for a whole game. It is
+  the engine-filtered rules digest: what exists, what it costs, what unlocks it.
+- **Per-turn grounding**, bounded to *this turn's* ``action_space``. This is the
+  budget discipline that keeps the prompt from growing with the rulebook — a
+  turn offering seventeen build options gets seventeen facts, not one hundred
+  and thirty-three.
+
+This implementation reads a parsed ``alphax.txt`` directly rather than querying
+Quipu. That is K1 on purpose: it proves the seam and the briefing content with
+no server, no embeddings, and no tokens, and K2 swaps the lookup for
+``quipu_context`` without the orchestrator noticing — which is the whole point
+of the ``Retriever`` protocol.
+
+**No model is involved.** Composing a digest from structured rows is templating;
+spending a model on it would buy paraphrase and risk invention, on exactly the
+facts the datalinks plane exists to keep trustworthy.
+"""
+
+from __future__ import annotations
+
+from ..contract import WorldView
+from ..knowledge import Grounding
+from .parse import Datalinks, Facility
+
+#: Only rules true for the engine in play may surface. A GLSMAC-only or
+#: Thinker-deviating rule presented as canonical SMAC is the exact failure the
+#: anti-masquerade guardrail exists to prevent.
+CANONICAL_ENGINES = frozenset({"smac"})
+
+
+def describe(item: Facility, links: Datalinks) -> str:
+    """One line a model can act on: cost, upkeep, effect, and the gate."""
+    parts = [f"{item.name} — cost {item.cost}"]
+    if item.maintenance:
+        parts.append(f"upkeep {item.maintenance}/turn")
+    if item.effect:
+        parts.append(item.effect)
+    if item.requires:
+        techs = links.by_abbrev()
+        named = [techs[a].name if a in techs else a for a in item.requires]
+        parts.append(f"needs {', '.join(named)}")
+    if item.secret_project:
+        parts.append("secret project — one per game, globally")
+    return "; ".join(parts)
+
+
+def briefing(links: Datalinks, engine: str = "thinker") -> str:
+    """The cached-once static digest.
+
+    Deliberately counts rather than enumerates the long tails: a model does not
+    need all 88 technology rows in front of it every turn, and a briefing that
+    grows with the rulebook is the thing budget discipline is protecting against.
+    """
+    available = [f for f in links.facilities.values() if not f.disabled]
+    projects = [f for f in available if f.secret_project]
+    ordinary = [f for f in available if not f.secret_project]
+    techs = [t for t in links.technologies.values() if not t.disabled]
+
+    lines = [
+        f"SMAC datalinks (canonical rules; engine in play: {engine}).",
+        f"{len(techs)} technologies, {len(ordinary)} base facilities, "
+        f"{len(projects)} secret projects available.",
+        "",
+        "Base facilities (cost; effect; prerequisite):",
+    ]
+    lines += [f"  - {describe(f, links)}" for f in sorted(ordinary, key=lambda f: f.name)]
+    lines += ["", "Secret projects (one per game, globally):"]
+    lines += [f"  - {describe(f, links)}" for f in sorted(projects, key=lambda f: f.name)]
+    return "\n".join(lines)
+
+
+class DatalinksRetriever:
+    """Serves rules grounding for the actions actually on offer this turn.
+
+    Satisfies :class:`~neural_amplifier.knowledge.Retriever`, so the orchestrator
+    treats it exactly as it will treat Quipu.
+    """
+
+    def __init__(self, links: Datalinks, engine: str = "thinker", limit: int = 12) -> None:
+        self.links = links
+        self.engine = engine
+        #: Ceiling on facts per turn. Rules before tactics under budget, and a
+        #: bounded prompt before either (``quipu-integration.md`` §budget).
+        self.limit = limit
+        self._index = {f.name.lower(): f for f in links.facilities.values()}
+
+    def retrieve(self, world_view: WorldView) -> Grounding:
+        facts: list[str] = []
+        seen: set[str] = set()
+        for action in world_view.action_space:
+            item = self._match(action.action)
+            if item is None or item.name in seen:
+                continue
+            seen.add(item.name)
+            facts.append(describe(item, self.links))
+            if len(facts) >= self.limit:
+                break
+        return Grounding(facts=tuple(facts))
+
+    def _match(self, action: str) -> Facility | None:
+        """Resolve an action to a rule.
+
+        Exact match only. A fuzzy match here would ground a decision in the
+        wrong rule and label it canonical — silence is the safer failure.
+        """
+        return self._index.get(action.strip().lower())

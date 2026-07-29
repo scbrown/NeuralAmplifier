@@ -7,6 +7,9 @@ verbose := "false"
 # Path to a local GLSMAC checkout (needed to build/run the engine builtin + mod)
 glsmac := env_var_or_default("GLSMAC_DIR", "../glsmac")
 
+# Path to your own extracted SMAC install (the game fixture — never committed)
+smac := env_var_or_default("SMAC_DIR", "../smac")
+
 # Default recipe - show available commands
 default:
     @just --list
@@ -115,6 +118,15 @@ coverage log="decisions.jsonl" max_degrade_rate="0.05":
 replay log="decisions.jsonl" store="worldviews" exact="false":
     @cd orchestrator && uv run neural-amplifier replay "../{{log}}" \
         --store "../{{store}}" {{ if exact == "true" { "--exact" } else { "" } }}
+
+# === Datalinks (K1) ===
+
+# Parse your SMAC install's alphax.txt into the smac: RDF graph + static briefing.
+# Deterministic — no model, no tokens. Needs SMAC_DIR.
+ingest out="datalinks/smac.ttl" brief="datalinks/briefing.txt":
+    @mkdir -p "$(dirname "{{out}}")"
+    @cd orchestrator && uv run neural-amplifier ingest "{{smac}}/alphax.txt" \
+        --out "../{{out}}" --briefing "../{{brief}}"
 
 # === Documentation ===
 

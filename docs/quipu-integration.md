@@ -53,6 +53,12 @@ These mirror step 3 of the retrieval flow in
 a **cached-once static briefing** paid at game start, and **per-turn fetches** bounded
 to this turn's scope.
 
+> **K1 landed as a local retriever.** `neural_amplifier.datalinks.DatalinksRetriever` serves
+> both shapes below straight from a parsed `alphax.txt`, with no server, no embeddings, and
+> no tokens. It satisfies the same `Retriever` protocol Quipu will, so K2 swaps the lookup
+> for `quipu_context` without the orchestrator noticing — that substitutability is the point
+> of the seam. Run `just ingest` to produce the graph and the briefing.
+
 ### Cached-once static briefing (paid at game start)
 
 Assembled once and **prompt-cached** for the whole game:

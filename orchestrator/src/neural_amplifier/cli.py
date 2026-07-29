@@ -37,12 +37,40 @@ def main(argv: list[str] | None = None) -> int:
         help="require identical decisions (scripted-brain runs only)",
     )
 
+    ing = sub.add_parser("ingest", help="parse alphax.txt into the smac: datalinks graph")
+    ing.add_argument("alphax", type=Path, help="path to alphax.txt in your SMAC install")
+    ing.add_argument("--out", type=Path, help="write Turtle here")
+    ing.add_argument("--engine", default="smac", help="appliesToEngine tag")
+    ing.add_argument("--tier", default="canonical", help="ruleTier tag")
+    ing.add_argument("--briefing", type=Path, help="also write the static briefing text here")
+
     args = parser.parse_args(argv)
 
     if args.command == "serve":
         import uvicorn
 
         uvicorn.run("neural_amplifier.service:app", host=args.host, port=args.port)
+        return 0
+
+    if args.command == "ingest":
+        from .datalinks import Provenance, briefing, parse_file, turtle
+
+        links = parse_file(args.alphax)
+        counts: dict[str, object] = {
+            "technologies": len(links.technologies),
+            "facilities": len(links.facilities),
+            "secret_projects": len(links.secret_projects),
+            "components": len(links.components),
+            "disabled_facilities": sum(1 for f in links.facilities.values() if f.disabled),
+        }
+        if args.out:
+            provenance = Provenance(engine=args.engine, tier=args.tier, source=args.alphax.name)
+            args.out.write_text(turtle(links, provenance), encoding="utf-8")
+            counts["turtle"] = str(args.out)
+        if args.briefing:
+            args.briefing.write_text(briefing(links, args.engine), encoding="utf-8")
+            counts["briefing"] = str(args.briefing)
+        print(json.dumps(counts, indent=2))
         return 0
 
     if args.command == "replay":
