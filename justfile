@@ -50,9 +50,9 @@ orchestrator cmd="test":
     case "{{cmd}}" in
         build|install) uv sync ;;
         test)          uv run pytest ;;
-        lint)          uv run ruff check . && uv run mypy . ;;
+        lint)          uv run ruff check . && uv run ruff format --check . && uv run mypy ;;
         fmt)           uv run ruff format . ;;
-        run)           uv run neural-amplifier ;;
+        run)           uv run neural-amplifier serve ;;
         *)             echo "Unknown: {{cmd}}. Try: build install test lint fmt run" ;;
     esac
 
@@ -100,6 +100,14 @@ play engine="thinker" faction="GAIANS":
     set -euo pipefail
     echo "Starting orchestrator + {{engine}} adapter, faction {{faction}}..."
     bash scripts/play.sh "{{engine}}" "{{faction}}"
+
+# === Coverage ===
+
+# Summarise a decision log: which surfaces fired, fallback rate, adherence.
+# Fails if the brain was largely absent or an illegal action slipped through.
+coverage log="decisions.jsonl" max_degrade_rate="0.05":
+    @cd orchestrator && uv run neural-amplifier coverage "../{{log}}" \
+        --max-degrade-rate {{max_degrade_rate}}
 
 # === Documentation ===
 

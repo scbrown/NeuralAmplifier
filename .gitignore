@@ -23,6 +23,9 @@ __pycache__/
 .pytest_cache/
 dist/
 *.egg-info/
+# Decision logs are run artifacts, not source (docs/observability.md §3).
+decisions.jsonl
+*.decisions.jsonl
 
 # Node (docs/mod tooling)
 node_modules/

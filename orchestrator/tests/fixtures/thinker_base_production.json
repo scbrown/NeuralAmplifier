@@ -1,0 +1,51 @@
+{
+  "schema_version": "0.1",
+  "engine": "thinker",
+  "scope": "base",
+  "surface_id": "base.production",
+  "trace": { "traceparent": "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01" },
+  "turn": 42,
+  "year": 2142,
+  "faction": "GAIANS",
+  "scores": { "GAIANS": 310, "HIVE": 288 },
+  "fairness": {
+    "slot": "ai",
+    "difficulty": "transcend",
+    "handicaps": [
+      {
+        "id": "retool_penalty",
+        "favours": "self",
+        "selected_by": "structural",
+        "detail": "AI pays no retool penalty at any difficulty"
+      },
+      {
+        "id": "tech_cost_factor",
+        "favours": "self",
+        "selected_by": "difficulty",
+        "detail": "tech cost x0.8 at transcend"
+      }
+    ]
+  },
+  "economy": {
+    "energy_credits": 74,
+    "research": { "current": "Ecological Engineering", "progress": 0.6 },
+    "techs_known": ["Centauri Ecology", "Biogenetics"]
+  },
+  "map": { "width": 64, "height": 32, "fog": true },
+  "bases": [
+    {
+      "name": "Gaia's Landing",
+      "x": 11,
+      "y": 9,
+      "pop": 4,
+      "yields": { "nutrients": 6, "minerals": 3, "energy": 5 }
+    }
+  ],
+  "action_space": [
+    { "id": "a1", "action": "set_production", "base": "Gaia's Landing", "item": "Recycling Tanks" },
+    { "id": "a2", "action": "set_production", "base": "Gaia's Landing", "item": "Former" },
+    { "id": "a3", "action": "set_production", "base": "Gaia's Landing", "item": "Scout Patrol" },
+    { "id": "a4", "action": "end_turn" }
+  ],
+  "memory": "Builder game; watching the Hive to my east."
+}

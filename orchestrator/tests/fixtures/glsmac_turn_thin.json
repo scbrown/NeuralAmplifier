@@ -1,0 +1,14 @@
+{
+  "schema_version": "0.1",
+  "engine": "glsmac",
+  "scope": "turn",
+  "surface_id": "unit.dispatch",
+  "turn": 7,
+  "faction": "GAIANS",
+  "map": { "width": 32, "height": 16, "fog": false },
+  "units": [{ "id": 101, "type": "former", "x": 12, "y": 8 }],
+  "action_space": [
+    { "id": "m1", "action": "move_unit", "unit": 101, "to": [13, 8] },
+    { "id": "m2", "action": "move_unit", "unit": 101, "to": [12, 9] }
+  ]
+}

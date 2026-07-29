@@ -19,7 +19,7 @@ the harness (the *game fixture*) and driving it with no human at the keyboard.
 | `orchestrator/` (Python) | `uv sync` | `pytest` + `ruff`/`mypy` on fixtures, fake Claude | ✅ |
 | `adapters/glsmac/mod` (`.gls.js`) | none (interpreted) | GLSMAC `--gse-tests` — **headless, no assets** | ⚠️ once mocks extended |
 | `adapters/glsmac/builtin` (C++) | CMake vs. GLSMAC | build + `--gse-tests` smoke | ❌ (needs GLSMAC) |
-| `adapters/thinker` (C++ DLL) | MinGW/MSVC 32-bit | run SMAC under Wine | ❌ (needs SMAC + Wine) |
+| `adapters/thinker` (C++ DLL) | MinGW 32-bit — **cross-compiles on Linux** | run SMAC under Wine | ✅ build only (no game needed) |
 | *full game* | — | end-to-end play | ❌ (nightly / local) |
 
 ## The test pyramid
@@ -84,9 +84,16 @@ SMAC data and a GL display, so it stays out of default CI. Determinism via
 
 Thinker is a closed-binary patch, so there's no in-isolation unit test of game logic:
 
-- **Build:** `just thinker build` (32-bit MinGW/MSVC). **Test:** run SMAC + the DLL under
-  **Wine** with a virtual display and assert the loop (state → `/decide` → applied choice)
-  completes. Deterministic where SMAC allows; fake Claude for free/repeatable runs.
+- **Build:** `just thinker build` (32-bit MinGW). This **cross-compiles on Linux with no game
+  present** and is verified in CI on every push — `apt install build-essential ninja-build
+  g++-mingw-w64-i686-posix`, then `cmake --preset ninja-develop && cmake --build --preset
+  ninja-develop`, producing a `PE32 executable (DLL) … Intel 80386`. Two gotchas: the fork's
+  `CMakePresets.json` requires **CMake ≥ 3.31** (newer than several distro and runner images),
+  and the Ninja presets share a `binaryDir` with the Makefiles ones, so switching generators in
+  place fails on the stale cache — delete `build/` first.
+- **Test:** run SMAC + the DLL under **Wine** with a virtual display and assert the loop
+  (state → `/decide` → applied choice) completes. Deterministic where SMAC allows; fake Claude
+  for free/repeatable runs.
 - Keep the DLL **thin** — all reusable logic belongs in the orchestrator, which *is* unit-
   testable. The DLL just serializes state to the contract and applies the returned choice.
 
@@ -100,15 +107,20 @@ view produces an orchestrator fixture *and* a contract fixture from one run.
 ## 6. CI
 
 Default CI (`.github/workflows/ci.yml`) runs only the fast, self-contained lanes: markdown
-lint, the pre-commit gate, and the orchestrator (`ruff` + `pytest`, auto-skipped until
-scaffolded). Game-dependent lanes — the GLSMAC builtin build, GLSMAC full-game integration
-(SMAC assets), and Thinker/Wine e2e — run locally via `just` and, later, on a nightly runner.
+lint, the pre-commit gate, the orchestrator (`ruff`, `ruff format`, `mypy`, `pytest`), and the
+**Thinker DLL cross-compile**, which uploads `thinker.dll` as a build artifact. None of these
+need a game, an adapter checkout of SMAC, or an API key — the scripted brain is the default, so
+CI never makes a paid call. Game-dependent lanes — the GLSMAC builtin build, GLSMAC full-game
+integration (SMAC assets), and Thinker/Wine e2e — run locally via `just` and, later, on a
+nightly runner.
 GLSMAC upstream CI compiles but runs no tests; adding a Debug `--gse-tests` step (no display,
 no assets) is the cleanest check to build on.
 
 ## What's testable when (maps to VISION §Roadmap)
 
-- **S1:** full orchestrator + contract suite on fixtures — the bulk of tests, no game.
+- **S1:** full orchestrator + contract suite on fixtures — the bulk of tests, no game. **Landed:**
+  contract types, `POST /decide`, action-space validation, safe degradation, the decision record
+  and JSONL log, and the coverage report (`just coverage`).
 - **A0–A2 (Thinker):** DLL builds; loop runs under Wine with fake Claude; a faction plays.
 - **B0 (GLSMAC):** `http` builtin smoke via `--gse-tests`; mod logic tested headless once mocks
   are extended.

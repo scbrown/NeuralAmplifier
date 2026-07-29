@@ -35,20 +35,57 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - id: guard
-        # Only lint/test the orchestrator once it is scaffolded (Phase 1).
-        run: |
-          if [ -f orchestrator/pyproject.toml ]; then
-            echo "present=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "present=false" >> "$GITHUB_OUTPUT"
-            echo "orchestrator not yet scaffolded — skipping."
-          fi
-      - if: steps.guard.outputs.present == 'true'
-        uses: astral-sh/setup-uv@v5
-      - if: steps.guard.outputs.present == 'true'
-        working-directory: orchestrator
+      - uses: astral-sh/setup-uv@v5
+      - working-directory: orchestrator
+        # No game, no adapter, no API key: the scripted brain is the default,
+        # so this lane is fast, free, and deterministic.
         run: |
           uv sync
           uv run ruff check .
+          uv run ruff format --check .
+          uv run mypy
           uv run pytest
+
+  thinker-dll:
+    name: Thinker adapter (MinGW cross-compile)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # The adapter is a fork of Thinker; build it from source so the release
+      # artifact is produced on every push. No SMAC install is involved.
+      - uses: actions/checkout@v4
+        with:
+          repository: scbrown/thinker
+          ref: claude/neural-amplifier-smac-testing-uq1fcg
+          path: thinker
+      - name: Install the 32-bit MinGW toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential ninja-build g++-mingw-w64-i686-posix
+      - name: Install CMake
+        # Thinker's CMakePresets.json requires >= 3.31; don't rely on the
+        # runner image's bundled CMake, which lags.
+        uses: lukka/get-cmake@latest
+        with:
+          cmakeVersion: "3.31.6"
+      - name: Build thinker.dll
+        working-directory: thinker
+        run: |
+          cmake --preset ninja-develop
+          cmake --build --preset ninja-develop
+      - name: Verify the artifact is a 32-bit PE
+        working-directory: thinker
+        run: |
+          dll=$(find build -name thinker.dll -print -quit)
+          test -n "$dll" || { echo "thinker.dll was not produced"; exit 1; }
+          file "$dll"
+          file "$dll" | grep -q "PE32 executable (DLL)" \
+            || { echo "not a 32-bit PE DLL"; exit 1; }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: thinker-dll
+          path: |
+            thinker/build/**/thinker.dll
+            thinker/build/**/thinker.exe
+          if-no-files-found: error
