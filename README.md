@@ -156,10 +156,14 @@ and the rollout are in the [design doc](docs/knowledge-architecture.md).
 
 ## 🚀 Quick Start
 
-> **Status: pre-alpha.** The repo currently holds the vision, architecture, and project
-> scaffold. The component tree below is where the code lands, phase by phase (see
-> [VISION.md](VISION.md) §Roadmap). **Track A (Thinker) is the current focus** — it's the
-> complete, balanced game and is controllable today.
+> **Status: pre-alpha, but the brain runs.** The orchestrator is real and tested — the
+> contract types, `POST /decide`, action-space validation, safe degradation, the decision
+> record and JSONL log, the OTel exporter, replay, the derived fairness ledger, the
+> Quipu/Hank seam, and the SMAC datalinks ingester. All of it runs with **no game present**.
+>
+> What is *not* built: the engine adapters. Nothing plays a turn of Alpha Centauri yet.
+> **Track A (Thinker) is the current focus** — the complete, balanced game, controllable
+> today — and its faction gate is in the fork; intercepting a real decision is next.
 
 ```bash
 git clone https://github.com/scbrown/NeuralAmplifier && cd NeuralAmplifier
@@ -187,6 +191,11 @@ docs/               contract.md         the world-view / action-space interface
 [CONTRIBUTING.md](CONTRIBUTING.md#the-game-fixture-bring-your-own-smac). Building, linting, and
 the whole test suite run with **no game present**.
 
+**Setting up a machine or a Claude Code cloud environment?**
+[`scripts/setup-environment.sh`](scripts/setup-environment.sh) installs everything —
+`just`, `bd`, the 32-bit MinGW cross-compiler, Wine, and Quipu — and reports what actually
+landed rather than assuming.
+
 ## 🛠️ Development
 
 ```bash
@@ -198,6 +207,12 @@ just orchestrator test   # Component-scoped recipes: <component> <cmd>
 just glsmac test         # GLSMAC adapter (headless --gse-tests)
 just thinker build       # Thinker adapter (needs the Thinker toolchain)
 just docs check          # Markdown lint
+
+just coverage            # Run health: surfaces fired, fallback rate, adherence
+just replay --store …    # Re-run a recorded log against the current code — no game
+just ingest              # Your alphax.txt → the smac: RDF graph + static briefing
+just quipu-load          # Load that graph into a local Quipu store
+just quipu-serve         # Serve it for grounded retrieval (NA_QUIPU_URL)
 ```
 
 `just` is the single entry point — see [CONTRIBUTING.md](CONTRIBUTING.md). Pre-commit hooks

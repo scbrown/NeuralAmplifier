@@ -17,6 +17,8 @@ the harness (the *game fixture*) and driving it with no human at the keyboard.
 | Component | Build | Test | In default CI? |
 |-----------|-------|------|:--------------:|
 | `orchestrator/` (Python) | `uv sync` | `pytest` + `ruff`/`mypy` on fixtures, fake Claude | ✅ |
+| `orchestrator/datalinks` | none | parses a synthetic `alphax.txt`; Turtle round-trips through rdflib | ✅ |
+| Quipu-backed retrieval | none | mocked by default; live tests skip unless `NA_QUIPU_URL` is set | ⚠️ live lane opt-in |
 | `adapters/glsmac/mod` (`.gls.js`) | none (interpreted) | GLSMAC `--gse-tests` — **headless, no assets** | ⚠️ once mocks extended |
 | `adapters/glsmac/builtin` (C++) | CMake vs. GLSMAC | build + `--gse-tests` smoke | ❌ (needs GLSMAC) |
 | `adapters/thinker` (C++ DLL) | MinGW 32-bit — **cross-compiles on Linux** | run SMAC under Wine | ✅ build only (no game needed) |
@@ -123,7 +125,8 @@ no assets) is the cleanest check to build on.
   and JSONL log, the coverage report (`just coverage`), the derived fairness ledger with drift
   detection against an adapter's stamp, the OTel exporter (spans, ops metrics, and W3C context
   continuation, all asserted against an in-memory tracer with no collector), and the
-  world-view store plus `neural-amplifier replay`.
+  world-view store plus `neural-amplifier replay`, the Quipu/Hank knowledge seam, the SMAC
+  datalinks ingester (`just ingest`), Quipu-backed grounding, and retrieval token budgeting.
 - **A0–A2 (Thinker):** DLL builds; loop runs under Wine with fake Claude; a faction plays.
 - **B0 (GLSMAC):** `http` builtin smoke via `--gse-tests`; mod logic tested headless once mocks
   are extended.

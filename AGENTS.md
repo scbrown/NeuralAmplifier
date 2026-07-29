@@ -68,6 +68,30 @@ A platform-agnostic brain + two engine adapters, joined by one JSON contract.
   measurement), and the adapter notes (`thinker-adapter-notes.md`,
   `glsmac-integration-notes.md`).
 
+### Orchestrator module map
+
+Every module owns one invariant. The invariant is why the module exists, so check it before
+changing the module — most of these look like ordinary plumbing and are not.
+
+| Module | Owns | The invariant it protects |
+|---|---|---|
+| `contract.py` | The wire types (`docs/contract.md`) | A field an engine lacks is *omitted*, never faked |
+| `surfaces.py` | The frozen 77-surface registry | A renamed surface invalidates every recorded run |
+| `orchestrator.py` | `decide()` — the whole loop | **Exactly one decision record per decision**, on every path |
+| `validate.py` | Action-space checking | Orders can only name actions the engine offered |
+| `fog.py` | Diplomacy-feed gating | The brain never sees a pact between factions it hasn't met |
+| `fairness.py` | The computed handicap ledger | `favours` is *derived*, never copied from a table — three entries flip side by difficulty |
+| `knowledge.py` | The Quipu/Hank seam | Knowledge degrades, never stalls; a dead guard **allows** |
+| `decisions.py` | The record + JSONL log | The record of truth, written before any exporter |
+| `telemetry.py` | Sink fan-out + OTel | The record is assembled **once**; layers are projections of one object |
+| `coverage.py` | Run health | `degrade_rate` and `fair_play` are measured, not asserted |
+| `replay.py` | World-view store + diffing | A log alone can't be replayed — something must keep the bytes |
+| `datalinks/` | SMAC's own rules → Quipu | Provenance on every fact, and **filtered on read** or the tag is decoration |
+| `brain.py` | Claude / scripted brains | CI never makes a paid call |
+
+The one that surprises people: `telemetry.Emitter` takes an *already-built* record and hands the
+same instance to every sink. Assembling it twice is how a dashboard and a log drift apart.
+
 ## Task Tracking — Beads
 
 Work is tracked in **[beads](https://github.com/steveyegge/beads)** (`bd`), not in markdown
