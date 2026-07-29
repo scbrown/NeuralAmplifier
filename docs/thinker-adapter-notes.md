@@ -141,6 +141,14 @@ Also note `BASE::gov_config()` (`engine_base.h:248`) returns `~0u` for AI but on
 bits for humans — so in Mode B/B+ the 21 governor permission flags become a real, recurring
 decision surface with **no AI policy to copy**.
 
+**Status: the gate is implemented** (`scbrown/thinker`, branch
+`claude/neural-amplifier-smac-testing-uq1fcg`). `Config.llm_factions` is a bitmask over faction
+slots (default `0` = stock Thinker, no bridge), `llm_endpoint` is the orchestrator base URL, and
+`llm_enabled(faction_id)` in `faction.cpp` sits alongside `thinker_enabled` rather than
+replacing it — a faction that is not LLM-routed falls through to Thinker's own choice, and that
+fall-through *is* the deterministic tier. Both options are documented in `docs/thinker.ini` at
+the point of use. No decision is intercepted yet; that is A1.
+
 **Recommendation: Mode B+ for autonomous play, Mode B for copilot.** Mode A stays usable —
 project policy is to **record the handicaps, not patch them out**
 ([game-surface.md](game-surface.md) §5), so a Mode A run is legitimate as long as its `fairness`
