@@ -244,3 +244,26 @@ def test_live_decision_records_the_hits() -> None:
     assert result.record.knowledge.quipu_hits == 1
     assert result.record.knowledge.quipu_degraded is False
     assert json.loads(result.record.model_dump_json())["knowledge"]["quipu_hits"] == 1
+
+
+# --- budgeting -------------------------------------------------------------
+
+
+def test_the_retriever_applies_the_token_budget() -> None:
+    """Bounding the fact count says nothing about prompt size when one fact is
+    a paragraph, so the retriever takes a token ceiling too."""
+    rows = [{"label": n, "cost": 4, "effect": "e" * 200} for n in ("A", "B", "C")]
+    grounding = FakeQuipu(rows, token_budget=30).retrieve(view("A", "B", "C"))
+
+    assert grounding.hits < 4
+    assert any("omitted for token budget" in f for f in grounding.facts)
+
+
+def test_no_budget_means_no_truncation_note() -> None:
+    """Default is unbounded — the action-space cap already bounds the common
+    case, and an accounting line nobody needs is wasted prompt."""
+    rows = [{"label": "A", "cost": 4, "effect": "e" * 500}]
+    grounding = FakeQuipu(rows).retrieve(view("A"))
+
+    assert grounding.hits == 1
+    assert not any("omitted" in f for f in grounding.facts)

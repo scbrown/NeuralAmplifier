@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from .briefing import DatalinksRetriever, briefing, describe
+from .budget import Budgeted, Fact, apply_budget
 from .parse import (
     Component,
     Datalinks,
@@ -17,14 +18,17 @@ from .quipu import QuipuRetriever, build_query
 from .rdf import Provenance, turtle
 
 __all__ = [
+    "Budgeted",
     "Component",
     "Datalinks",
     "DatalinksRetriever",
+    "Fact",
     "Facility",
     "Provenance",
     "QuipuRetriever",
     "Row",
     "Technology",
+    "apply_budget",
     "briefing",
     "build_query",
     "looks_modded",

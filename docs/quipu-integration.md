@@ -108,6 +108,38 @@ Run each turn, kept small:
 > get rewritten as disjunctions, or Quipu grows `VALUES`; until then, treat every `VALUES` and
 > `IN` in this document as pseudocode for the disjunction.
 
+## Semantic retrieval is blocked on an embedding model
+
+`quipu_context` and `quipu_hybrid_search` need vectors, and **`quipu knot` does not generate
+them** — only `/episode` auto-embeds. Backfilling is the documented route, but on a store loaded
+from Turtle it fails:
+
+```console
+$ quipu-server --db .quipu/na.db --embed-backfill
+Running embedding backfill for all entities...
+Backfill error: No embedding provider configured
+```
+
+Building with `--features onnx` supplies the *runtime*, not a model. The provider also needs
+`.bobbin/config.toml`:
+
+```toml
+[quipu.embedding]
+auto_embed = true
+model_path = "models/all-MiniLM-L6-v2/onnx/model.onnx"
+tokenizer_path = "models/all-MiniLM-L6-v2/tokenizer.json"
+dimension = 384
+```
+
+**And the model files have to get there.** `huggingface.co` is not on the Claude Code cloud
+[Trusted allowlist](https://code.claude.com/docs/en/cloud-environments#default-allowed-domains),
+so a fetch from a cloud session times out. Either add it to a **Custom** allowlist or vendor the
+model. Until then `/context` returns zero entities against a knotted graph — it does not error,
+which is exactly the kind of quiet emptiness worth knowing about in advance.
+
+What is *not* blocked: exact-match action-space grounding (`datalinks/quipu.py`), which uses
+plain SPARQL and needs no vectors at all. That is what grounds decisions today.
+
 ## Token budget discipline
 
 The live risk is latency and token cost (see the honesty section below). The rules:

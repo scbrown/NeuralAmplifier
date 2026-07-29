@@ -27,6 +27,7 @@ from typing import Any
 
 from ..contract import WorldView
 from ..knowledge import Grounding
+from .budget import Fact, apply_budget
 
 NAMESPACE = "http://neuralamplifier.local/ontology/smac/"
 
@@ -103,10 +104,15 @@ class QuipuRetriever:
         engine: str = "thinker",
         limit: int = 12,
         timeout: float = 2.0,
+        token_budget: int = 0,
     ) -> None:
         self.base_url = base_url.rstrip("/")
         self.engine = engine
         self.limit = limit
+        #: Approximate token ceiling for grounding, 0 to disable. Bounding
+        #: the count alone says nothing about prompt size when one fact is
+        #: a paragraph (``budget.py``).
+        self.token_budget = token_budget
         #: A hung request would block the decision loop even though the seam
         #: catches exceptions — a timeout is what makes "degrade, never stall"
         #: true rather than aspirational.
@@ -137,5 +143,9 @@ class QuipuRetriever:
         # Preserve action-space order so the prompt reads in the order the
         # engine offered the choices, not in whatever order the store returns.
         by_label = {str(r.get("label")): r for r in rows}
-        facts = tuple(format_row(by_label[label]) for label in labels if label in by_label)
-        return Grounding(facts=facts)
+        facts = [
+            Fact(format_row(by_label[label]), kind="rule") for label in labels if label in by_label
+        ]
+        if self.token_budget <= 0:
+            return Grounding(facts=tuple(f.text for f in facts))
+        return apply_budget(facts, self.token_budget).grounding()
