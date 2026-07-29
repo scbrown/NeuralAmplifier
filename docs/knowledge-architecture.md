@@ -246,7 +246,25 @@ tactics are optimization); bound deny-repair retries.
 
 ## Rollout phases
 
-Nothing below is built yet; this is the intended order.
+**The seam is built; none of K1–K6 is.** `orchestrator/src/neural_amplifier/knowledge.py`
+defines the two protocols Quipu and Hank plug into (`Retriever.retrieve`, `Guard.rule`) and
+fixes the three things that are expensive to retrofit:
+
+- **Degradation** — a retriever or guard that raises is absorbed, and the decision proceeds
+  without it. A dead Hank **allows**: engine legality still stands behind it, and a guard
+  failure that silently blocked every move would stall the game to enforce a policy nobody
+  could read. A dead Quipu is distinguishable from an absent one on the record.
+- **Precedence by order, not by policy code** — retrieval runs before the brain and cannot
+  widen the action space; the guard runs *after* action-space validation, so it never sees an
+  action the engine did not offer and cannot re-add one. Deny strips, warn advises. Denying
+  everything degrades to the fallback and says the guard was the cause.
+- **Provenance** — the `knowledge` block lands on every decision record, and the OTel exporter
+  emits `quipu.retrieve` / `hank.policy_guard` child spans so a slow turn is attributable.
+
+Bounded deny-repair (≤2 retries) is specified above but **not** implemented — the current
+behaviour is strip-then-degrade. Tracked as its own bead.
+
+The phases below are the intended order; none is built.
 
 - **K1 — Datalinks read path (Thinker).** `smac:` shapes + an `alphax.txt`→episode ingester +
   a Quipu-sourced static briefing. *Exit: a Thinker static briefing is Quipu-sourced.*

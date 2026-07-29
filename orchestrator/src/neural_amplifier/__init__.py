@@ -11,6 +11,7 @@ from .coverage import Report, report
 from .decisions import DecisionLog, DecisionRecord
 from .fairness import fairness_profile, handicap_drift
 from .fog import redact
+from .knowledge import Grounding, Guard, Retriever, Ruling
 from .orchestrator import Orchestrator, Result
 from .replay import Comparison, WorldViewStore, replay
 from .telemetry import Emitter, OtelSink, Sink, sinks_for
@@ -27,11 +28,15 @@ __all__ = [
     "DecisionRecord",
     "Emitter",
     "Fairness",
+    "Grounding",
+    "Guard",
     "Orchestrator",
     "Orders",
     "OtelSink",
     "Report",
     "Result",
+    "Retriever",
+    "Ruling",
     "ScriptedBrain",
     "Sink",
     "WorldView",

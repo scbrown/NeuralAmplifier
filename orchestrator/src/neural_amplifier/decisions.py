@@ -41,6 +41,25 @@ class Tokens(BaseModel):
     cached: int = 0
 
 
+class KnowledgeBlock(BaseModel):
+    """Provenance: what the knowledge layer contributed to this decision.
+
+    ``docs/observability.md`` §7 — this is what makes "the brain was told
+    this" distinguishable from "the brain assumed this".
+    """
+
+    model_config = ConfigDict(extra="allow")
+
+    quipu_hits: int = 0
+    hank_verdict: str | None = None
+    stripped: list[str] = Field(default_factory=list)
+    advisories: list[str] = Field(default_factory=list)
+    quipu_degraded: bool = False
+    hank_degraded: bool = False
+    quipu_latency_ms: int = 0
+    hank_latency_ms: int = 0
+
+
 class DecisionRecord(BaseModel):
     """One decision. See ``docs/observability.md`` §2."""
 
@@ -83,6 +102,9 @@ class DecisionRecord(BaseModel):
     #: Orders that referenced an action the engine never offered. Structurally
     #: impossible by design, so any non-zero value is a broken invariant.
     adherence_violations: int = 0
+
+    #: What Quipu and Hank contributed (``docs/observability.md`` §7).
+    knowledge: KnowledgeBlock = Field(default_factory=KnowledgeBlock)
 
     model: str | None = None
     tokens: Tokens = Field(default_factory=Tokens)

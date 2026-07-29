@@ -336,3 +336,62 @@ def test_metrics_drop_the_unbounded_attributes() -> None:
     metric = metric_attributes(attrs)
     assert set(metric) == {"surface_id", "scope", "tier", "engine", "degraded"}
     assert all(isinstance(v, str | bool) for v in metric.values())
+
+
+# --- the knowledge layer ---------------------------------------------------
+
+
+def test_knowledge_legs_get_their_own_spans(otel: Harness, thinker_base: WorldView) -> None:
+    """A slow turn has to be attributable to a Quipu retrieval rather than to
+    the model — that attribution is the whole reason layer 2 exists (§4)."""
+    from neural_amplifier.knowledge import Grounding, Ruling
+
+    class Quipu:
+        def retrieve(self, world_view: WorldView) -> Grounding:
+            return Grounding(facts=("a", "b"), latency_ms=120)
+
+    class Hank:
+        def rule(self, orders: object, world_view: WorldView) -> Ruling:
+            return Ruling(verdict="warn", advisories=("eco",), latency_ms=30)
+
+    sink, spans, _ = otel
+    Orchestrator(ScriptedBrain(), sinks=[sink], retriever=Quipu(), guard=Hank()).decide(
+        thinker_base
+    )
+
+    finished = {s.name: s for s in spans.get_finished_spans()}
+    assert {"quipu.retrieve", "hank.policy_guard", "decision base.production"} <= set(finished)
+
+    decision = finished["decision base.production"]
+    for leg in ("quipu.retrieve", "hank.policy_guard"):
+        assert finished[leg].parent.span_id == decision.context.span_id
+    assert (
+        finished["quipu.retrieve"].end_time - finished["quipu.retrieve"].start_time == 120_000_000
+    )
+    assert finished["quipu.retrieve"].attributes["na.quipu.hits"] == 2
+    assert finished["hank.policy_guard"].attributes["na.hank.verdict"] == "warn"
+
+
+def test_no_knowledge_layer_emits_no_child_spans(otel: Harness, thinker_base: WorldView) -> None:
+    """Don't pay for spans describing services that were never consulted."""
+    sink, spans, _ = otel
+    Orchestrator(ScriptedBrain(), sinks=[sink]).decide(thinker_base)
+    assert {s.name for s in spans.get_finished_spans()} == {"decision base.production"}
+
+
+def test_a_dead_knowledge_layer_still_gets_a_red_span(
+    otel: Harness, thinker_base: WorldView
+) -> None:
+    """Silence is the failure mode: a Quipu that stopped answering otherwise
+    looks exactly like one nobody wired up."""
+    from neural_amplifier.knowledge import Grounding
+
+    class Down:
+        def retrieve(self, world_view: WorldView) -> Grounding:
+            raise ConnectionError("quipu unreachable")
+
+    sink, spans, _ = otel
+    Orchestrator(ScriptedBrain(), sinks=[sink], retriever=Down()).decide(thinker_base)
+
+    retrieval = next(s for s in spans.get_finished_spans() if s.name == "quipu.retrieve")
+    assert retrieval.status.status_code is StatusCode.ERROR

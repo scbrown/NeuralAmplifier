@@ -157,6 +157,11 @@ def attributes(record: DecisionRecord) -> dict[str, Any]:
             h for h in handicaps if fairness.is_structural(h)
         ),
     }
+    block = record.knowledge
+    if block.quipu_hits or block.hank_verdict or block.quipu_degraded or block.hank_degraded:
+        out[f"{NAMESPACE}.quipu.hits"] = block.quipu_hits
+        out[f"{NAMESPACE}.hank.verdict"] = block.hank_verdict or ""
+        out[f"{NAMESPACE}.hank.stripped"] = list(block.stripped)
     if record.year is not None:
         out[f"{NAMESPACE}.year"] = record.year
     if record.degrade_reason:
@@ -227,6 +232,44 @@ class OtelSink:
         self._span(record, attrs)
         self._metrics(record, attrs)
 
+    def _knowledge_spans(self, record: DecisionRecord, parent: Any, end: int) -> None:
+        """Child spans for the knowledge layer (``docs/observability.md`` §4).
+
+        Without these, a slow turn is attributable only to "the decision" —
+        the whole point of layer 2 is telling a Quipu retrieval apart from the
+        model. Emitted only for layers that actually ran.
+        """
+        trace = self._trace
+        block = record.knowledge
+        context = trace.set_span_in_context(parent)
+        legs = (
+            ("quipu.retrieve", block.quipu_latency_ms, block.quipu_degraded, block.quipu_hits > 0),
+            (
+                "hank.policy_guard",
+                block.hank_latency_ms,
+                block.hank_degraded,
+                block.hank_verdict is not None,
+            ),
+        )
+        for name, latency_ms, degraded, ran in legs:
+            if not ran and not degraded:
+                continue
+            child_attrs: dict[str, Any] = {f"{NAMESPACE}.degraded": degraded}
+            if name.startswith("quipu"):
+                child_attrs[f"{NAMESPACE}.quipu.hits"] = block.quipu_hits
+            else:
+                child_attrs[f"{NAMESPACE}.hank.verdict"] = block.hank_verdict or ""
+                child_attrs[f"{NAMESPACE}.hank.stripped"] = list(block.stripped)
+            child = self.tracer.start_span(
+                name,
+                context=context,
+                start_time=end - max(latency_ms, 0) * 1_000_000,
+                attributes=child_attrs,
+            )
+            if degraded:
+                child.set_status(trace.Status(trace.StatusCode.ERROR, f"{name} unavailable"))
+            child.end(end_time=end)
+
     def _span(self, record: DecisionRecord, attrs: dict[str, Any]) -> None:
         trace = self._trace
         parent = parse_traceparent(record.trace_id)
@@ -257,6 +300,7 @@ class OtelSink:
             span.set_status(
                 trace.Status(trace.StatusCode.ERROR, record.degrade_reason or "degraded")
             )
+        self._knowledge_spans(record, span, end)
         span.end(end_time=end)
 
     def _metrics(self, record: DecisionRecord, attrs: dict[str, Any]) -> None:

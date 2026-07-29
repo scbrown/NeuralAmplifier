@@ -81,6 +81,12 @@ class WorldView(_Model):
     action_space: list[Action] = Field(default_factory=list)
     memory: str | None = None
 
+    #: Retrieved facts and guard advisories the *orchestrator* injects before
+    #: the brain call. Not adapter fields — an adapter never sets these; they
+    #: live here so the brain sees one object (``knowledge.py``).
+    grounding: list[str] | None = None
+    advisories: list[str] | None = None
+
     #: Factions this faction has legitimately met. ``None`` means the adapter
     #: does not report contact, so the fog gate cannot run — see ``fog.py``.
     contacts: list[str] | None = None
