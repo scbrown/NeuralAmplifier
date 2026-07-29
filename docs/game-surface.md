@@ -257,7 +257,8 @@ Which side owns a decision is partly configurable (`struct Config`, `main.h:205+
 ## 7. Open questions
 
 1. **Surface ID scheme.** The IDs above are provisional. They should be frozen before the first
-   hook emits one, since the coverage report keys on them.
+   hook emits one, since the coverage report keys on them — see
+   [observability.md](observability.md) §2 and §9.1.
 2. **Where the coverage report is asserted.** A per-run JSON artifact is easy; deciding *which*
    surfaces a given canned save must exercise is the real design work.
 3. **Neutralising the fairness ledger.** Patch the handicap branches for LLM-routed factions, or

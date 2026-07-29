@@ -23,6 +23,7 @@ Read the design before writing code — it is source-grounded and will save you 
 | Running the game unattended, dialogs, or the SMAC game fixture | [docs/headless-harness.md](docs/headless-harness.md) |
 | Deciding what an AI player must cover, or adding a decision hook | [docs/game-surface.md](docs/game-surface.md) |
 | Tests, CI lanes, or fixtures | [docs/building-and-testing.md](docs/building-and-testing.md) |
+| Logging, metrics, tracing, or measuring coverage | [docs/observability.md](docs/observability.md) |
 | A GLSMAC mod or the GSE builtin | [docs/glsmac-integration-notes.md](docs/glsmac-integration-notes.md) |
 | Knowledge, memory, or guardrails | [docs/knowledge-architecture.md](docs/knowledge-architecture.md) |
 
@@ -62,7 +63,8 @@ A platform-agnostic brain + two engine adapters, joined by one JSON contract.
   GLSMAC (**AGPL-3.0**).
 - `docs/` — `contract.md` (the shared interface), `building-and-testing.md`,
   `headless-harness.md` (game fixture + unattended runs), `game-surface.md` (the decision
-  inventory + AI coverage matrix), and the adapter notes (`thinker-adapter-notes.md`,
+  inventory + AI coverage matrix), `observability.md` (decision records, tracing, coverage
+  measurement), and the adapter notes (`thinker-adapter-notes.md`,
   `glsmac-integration-notes.md`).
 
 ## Conventions

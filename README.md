@@ -176,6 +176,7 @@ adapters/
 docs/               contract.md         the world-view / action-space interface
                     game-surface.md     every decision the game asks + AI coverage matrix
                     headless-harness.md game fixture + running unattended
+                    observability.md    decision records, tracing, coverage
                     building-and-testing.md, adapter notes, knowledge-architecture.md,
                     strategy-knowledge.md, ontology/, Quipu/Hank integration docs
 ```

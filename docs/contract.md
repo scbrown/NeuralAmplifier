@@ -28,6 +28,8 @@ omitted (the orchestrator treats missing sections as "not available on this engi
   "schema_version": "0.1",
   "engine": "thinker",              // or "glsmac"
   "scope": "turn",                  // "turn" | "unit" | "base"  (drill-down granularity)
+  "surface_id": "base.production",  // optional: stable decision id (see game-surface.md)
+  "trace": { "traceparent": "00-4bf92f35…-00f067aa…-01" },  // optional: W3C trace context
   "turn": 42,
   "year": 2142,
   "faction": "GAIANS",
@@ -86,7 +88,8 @@ omitted (the orchestrator treats missing sections as "not available on this engi
     { "action_id": "a3", "reason": "Recycling Tanks — economy first." },
     { "action_id": "a4", "reason": "Nothing else worth doing this turn." }
   ],
-  "notes": "Still builder-focused; begin scouting east next turn."
+  "notes": "Still builder-focused; begin scouting east next turn.",
+  "degraded": false                 // optional: true when this is the safe fallback, not a decision
 }
 ```
 
@@ -100,7 +103,24 @@ omitted (the orchestrator treats missing sections as "not available on this engi
   [learned-memory.md](learned-memory.md)).
 - **Degradation:** if the orchestrator times out / errors / exceeds budget, it returns the
   safe fallback (`end_turn` where present, else the deterministic default) rather than
-  failing — the game never stalls waiting on the brain.
+  failing — the game never stalls waiting on the brain. It sets `degraded: true` when it does,
+  so a run of pure fallbacks is distinguishable from a run of real decisions — see
+  [observability.md](observability.md) §5.4.
+
+## Telemetry fields
+
+Three optional, additive fields carry observability without changing the shape of the exchange
+(full design in [observability.md](observability.md)):
+
+| Field | Direction | Purpose |
+|---|---|---|
+| `surface_id` | adapter → orchestrator | Which decision this is, from [game-surface.md](game-surface.md). Drives coverage measurement. |
+| `trace.traceparent` | adapter → orchestrator | W3C trace context. The **adapter is the root** — the game is the root of the causality — and the orchestrator continues it across Quipu/Hank. |
+| `degraded` | orchestrator → adapter | This response is the safe fallback, not a decision. |
+
+An adapter that omits them still works; it just cannot be measured. The orchestrator owns
+telemetry export — the adapter only stamps these fields, because it must never block the game's
+message pump.
 
 ## Two tiers
 
