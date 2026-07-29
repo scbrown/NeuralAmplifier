@@ -185,6 +185,24 @@ decisions. Changed decisions are either the improvement you intended or the regr
 didn't. This is only possible because the contract is plain JSON over HTTP — it is a payoff of
 that design choice, so don't spend it.
 
+**"The stored world views" needed somewhere to be stored.** The decision record is
+content-addressed but does not *contain* its input — it carries `world_view_hash` and nothing
+else — so a log on its own cannot be replayed at all. `replay.WorldViewStore` keeps the bytes,
+keyed by the same hash the record already carries, which means a record and its input can never
+be mismatched and repeated inputs cost one file. Enable it with `NA_WORLD_VIEW_STORE`; a run
+without it produces a log that is readable but not replayable, and `neural-amplifier replay`
+says so rather than reporting a clean pass over zero decisions.
+
+Two verdicts, because the run kinds support different claims. A scripted run must match exactly
+(`--exact`). A **real-model** run can only be held to the weaker one: nothing newly degraded and
+the same surfaces fired. The trap that motivates keeping them apart is a replay where the
+fallback happens to choose what the brain chose — the actions match, every "did it decide?"
+assertion passes, and the brain is gone. `new_degradations` catches it; a bare action diff does
+not.
+
+The store doubles as **fixture harvesting** (§5 of [headless-harness.md](headless-harness.md)):
+one recorded game yields orchestrator fixtures no hand-written world view would.
+
 ### 5.4 Silent degradation — the failure tests miss
 
 A run where the orchestrator timed out every single turn, fell back to `end_turn`, and finished
@@ -273,7 +291,8 @@ Each step is useful on its own and none requires a running game until the last.
 | **6** | OTel exporter; spans across orchestrator → Quipu → Hank | ❌ |
 | **7** | Replay mode + determinism diffing in the harness | ✅ |
 
-Steps 1–4 and 6 have **landed** in the orchestrator; 5 and 7 wait on the adapter and the harness.
+Steps 1–4, 6, and the game-free half of 7 have **landed** in the orchestrator; 5 and a real
+recorded game wait on the adapter and the harness.
 Step 6's span-per-decision, the §6 metrics, and W3C context continuation are all tested against
 an in-memory tracer, so the exporter is verified with no collector and no game.
 

@@ -57,7 +57,16 @@ class Emitter:
     """
 
     def __init__(self, *sinks: Sink) -> None:
-        self.sinks: tuple[Sink, ...] = tuple(s for s in sinks if s is not None)
+        for sink in sinks:
+            # emit() swallows per-call errors so telemetry can never stall the
+            # game — which means a mis-wired sink would fail silently for a
+            # whole run. Catch the shape mistake here instead, once, loudly.
+            if not isinstance(sink, Sink):
+                raise TypeError(
+                    f"{type(sink).__name__} is not a Sink: it has no write(record). "
+                    "A WorldViewStore belongs in Orchestrator(store=...), not sinks=[...]"
+                )
+        self.sinks: tuple[Sink, ...] = tuple(sinks)
         self.failures: list[SinkFailure] = []
 
     def emit(self, record: DecisionRecord) -> None:

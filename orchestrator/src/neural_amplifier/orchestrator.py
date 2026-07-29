@@ -13,6 +13,7 @@ import time
 import uuid
 from collections.abc import Sequence
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 from .brain import Brain, BrainError
 from .contract import Orders, WorldView
@@ -20,6 +21,9 @@ from .decisions import DecisionLog, DecisionRecord, world_view_hash
 from .fog import Redaction, redact
 from .telemetry import Emitter, Sink
 from .validate import validate
+
+if TYPE_CHECKING:  # replay imports us; keep the cycle type-only
+    from .replay import WorldViewStore
 
 
 @dataclass
@@ -39,6 +43,7 @@ class Orchestrator:
         log: DecisionLog | None = None,
         game_id: str | None = None,
         sinks: Sequence[Sink] = (),
+        store: WorldViewStore | None = None,
     ) -> None:
         self.brain = brain
         self.log = log
@@ -46,6 +51,9 @@ class Orchestrator:
         # Record of truth first: if a downstream exporter fails, the JSONL line
         # is already written (``docs/observability.md`` §3).
         self.telemetry = Emitter(*([log] if log is not None else []), *sinks)
+        # Records carry only the hash of their input, so replay needs the
+        # bytes kept somewhere. Content-addressed, so this dedupes for free.
+        self.store = store
 
     def decide(self, world_view: WorldView) -> Result:
         started = time.monotonic()
@@ -56,6 +64,11 @@ class Orchestrator:
         # difference between a policy and a control.
         fog = redact(world_view)
         world_view = fog.world_view
+
+        # Store the *gated* view: replay must reproduce what the brain saw,
+        # not what the adapter sent.
+        if self.store is not None:
+            self.store.put(world_view)
 
         try:
             orders = self.brain.decide(world_view)

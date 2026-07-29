@@ -121,9 +121,14 @@ no assets) is the cleanest check to build on.
 - **S1:** full orchestrator + contract suite on fixtures — the bulk of tests, no game. **Landed:**
   contract types, `POST /decide`, action-space validation, safe degradation, the decision record
   and JSONL log, the coverage report (`just coverage`), the derived fairness ledger with drift
-  detection against an adapter's stamp, and the OTel exporter — spans, ops metrics, and W3C
-  context continuation, all asserted against an in-memory tracer with no collector.
+  detection against an adapter's stamp, the OTel exporter (spans, ops metrics, and W3C context
+  continuation, all asserted against an in-memory tracer with no collector), and the
+  world-view store plus `neural-amplifier replay`.
 - **A0–A2 (Thinker):** DLL builds; loop runs under Wine with fake Claude; a faction plays.
 - **B0 (GLSMAC):** `http` builtin smoke via `--gse-tests`; mod logic tested headless once mocks
   are extended.
 - **B1–B2:** integration as the action space, then fog and depth, come online.
+
+Once a real run exists, `NA_WORLD_VIEW_STORE` turns it into regression material: the stored
+world views replay through a changed orchestrator with no game (`just replay`), and they are
+the fixture source for the layers below.

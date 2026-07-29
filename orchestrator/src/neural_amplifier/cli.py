@@ -28,6 +28,15 @@ def main(argv: list[str] | None = None) -> int:
         help="fail if the fallback rate exceeds this (e.g. 0.05)",
     )
 
+    rep = sub.add_parser("replay", help="re-run a recorded log with no game")
+    rep.add_argument("log", type=Path)
+    rep.add_argument("--store", type=Path, required=True, help="world-view store from the run")
+    rep.add_argument(
+        "--exact",
+        action="store_true",
+        help="require identical decisions (scripted-brain runs only)",
+    )
+
     args = parser.parse_args(argv)
 
     if args.command == "serve":
@@ -35,6 +44,34 @@ def main(argv: list[str] | None = None) -> int:
 
         uvicorn.run("neural_amplifier.service:app", host=args.host, port=args.port)
         return 0
+
+    if args.command == "replay":
+        from .brain import ScriptedBrain
+        from .orchestrator import Orchestrator
+        from .replay import WorldViewStore, replay
+
+        comparison = replay(
+            DecisionLog(args.log).read(),
+            WorldViewStore(args.store),
+            Orchestrator(ScriptedBrain()),
+        )
+        print(json.dumps(comparison.summary(), indent=2))
+        for divergence in comparison.diverged:
+            print(
+                f"  turn {divergence.turn} {divergence.surface_id}: "
+                f"{divergence.before} -> {divergence.after} ({divergence.reason})",
+                file=sys.stderr,
+            )
+        problems: list[str] = []
+        if comparison.replayed == 0:
+            problems.append("nothing was replayed — the store has none of the log's inputs")
+        if not comparison.consistent:
+            problems.append("replay is inconsistent: new degradation or lost surfaces")
+        if args.exact and not comparison.deterministic:
+            problems.append(f"{len(comparison.diverged)} decision(s) changed")
+        for problem in problems:
+            print(f"FAIL: {problem}", file=sys.stderr)
+        return 1 if problems else 0
 
     summary = report(DecisionLog(args.log).read())
     print(json.dumps(summary.summary(), indent=2))

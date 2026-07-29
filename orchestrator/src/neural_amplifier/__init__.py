@@ -12,6 +12,7 @@ from .decisions import DecisionLog, DecisionRecord
 from .fairness import fairness_profile, handicap_drift
 from .fog import redact
 from .orchestrator import Orchestrator, Result
+from .replay import Comparison, WorldViewStore, replay
 from .telemetry import Emitter, OtelSink, Sink, sinks_for
 from .validate import validate
 
@@ -20,6 +21,7 @@ __all__ = [
     "Brain",
     "BrainError",
     "Choice",
+    "Comparison",
     "ClaudeBrain",
     "DecisionLog",
     "DecisionRecord",
@@ -33,9 +35,11 @@ __all__ = [
     "ScriptedBrain",
     "Sink",
     "WorldView",
+    "WorldViewStore",
     "fairness_profile",
     "handicap_drift",
     "redact",
+    "replay",
     "report",
     "sinks_for",
     "validate",

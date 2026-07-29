@@ -109,6 +109,13 @@ coverage log="decisions.jsonl" max_degrade_rate="0.05":
     @cd orchestrator && uv run neural-amplifier coverage "../{{log}}" \
         --max-degrade-rate {{max_degrade_rate}}
 
+# Replay a recorded log through the current orchestrator — no game, no tokens.
+# Needs a world-view store from the run (set NA_WORLD_VIEW_STORE when recording).
+# exact=true additionally requires identical decisions; only valid for scripted runs.
+replay log="decisions.jsonl" store="worldviews" exact="false":
+    @cd orchestrator && uv run neural-amplifier replay "../{{log}}" \
+        --store "../{{store}}" {{ if exact == "true" { "--exact" } else { "" } }}
+
 # === Documentation ===
 
 # Documentation: just docs <cmd>

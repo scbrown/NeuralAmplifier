@@ -19,6 +19,7 @@ from .contract import Orders, WorldView
 from .coverage import report
 from .decisions import DecisionLog
 from .orchestrator import Orchestrator
+from .replay import WorldViewStore
 from .telemetry import OtelSink, Sink
 
 
@@ -56,8 +57,14 @@ def create_app(
         list(sinks) if sinks is not None else ([OtelSink()] if _otel_requested() else [])
     )
 
+    # Without this a run's log references inputs nobody kept, and replay
+    # (observability step 7) has nothing to feed back.
+    store_path = os.environ.get("NA_WORLD_VIEW_STORE")
     orchestrator = Orchestrator(
-        brain=brain or build_brain(), log=resolved_log, sinks=resolved_sinks
+        brain=brain or build_brain(),
+        log=resolved_log,
+        sinks=resolved_sinks,
+        store=WorldViewStore(store_path) if store_path else None,
     )
     app.state.orchestrator = orchestrator
 
