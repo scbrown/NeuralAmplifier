@@ -27,9 +27,25 @@ just play thinker GAIANS     # Full loop for an engine (thinker | glsmac)
 ## Tooling
 
 **Fastest route: [`scripts/setup-environment.sh`](scripts/setup-environment.sh)** installs
-everything below, is idempotent, and prints a per-tool verification table at the end. Point a
-Claude Code web environment's setup script at it, or run it on a fresh box. Each lane fails
+everything below and prints a per-tool verification table at the end. Each lane fails
 independently, so a partial run still leaves you able to work.
+
+For a **Claude Code cloud session**, paste that file's body into the environment's *Setup
+script* field (claude.ai/code → the cloud icon above the message box → add/edit environment).
+The field takes a script, not a path, and it runs before the repo is available, so it cannot
+call the checked-in copy — this file is the version-controlled thing you paste from. Three
+constraints shape it, and all three are load-bearing:
+
+- **It must exit 0.** A non-zero exit means the session *fails to start*, so every optional
+  step is `|| true` and the script ends in an explicit `exit 0`.
+- **It must finish in ~5 minutes**, or the environment cache never builds — and without the
+  cache it re-runs on *every* session instead of once. Quipu alone is 4m19s measured, so the
+  lanes run in parallel and the total is the slowest lane rather than the sum.
+- **The cache is a filesystem snapshot**: installed files persist, running processes do not.
+  It rebuilds when the script changes or after ~7 days.
+
+Cloud sessions already ship Rust, Python (+uv, ruff, mypy, pytest), Node, ninja, git, jq, and
+ripgrep, so the script only adds what is genuinely missing.
 
 Otherwise, install by tier. **Core** is everything you need to build, lint, test, and track
 work — no game, no cross-compiler, no knowledge graph. **Per-component** is only needed if you

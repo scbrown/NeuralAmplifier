@@ -40,7 +40,11 @@ tmp/lastmap.*
 
 # Agent runtime / session state
 .runtime/
-.claude/
+# .claude/settings.json IS read by cloud sessions (repo hooks carry over,
+# user-level ~/.claude does not), so it is tracked. Everything else under
+# .claude/ is local state.
+.claude/*
+!.claude/settings.json
 .logs/
 state.json
 CLAUDE.md
