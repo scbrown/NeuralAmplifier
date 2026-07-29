@@ -9,6 +9,7 @@ from .brain import Brain, BrainError, ClaudeBrain, ScriptedBrain
 from .contract import Action, Choice, Fairness, Orders, WorldView
 from .coverage import Report, report
 from .decisions import DecisionLog, DecisionRecord
+from .fairness import fairness_profile, handicap_drift
 from .orchestrator import Orchestrator, Result
 from .validate import validate
 
@@ -27,6 +28,8 @@ __all__ = [
     "Result",
     "ScriptedBrain",
     "WorldView",
+    "fairness_profile",
+    "handicap_drift",
     "report",
     "validate",
 ]

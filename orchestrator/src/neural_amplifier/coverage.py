@@ -11,7 +11,7 @@ from collections import Counter
 from collections.abc import Iterable
 from dataclasses import dataclass, field
 
-from . import surfaces
+from . import fairness, surfaces
 from .decisions import DecisionRecord
 
 
@@ -25,6 +25,7 @@ class Report:
     adherence_violations: int = 0
     unknown_surface_ids: set[str] = field(default_factory=set)
     missing_surface_id: int = 0
+    handicaps: set[str] = field(default_factory=set)
 
     @property
     def degrade_rate(self) -> float:
@@ -42,6 +43,22 @@ class Report:
         Structurally guaranteed, so assert ``True`` — not "few violations".
         """
         return self.adherence_violations == 0
+
+    @property
+    def structural_handicaps(self) -> set[str]:
+        """Advantages nobody selected. These are what a result has to defend."""
+        return {h for h in self.handicaps if fairness.is_structural(h)}
+
+    @property
+    def fair_play(self) -> bool:
+        """Whether this run supports an **unqualified** fair-play claim.
+
+        True only when no handicap was in force for any decision — a human slot
+        under unmodified rules. Difficulty-selected advantages still disqualify
+        it: they make the result honest, not unqualified, and the win has to be
+        reported as "won with N declared advantages" (``game-surface.md`` §5).
+        """
+        return not self.handicaps
 
     def covered(self) -> set[str]:
         return set(self.fired)
@@ -63,6 +80,9 @@ class Report:
             "adherence_violations": self.adherence_violations,
             "unknown_surface_ids": sorted(self.unknown_surface_ids),
             "missing_surface_id": self.missing_surface_id,
+            "handicaps": sorted(self.handicaps),
+            "structural_handicaps": sorted(self.structural_handicaps),
+            "fair_play": self.fair_play,
         }
 
 
@@ -74,6 +94,7 @@ def report(records: Iterable[DecisionRecord]) -> Report:
         if record.degraded:
             out.degraded += 1
         out.adherence_violations += record.adherence_violations
+        out.handicaps.update(record.fairness_profile)
 
         surface_id = record.surface_id
         if surface_id is None:

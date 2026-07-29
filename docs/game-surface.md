@@ -243,37 +243,52 @@ and a player who selects Transcend is deliberately asking for a stronger opponen
 the computer opponent (VISION's autonomous mode), inheriting those is correct product behaviour,
 not cheating.
 
-The rest are **structural**: flat `is_human` branches that apply at *every* difficulty, including
-Citizen. Nobody chose those, so they can't be justified by the difficulty argument. The `fairness`
-block carries `selected_by` per entry so the two never get conflated in a result.
+The rest are **structural**: `is_human` branches nobody selected, so they can't be justified by
+the difficulty argument. The `fairness` block carries `selected_by` per entry so the two never
+get conflated in a result. A few structural entries are still difficulty-*gated* — global warming
+in particular — but the gate is not what a player is choosing when they pick a difficulty, so
+they stay on this side of the line.
 
 **Difficulty-selected** — scale with `*DiffLevel`; a user choice:
 
-| Asymmetry | Where | Favours |
-|---|---|---|
-| Unit support bonus | base.cpp:1645 (`unit_support_bonus[*DiffLevel]`) | AI |
-| Facility maintenance discount | game.cpp:1846-1859 (`*DiffLevel >= DIFF_THINKER`) | AI |
-| Tech cost factor | tech.cpp:1155 (`tech_cost_factor[*DiffLevel]`) | AI |
-| Terraform speed | veh_action.cpp:210 (difficulty > 3) | AI |
-| Mind-control cost | probe.cpp:713 | AI |
-| Combat modifiers | veh_combat.cpp:1558-1567 | AI |
+| Asymmetry | Where | In force when | Favours |
+|---|---|---|---|
+| Unit support bonus | base.cpp:1645 (`unit_support_bonus[*DiffLevel]`) | configured non-zero — **never, by default** | AI |
+| Facility maintenance discount | game.cpp:1846-1859 (`*DiffLevel >= DIFF_THINKER`) | Thinker+ | AI |
+| Tech cost factor | tech.cpp:1155 (`tech_cost_factor[*DiffLevel]`) | any level except Librarian | **human** below Librarian, AI above |
+| Terraform speed | veh_action.cpp:210 (difficulty > 3) | Thinker+ | AI |
+| Mind-control cost | probe.cpp:713 (`tgt->diff_level > 3`) | Thinker+ | AI |
+| Combat modifiers | veh_combat.cpp:1557-1565 | below Talent | **human** |
 
 **Structural** — flat `is_human` or separate config; present at every difficulty:
 
-| Asymmetry | Where | Favours |
-|---|---|---|
-| **Retool penalty — AI pays none, ever** | base.cpp:1045, build.cpp:11 | AI |
-| **Global warming — AI exempt below difficulty 4** | base.cpp:3205 | AI |
-| Mineral carry-over cap | base.cpp:3382, 3655 | AI |
-| Eco-damage rollback | base.cpp:3118-3124 | AI |
-| Former automation restrictions | move.cpp:1533-1988 | AI |
-| Content population | base.cpp:4220 (`content_pop_player` vs `_computer`) | config |
-| Starting units | faction.cpp:1759-1760, 2234-2235 | config |
-| Colony-pod base disbanding | base.cpp:3325 (AI returns early) | AI |
-| Project race-blocking | base.cpp:3639-3652 | **human** |
+| Asymmetry | Where | In force when | Favours |
+|---|---|---|---|
+| **Retool penalty — AI pays none, ever** | base.cpp:1045, build.cpp:11 | `retool_penalty_prod_change != 0` | AI |
+| **Global warming — AI exempt below difficulty 4** | base.cpp:3205 | below Thinker | AI |
+| Mineral carry-over cap | base.cpp:3382, 3655 | always | AI |
+| Eco-damage rollback | base.cpp:3118-3124 | always | AI |
+| Former automation restrictions | move.cpp:1533-1988 | always | AI |
+| Content population | base.cpp:4220 (`content_pop_player` vs `_computer`) | any level except Librarian | **human** below Librarian, AI above |
+| Starting units | faction.cpp:1759-1760, 2234-2235 | always | config |
+| Colony-pod base disbanding | base.cpp:3325 (AI returns early) | Talent+ | AI |
+| Project race-blocking | base.cpp:3639-3652 | always | **human** |
 
-Note the last one favours the *human* — the ledger is not uniformly tilted, which is another
-reason to record rather than hand-wave.
+Three of these favour the *human* — the ledger is not uniformly tilted, which is another reason
+to record rather than hand-wave.
+
+> **This table is an index, not the source of truth.** Building
+> [`fairness.py`](../orchestrator/src/neural_amplifier/fairness.py) against the fork showed a
+> static `favours` column cannot be right: `tech_cost_factor` is `{124,116,108,100,84,76}`
+> (`main.h:327`), so the AI pays *more* below Thinker and the entry flips sides at Librarian
+> where the factor is exactly 100. `content_pop` flips at the same level for the same reason
+> (`{6,5,4,3,2,1}` vs a flat `{3,3,3,3,3,3}`). The combat modifiers were listed as an AI
+> advantage but scale a low-difficulty *human's* offense up and an AI attacker's down. And
+> `unit_support_bonus` ships all-zero, so declaring it would claim a handicap nobody has.
+>
+> The orchestrator therefore **derives** the block from `(slot, difficulty, config)` rather than
+> reading a table, `handicap_drift()` flags an adapter whose stamp disagrees, and each entry
+> carries the `file:line` that justifies it. Correct this table from the module, not the reverse.
 
 ---
 

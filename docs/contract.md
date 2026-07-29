@@ -147,6 +147,13 @@ An adapter that omits them still works; it just cannot be measured. The orchestr
 telemetry export — the adapter only stamps these fields, because it must never block the game's
 message pump.
 
+The block is **derivable**: `neural_amplifier.fairness_profile(slot, difficulty, config)` computes
+what the rules actually produce, and `handicap_drift()` compares a stamped block against it. Use
+it — an adapter that quietly stops stamping otherwise looks exactly like a clean run, which is the
+fairness twin of the all-fallback failure in [observability.md](observability.md) §5.4. Whether an
+entry is in force depends on difficulty and `thinker.ini`, not on the entry existing, so `favours`
+is computed rather than copied from a table ([game-surface.md](game-surface.md) §5.1).
+
 ## Two tiers
 
 The adapter runs the **deterministic tier** locally (former automation, pathfinding, base
