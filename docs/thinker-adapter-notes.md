@@ -134,7 +134,10 @@ drill-down model exactly.
    engine.
 4. Decide the transport (WinHTTP worker thread vs. local helper process) and the
    non-blocking/timeout policy against the message pump.
-5. Wine + virtual-display harness for unattended/CI runs (the hardest part of this route).
+5. Wine + virtual-display harness for unattended/CI runs (the hardest part of this route) —
+   designed in **[headless-harness.md](headless-harness.md)**, which also covers the game
+   fixture (`terranx.exe` v2.0 sourcing) and the menu-free startup seams (`load_daemon`,
+   `cmd_parse`, `mod_auto_save`).
 
 ## Reference
 

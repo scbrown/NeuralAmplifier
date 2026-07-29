@@ -8,6 +8,10 @@ Guiding principle: **push testing down to where it's fast, free, and determinist
 platform-agnostic orchestrator and the GLSMAC `--gse-tests` path — and reserve slow,
 game-dependent runs for a gated integration lane.
 
+The one lane that can't be pushed down — a real game, unattended — has its own design:
+**[headless-harness.md](headless-harness.md)** covers making an owned SMAC copy available to
+the harness (the *game fixture*) and driving it with no human at the keyboard.
+
 ## The pieces
 
 | Component | Build | Test | In default CI? |

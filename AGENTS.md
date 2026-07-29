@@ -16,8 +16,9 @@ A platform-agnostic brain + two engine adapters, joined by one JSON contract.
   fork. **MIT.**
 - `adapters/glsmac/` — long-term: `.gls.js` mod (**MIT**) + a GSE `http` builtin that modifies
   GLSMAC (**AGPL-3.0**).
-- `docs/` — `contract.md` (the shared interface), `building-and-testing.md`, and the adapter
-  notes (`thinker-adapter-notes.md`, `glsmac-integration-notes.md`).
+- `docs/` — `contract.md` (the shared interface), `building-and-testing.md`,
+  `headless-harness.md` (game fixture + unattended runs), and the adapter notes
+  (`thinker-adapter-notes.md`, `glsmac-integration-notes.md`).
 
 ## Conventions
 

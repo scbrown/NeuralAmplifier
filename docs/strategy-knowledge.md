@@ -371,7 +371,7 @@ The gameplay policy-guardrail harness (role (c) in
 **enforced invariants**. A `strat:` heuristic marked `strat:enforceable true` projects to
 an `aegis:Policy` (`effect warn`, `tier "game-state"`) evaluated by `hank_guard` over the
 proposed orders — e.g. *"a `border` base must not end the turn without an in-base unit
-matching a `garrison` `strat:UnitTemplate."* The guard only **warns/advises** on legal
+matching a `garrison` `strat:UnitTemplate`."* The guard only **warns/advises** on legal
 orders; it never overrides `action_space` legality (the engine stays authoritative), and
 a doctrine warning yields to a higher-confidence learned tactic exactly as the precedence
 chain dictates.
