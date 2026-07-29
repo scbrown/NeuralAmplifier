@@ -114,8 +114,12 @@ cost (`tech.cpp:1155`), terraform speed (`veh_action.cpp:210`), mind-control cos
 (`content_pop_player` vs `content_pop_computer`, `base.cpp:4220`), starting units
 (`faction.cpp:1759-1760, 2234-2235`). Two are outright rule differences: **AI factions pay no
 retool penalty at all** (`base.cpp:1045`, `build.cpp:11`), and AI factions below Transcend
-**do not accumulate global warming** (`base.cpp:3205`). A Mode A win does not demonstrate what
-VISION §4 claims.
+**do not accumulate global warming** (`base.cpp:3205`).
+
+Project policy is to **record these, not patch them out** ([game-surface.md](game-surface.md)
+§5): the active set is declared in the world view's `fairness` block. So a Mode A run is
+legitimate and interpretable — it just cannot be reported as a fair win without citing the
+profile.
 
 **Mode B+ is the resolution.** Two config switches let a *human* faction borrow Thinker's AI
 brain while keeping human rules:
@@ -137,8 +141,11 @@ Also note `BASE::gov_config()` (`engine_base.h:248`) returns `~0u` for AI but on
 bits for humans — so in Mode B/B+ the 21 governor permission flags become a real, recurring
 decision surface with **no AI policy to copy**.
 
-**Recommendation: Mode B+ for autonomous play, Mode B for copilot.** Mode A is acceptable only
-for early plumbing spikes, and any result from it should be labelled as handicapped. Full
+**Recommendation: Mode B+ for autonomous play, Mode B for copilot.** Mode A stays usable —
+project policy is to **record the handicaps, not patch them out**
+([game-surface.md](game-surface.md) §5), so a Mode A run is legitimate as long as its `fairness`
+profile is declared and reported. What it cannot support is an *unqualified* fair-play claim;
+only Mode B+ (empty profile) does that. Full
 surface consequences in [game-surface.md](game-surface.md); dialog handling in
 [headless-harness.md](headless-harness.md) §4.
 

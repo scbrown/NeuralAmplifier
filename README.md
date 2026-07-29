@@ -61,9 +61,11 @@ copilot**.
 
 > **On "plays fair":** that's a design commitment, not a freebie. SMAC hands non-human factions
 > a systematic bonus layer — cheaper tech, free unit support, no retool penalty, no global
-> warming below Transcend. Neural Amplifier tracks every one of those in a
-> [fairness ledger](docs/game-surface.md#5-rule-asymmetries-the-fairness-ledger) and either
-> neutralises it or records it in the world view, so a win means something.
+> warming below Transcend. Neural Amplifier keeps a
+> [fairness ledger](docs/game-surface.md#5-rule-asymmetries-the-fairness-ledger) of all of them
+> and **declares whichever are active** in the world view, so every result is interpretable and
+> Claude reasons about its own advantages out loud. Play it on a human slot and the list is
+> empty — that's the configuration behind an unqualified fair-play claim.
 
 The original game's AI is dated and leans on difficulty cheating; the open-source engine has
 **no computer opponents yet**. An LLM already understands Alpha Centauri and can weigh fuzzy,

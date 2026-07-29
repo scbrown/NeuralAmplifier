@@ -41,9 +41,10 @@ Break these and the project stops being what it claims to be. They are not style
    Accidental assignment is a bug; record it in [docs/game-surface.md](docs/game-surface.md).
 5. **Emit a surface ID from every decision hook.** Coverage is measured, not assumed — see
    [docs/game-surface.md](docs/game-surface.md) §1.
-6. **Don't accept the AI handicaps silently.** Non-human factions get a systematic bonus layer
-   (fairness ledger, [docs/game-surface.md](docs/game-surface.md) §5). Either neutralise it or
-   record it in the world view. VISION §4 commits to no cheating.
+6. **Declare the AI handicaps; never hide them.** Non-human factions get a systematic bonus
+   layer (fairness ledger, [docs/game-surface.md](docs/game-surface.md) §5). Policy is to
+   **record, not neutralise**: every active asymmetry goes in the world view's `fairness` block
+   and onto the decision record. Never report a Mode A result as a fair win — cite the profile.
 7. **Intercept in-game dialogs; never blanket-suppress them.** They are decision points. Only
    Thinker's *fatal error* `MessageBoxA` should be suppressed
    ([docs/headless-harness.md](docs/headless-harness.md) §4).

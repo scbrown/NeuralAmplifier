@@ -34,6 +34,14 @@ omitted (the orchestrator treats missing sections as "not available on this engi
   "year": 2142,
   "faction": "GAIANS",
   "scores": { "GAIANS": 310, "HIVE": 288 },
+  "fairness": {                     // declared rule asymmetries — see game-surface.md §5
+    "slot": "ai",                   // "ai" | "human"  (is_human for this faction)
+    "difficulty": "transcend",
+    "handicaps": [
+      { "id": "retool_penalty",  "favours": "self", "detail": "AI pays no retool penalty" },
+      { "id": "tech_cost_factor", "favours": "self", "detail": "tech cost x0.8 at this level" }
+    ]
+  },
   "economy": {                      // omitted on engines without it (e.g. GLSMAC today)
     "energy_credits": 74,
     "research": { "current": "Ecological Engineering", "progress": 0.6 },
@@ -117,6 +125,18 @@ Three optional, additive fields carry observability without changing the shape o
 | `surface_id` | adapter → orchestrator | Which decision this is, from [game-surface.md](game-surface.md). Drives coverage measurement. |
 | `trace.traceparent` | adapter → orchestrator | W3C trace context. The **adapter is the root** — the game is the root of the causality — and the orchestrator continues it across Quipu/Hank. |
 | `degraded` | orchestrator → adapter | This response is the safe fallback, not a decision. |
+
+## Fairness
+
+`fairness` declares the rule asymmetries in force for this faction. SMAC gives non-human
+factions a systematic bonus layer; the project's decision is to **record** it rather than patch
+it out ([game-surface.md](game-surface.md) §5). An empty `handicaps` list means the faction plays
+by unmodified rules — the expected case on a human slot.
+
+The orchestrator does not act on this field as a rule engine; it passes it into the prompt (so
+Claude reasons honestly about its own advantages) and onto the decision record (so a result is
+interpretable after the fact). `slot: "human"` with an empty list is the only configuration that
+supports an unqualified fair-play claim.
 
 An adapter that omits them still works; it just cannot be measured. The orchestrator owns
 telemetry export — the adapter only stamps these fields, because it must never block the game's

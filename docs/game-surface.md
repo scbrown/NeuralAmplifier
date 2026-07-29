@@ -211,8 +211,32 @@ how much they cost us:
 ## 5. Rule asymmetries (the fairness ledger)
 
 Not UI differences — **different rules**. This is why a Mode A result is not a fair result
-(see [thinker-adapter-notes.md](thinker-adapter-notes.md) §5.0). Every LLM-routed faction should
-either neutralise these or record them in the world view:
+(see [thinker-adapter-notes.md](thinker-adapter-notes.md) §5.0).
+
+> **Decided: we record, we do not neutralise.** Every active asymmetry is declared in the world
+> view's `fairness` block ([contract.md](contract.md)) and carried on the decision record
+> ([observability.md](observability.md) §2), rather than patched out of the binary.
+
+Three reasons this is the right call, and one cost to be honest about:
+
+- **Patching is disproportionately risky here.** Thinker's hook primitives verify original bytes
+  and abort on mismatch (`patch.cpp:218,250`). Neutralising fourteen branches means fourteen more
+  binary-compat surfaces that break on any upstream Thinker change — for no gameplay capability.
+- **Disclosure is what the claim actually needs.** The problem was never that handicaps exist;
+  it was that they were *invisible*, so a result couldn't be interpreted. Recorded, it can.
+- **It turns a bug into an experimental variable.** With the profile on every record, Mode A and
+  Mode B+ runs become directly comparable, and "does Claude still win with the handicaps off?"
+  becomes a query rather than a rebuild.
+- **The cost:** recording does **not** make a Mode A run fair — it makes it *interpretable*. A
+  win under an active profile is "won as Gaians on Transcend with six declared advantages," and
+  must be reported that way. For an unqualified fair-play claim, use Mode B+, where the profile
+  is empty because human rules apply.
+
+Because the profile is in the world view, **Claude can see its own handicaps** and reason about
+them. That is deliberate: it is more honest than hiding them, and a model that knows tech is
+cheap for it should say so out loud.
+
+The ledger:
 
 | Asymmetry | Where | Favours |
 |---|---|---|
@@ -261,9 +285,10 @@ Which side owns a decision is partly configurable (`struct Config`, `main.h:205+
    [observability.md](observability.md) §2 and §9.1.
 2. **Where the coverage report is asserted.** A per-run JSON artifact is easy; deciding *which*
    surfaces a given canned save must exercise is the real design work.
-3. **Neutralising the fairness ledger.** Patch the handicap branches for LLM-routed factions, or
-   record them in the world view and accept a handicapped baseline? §5 is the full list; the
-   decision affects whether A2 proves anything.
+3. ~~**Neutralising the fairness ledger.**~~ **Resolved — record, don't neutralise** (§5). What
+   remains open is mechanical: the engine exposes `*DiffLevel` and the `conf.*` values, but the
+   adapter has to map those to a concrete active-handicap list per faction per game. Some entries
+   (retool penalty, global warming) are boolean on `is_human`; others scale with difficulty.
 4. **`enemy_diplomacy` is a black box.** AI↔AI pact and vendetta decisions are unobservable from
    source. We can see outcomes (`mod_NetMsg_pop`) but not reasoning. Accept, or reimplement?
 5. **Council coverage requires fork work.** With `council_get_vote` uncalled anywhere, giving

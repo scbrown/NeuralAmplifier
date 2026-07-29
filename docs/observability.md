@@ -51,6 +51,7 @@ a projection, or an export of this record.
   "reason": "Recycling Tanks — economy first.",
   "degraded": false,
   "degrade_reason": null,
+  "fairness_profile": ["retool_penalty", "tech_cost_factor"],
   "model": "claude-...",
   "tokens": { "input": 8412, "output": 291, "cached": 7900 },
   "latency_ms": 1840,
@@ -68,6 +69,10 @@ Three fields carry most of the weight:
   "identical input?" a string comparison.
 - **`degraded`** — whether this decision came from the brain or the safe fallback. See §5.4;
   this is the single most valuable field for testing.
+- **`fairness_profile`** — the rule asymmetries in force, from the world view's `fairness` block
+  ([game-surface.md](game-surface.md) §5). Carried on every record so a result is interpretable
+  months later, and so Mode A and Mode B+ runs are directly comparable. An empty list is the
+  claim "this was won under unmodified rules" — never assert that without it.
 
 ---
 
@@ -109,18 +114,23 @@ adapter is a DLL inside a 32-bit `terranx.exe` under Wine, and **must not block 
 pump** ([thinker-adapter-notes.md](thinker-adapter-notes.md) §5). Synchronous telemetry egress
 from inside the game process is not an option.
 
-So the adapter's entire telemetry job is: **stamp two fields on the world view it already
+So the adapter's entire telemetry job is: **stamp a few fields on the world view it already
 sends.** The orchestrator does the rest.
 
 ### Contract delta
 
-Both are optional and additive — an adapter that omits them still works:
+All optional and additive — an adapter that omits them still works, it just cannot be measured:
 
-- **World view** gains `surface_id` (which decision this is) and `trace` (`{ "traceparent": … }`,
-  W3C format). The adapter is the **root** of the trace because the game is the root of the
-  causality; the orchestrator continues the context rather than starting a new one.
+- **World view** gains `surface_id` (which decision this is), `trace` (`{ "traceparent": … }`,
+  W3C format), and `fairness` (the declared rule asymmetries in force — see
+  [game-surface.md](game-surface.md) §5). The adapter is the **root** of the trace because the
+  game is the root of the causality; the orchestrator continues the context rather than starting
+  a new one.
 - **Orders** gain `degraded` (bool) so the adapter can log locally that it applied a fallback
   rather than a real decision.
+
+`fairness` is the adapter's job because only the engine side knows `is_human`, `*DiffLevel`, and
+the `conf.*` values that determine which handicaps are live.
 
 Recorded in [contract.md](contract.md).
 
