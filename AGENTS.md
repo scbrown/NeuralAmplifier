@@ -102,7 +102,7 @@ artifact** and `.beads/embeddeddolt/` is local working state (already gitignored
 bd ready                     # unblocked work, highest priority first — start here
 bd show <id>                 # full detail, including why something is blocked
 bd update <id> --claim       # claim before starting
-bd close <id> "what landed"  # close with an outcome, not just a status
+bd close <id> -r "what landed"     # -r is a flag; a positional reason is rejected
 bd create "Title" -p 1 -t task -d "..."
 bd dep add <blocked> <blocker>
 bd export -o .beads/issues.jsonl   # refresh the tracked artifact before committing
@@ -119,6 +119,11 @@ Conventions for this repo:
   restates its title is not worth the round trip.
 - **Model real blockers as dependencies** so `bd ready` stays trustworthy. If everything is
   ready, nothing is prioritised.
+- **Read the output of `bd close`.** It refuses to close a bead that is still blocked
+  (`cannot close X: blocked by open issues [Y]`) and errors on an unknown id. Both are silent
+  if you redirect to `/dev/null` — which has already produced two commits here claiming
+  "Closes na-…" for a bead that stayed open. Check `bd ready` before you write the commit
+  message, not after.
 
 ## Conventions
 
