@@ -47,6 +47,15 @@ $SUDO env DEBIAN_FRONTEND=noninteractive apt-get install -y \
 log "Wine + Xvfb"
 $SUDO env DEBIAN_FRONTEND=noninteractive apt-get install -y wine xvfb
 
+# ── Seeing and driving the game window ──────────────────────────────────────
+#
+# For `just game-screen` (scripts/game-screen.sh): capture the running game and
+# send it input. Needed to debug anything visual — and under XWayland capturing the
+# root window returns solid black, so this must address the game's own window by id,
+# which is what xdotool provides.
+log "Screen capture + input (xdotool, imagemagick)"
+$SUDO env DEBIAN_FRONTEND=noninteractive apt-get install -y xdotool imagemagick x11-apps
+
 # ── CMake ≥ 3.31 ────────────────────────────────────────────────────────────
 #
 # The fork's CMakePresets.json requires it, which is newer than several distro

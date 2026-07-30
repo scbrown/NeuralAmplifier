@@ -134,6 +134,12 @@ setup-host:
 thinker-play cmd="launch":
     bash scripts/play-thinker.sh {{cmd}}
 
+# See and drive the running game's window: just game-screen shot|click|key|info
+# Captures the game WINDOW, not the root — under XWayland the root is solid black.
+# Coordinates are window-relative. e.g. just game-screen "click 2370 1185"
+game-screen args="shot":
+    bash scripts/game-screen.sh {{args}}
+
 # === Game fixture ===
 
 # The repo holds paths and checksums, never the bytes (docs/headless-harness.md §2.3).
