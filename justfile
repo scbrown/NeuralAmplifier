@@ -122,6 +122,34 @@ replay log="decisions.jsonl" store="worldviews" exact="false":
     @cd orchestrator && uv run neural-amplifier replay "../{{log}}" \
         --store "../{{store}}" {{ if exact == "true" { "--exact" } else { "" } }}
 
+# === Track A: play the real game ===
+
+# One-time host setup: i686 cross-compiler, Wine, Xvfb, CMake >= 3.31.
+setup-host:
+    bash scripts/setup-host.sh
+
+# Build our Thinker fork, install it over a real SMAC install, and launch.
+# cmd = launch | headless | build | restore   (restore puts stock Thinker back)
+# Needs THINKER_DIR; finds the game automatically or set SMAC_PLAY_DIR.
+thinker-play cmd="launch":
+    bash scripts/play-thinker.sh {{cmd}}
+
+# === Game fixture ===
+
+# The repo holds paths and checksums, never the bytes (docs/headless-harness.md §2.3).
+# Needs SMAC_DIR. `scan` refuses a tree with a mod overlay on it — see §2.4.
+# Check or regenerate the SMAC fixture manifest: just game verify|scan
+game cmd="verify" manifest="fixtures/smac/steam-2204130.manifest":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    case "{{cmd}}" in
+        verify) python3 scripts/game_fixture.py verify "{{smac}}" --manifest "{{manifest}}" ;;
+        strict) python3 scripts/game_fixture.py verify "{{smac}}" --manifest "{{manifest}}" --strict ;;
+        scan)   python3 scripts/game_fixture.py scan "{{smac}}" --out "{{manifest}}" \
+                    --provenance "${SMAC_PROVENANCE:-unspecified}" ;;
+        *)      echo "Unknown: {{cmd}}. Try: verify strict scan" ;;
+    esac
+
 # === Datalinks (K1) ===
 
 # Deterministic — no model, no tokens. Needs SMAC_DIR. Output is gitignored,

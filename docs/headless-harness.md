@@ -40,32 +40,48 @@ neither substitutes for the other.
 
 ### 2.1 What decides compatibility
 
-One checksum. Thinker requires **Alien Crossfire v2.0 `terranx.exe`** — 3 084 288 bytes,
-SHA-1 `4b19c1fe3266b5ebc4305cd182ed6e864e3a1c4a` (`thinker/Technical.md:193-195`). The same
-passage notes that *"using other official game binaries of the same version should also
-work"* — so **GOG is not special; v2.0 is**. Game version 1.0 is explicitly unsupported.
+Not a checksum — a **build**. Thinker requires **Alien Crossfire v2.0 `terranx.exe`**. Game
+version 1.0 is explicitly unsupported. `thinker/Technical.md:193-195` cites one v2.0 binary,
+3 084 288 bytes, SHA-1 `4b19c1fe3266b5ebc4305cd182ed6e864e3a1c4a`, but the same passage allows
+*"using other official game binaries of the same version should also work"* — so **GOG is not
+special; v2.0 is**, and that published hash is one known-good value, not the gate.
 
-This is not a soft requirement. Both hook primitives verify the original bytes before
-patching and abort on mismatch (`thinker/src/patch.cpp:218,250`), so an incompatible binary
-fails loudly at startup rather than corrupting a run.
+The gate is the **patch sites**. Both hook primitives verify the original bytes before patching
+and abort on mismatch (`thinker/src/patch.cpp:218,250`), so an incompatible binary fails loudly
+at startup rather than corrupting a run. A binary whose hash is unlisted but whose patch sites
+match is fine, and the game itself tells you which you have.
 
-The verification is therefore trivial:
+**Measured, 2026-07-29** — the Steam Planetary Pack binary is one of those unlisted-but-valid
+builds:
+
+| | Bytes | SHA-1 |
+|---|---|---|
+| Technical.md anchor (GOG) | 3 084 288 | `4b19c1fe3266b5ebc4305cd182ed6e864e3a1c4a` |
+| **Steam, app 2204130** | **3 094 576** | **`7bbcc54e64760c11a24f48862f15dbaaeab61435`** |
+
+10 288 bytes larger and a different hash — yet Thinker v5.4 attaches and plays it. Its PE link
+timestamp is 1999-12-20, i.e. an original Firaxis build rather than a storefront repack. So:
 
 ```bash
-sha1sum terranx.exe   # want: 4b19c1fe3266b5ebc4305cd182ed6e864e3a1c4a
+sha1sum terranx.exe   # 4b19c1fe… (GOG) and 7bbcc54e… (Steam) are both known-good v2.0
 ```
+
+**Never hard-fail the fixture on a hash mismatch.** An unknown hash is a prompt to record a new
+provenance line and let Thinker adjudicate, not grounds to reject the install. The authority is
+`patch.cpp`, and it reports at startup.
 
 ### 2.2 Sourcing: Steam primary, ISO as validator
 
 | Source | Role | Notes |
 |---|---|---|
-| **Steam** — [Planetary Pack](https://store.steampowered.com/app/2204130/Sid_Meiers_Alpha_Centauri_Planetary_Pack/) (app 2204130) | **Primary** | Ships SMAC + SMACX; community reports Thinker and PRACX working against it. Expected to be v2.0 already — confirm with the checksum. |
-| **Physical media (ISO backup)** | **Validator** | Discs are v1.0, which Thinker does not support; requires the official Alien Crossfire v2.0 patch. Slower to prepare. |
+| **Steam** — [Planetary Pack](https://store.steampowered.com/app/2204130/Sid_Meiers_Alpha_Centauri_Planetary_Pack/) (app 2204130) | **Primary — confirmed working** | Ships SMAC + SMACX at v2.0. Verified 2026-07-29: Thinker v5.4 patches and plays it (§2.1). No patching step needed. |
+| **Physical media (ISO backup)** | **Optional validator** | Discs are v1.0, which Thinker does not support; requires the official Alien Crossfire v2.0 patch. Slower to prepare, and **no longer on the critical path**. |
 
-The ISO's job is **not** to be a spare copy. It is to prove the fixture is reconstructible
-from media we physically own, independent of a storefront account. If an ISO-derived install
-reproduces the same manifest as the Steam-derived one, the fixture's provenance is settled and
-the harness is no longer coupled to Steam.
+The ISO's job is **not** to be a spare copy, and it is not a prerequisite — Steam alone yields a
+playable fixture. Its only remaining job is to prove the fixture is reconstructible from media we
+physically own, independent of a storefront account. If an ISO-derived install reproduces the
+same manifest as the Steam-derived one, the fixture's provenance is settled and the harness is no
+longer coupled to Steam. Worth doing eventually; nothing blocks on it.
 
 Steam is only ever a *source*, never a runtime dependency: Thinker never modifies
 `terranx.exe` on disk — it applies every patch in memory at DLL attach
@@ -85,19 +101,102 @@ $SMAC_DIR/            # extracted once, lives outside the repo, never committed
 ```
 
 **The repo holds the manifest, never the bytes.** Game data is copyrighted; it cannot go in
-the repository or into public CI. What is version-controlled is a manifest of relative paths
-plus checksums, and a `just game verify` recipe that resolves `$SMAC_DIR`, checks the
-manifest, and reports precisely what is missing or wrong. The `check-added-large-files`
-pre-commit hook is a useful second line of defence against an accidental commit.
+the repository or into public CI. What is version-controlled lives in `fixtures/smac/`:
+
+| File | Role |
+|---|---|
+| `steam-2204130.manifest` | `sha1 <TAB> size <TAB> relpath`, sorted — the reference fixture (1 624 files) |
+| `overlays.tsv` | Known **mod** hashes, so a mismatch can be *explained* rather than merely reported |
+| `PROVENANCE.md` | Where the bytes came from, which `terranx.exe` hashes we accept, what is unresolved |
+
+Driven by `scripts/game_fixture.py` through `just game`:
+
+```bash
+just game verify    # check $SMAC_DIR against the manifest
+just game strict    # also fail on files present but absent from the manifest
+just game scan      # regenerate the manifest from $SMAC_DIR
+```
+
+The `check-added-large-files` pre-commit hook is a useful second line of defence against an
+accidental commit of the bytes themselves.
 
 **One fixture serves both engines.** A full GLSMAC game also requires a real SMAC install —
 `ResourceManager` probes for marker files and genuinely decodes `texture.pcx` / `ter1.pcx`,
 with no synthetic fallback ([glsmac-integration-notes.md](glsmac-integration-notes.md) §5).
 So the fixture is engine-independent and worth building properly once.
 
+### 2.4 Keep the fixture separate from the directory you play in
+
+The failure this prevents is quiet and expensive, so it gets its own section.
+
+**A mod installs *into* the game directory.** Thinker extracts over the top of an existing
+install and overwrites data files — measured on the gaming host, it replaces `alphax.txt`,
+`german/alphax.txt`, and 15 `basenames/*.txt` with its own copies, byte-identical to
+`Thinker_v5.4.zip`. Nothing warns you. The directory still looks like a game directory.
+
+**`alphax.txt` is the one that hurts.** `just ingest` reads `$SMAC_DIR/alphax.txt` and labels
+the result **canonical**. Thinker ships its own tech tree and rules, so pointing `$SMAC_DIR` at
+a Thinker-modded directory silently launders house-rule data into the canonical `smac:` graph —
+precisely what invariant 4 forbids and what `just ingest-thinker` (tier `house-rule`) exists to
+prevent. A checksum manifest catches this; a directory listing does not.
+
+So:
+
+- `$SMAC_DIR` is a **pristine** game tree — the provenance anchor and the canonical K1 source.
+- The **play** directory is a separate copy with the mod overlaid on it.
+- `just game scan` **refuses** a tree whose files match a known overlay hash, rather than baking
+  mod hashes into the canonical manifest. Override with `--allow-contaminated` and it records
+  the pristine files only, listing the rest as `unresolved` in the manifest header.
+
+To restore a contaminated tree: Steam → Properties → Installed Files → **Verify integrity of
+game files**. It re-downloads tracked files and leaves untracked additions (`thinker.dll`,
+`thinker.exe`, `smac_mod/`) in place. Then re-scan.
+
 ---
 
 ## 3. Running unattended
+
+### 3.0 Host setup and the one-command launch
+
+**Verified working, 2026-07-29.** Our Thinker fork, cross-compiled on Linux, drives the Steam
+Alien Crossfire `terranx.exe` under Wine 11.9 + Xvfb with no visible display and no Steam client
+in the loop.
+
+Dependencies, all installed by `just setup-host` (`scripts/setup-host.sh`):
+
+| Dependency | Why |
+|---|---|
+| `build-essential`, `g++-mingw-w64-i686-posix` | Thinker is a 32-bit Windows DLL; Linux cross-compile is upstream-supported (`thinker/Technical.md`). GCC < 8.1.0 unsupported. |
+| `cmake` ≥ 3.31 | Required by the fork's `CMakePresets.json`, newer than several distro packages |
+| `wine` | `terranx.exe` is a 32-bit Windows GUI binary |
+| `xvfb` | The virtual display. The game still renders — nobody is watching (§1) |
+
+Then one command builds the fork, installs it over a real install, and launches:
+
+```bash
+just thinker-play             # on your current display
+just thinker-play headless    # on a virtual display (Xvfb)
+just thinker-play build       # build + install, don't launch
+just thinker-play restore     # put stock Thinker back
+```
+
+Three things `scripts/play-thinker.sh` is careful about, each a bug we actually hit:
+
+- **It creates its own Wine prefix** (`~/.local/share/na-wine`) and never touches Steam's Proton
+  prefix. A prefix upgraded by a different Wine version is not reversible, so the game you launch
+  from Steam and the game the harness drives must stay independent.
+- **It backs up stock Thinker exactly once**, and refuses to record one of our own builds as the
+  restore point — otherwise a hand-installed DLL gets frozen in and `restore` silently restores
+  our build forever.
+- **It verifies the artifact is `PE32 … i386`** before installing. The fork's `CMakeLists.txt`
+  sets `CMAKE_CXX_COMPILER` *after* `project()`, which is fragile enough to be worth asserting.
+
+On prefix architecture: `setup-environment.sh` notes that a `WINEARCH=win32` prefix is required.
+That holds for older Wine; **Wine 9+ runs 32-bit binaries in a default 64-bit prefix via
+new-wow64**, and SMAC was verified booting that way here on Wine 11.9.
+
+The gate is off unless configured. `llm_factions=0` (the default) behaves exactly like stock
+Thinker, so an unconfigured build produces no observations rather than an error.
 
 ### 3.1 The real blocker is menus, not rendering
 

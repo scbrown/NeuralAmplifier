@@ -66,3 +66,6 @@ CLAUDE.local.md
 
 # Local Quipu store — rebuildable with `just quipu-load`.
 /.quipu/
+
+# Beads local working state (the tracked artifact is .beads/issues.jsonl)
+.beads/.auto-import-issues.jsonl
