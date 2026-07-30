@@ -218,7 +218,46 @@ is cached and paid once; per-turn calls are
 bounded to action-space scope; under budget, drop tactics before rules (rules are correctness,
 tactics are optimization); bound deny-repair retries.
 
-> **Quipu's SPARQL engine implements neither `VALUES` nor `FILTER(?x IN (…))`.** Both return
+### What is wired today
+
+Steps 1, 3 (action-space grounding only), 6 (one policy) and 7 run. Steps 2, 5 and the rest of
+3 do not — Hank's hot state graph is unbuilt, so nothing that reasons over the board can exist
+yet.
+
+| Step | State |
+|---|---|
+| Quipu action-space grounding | **Working.** One batched query over exactly this turn's `action_space` |
+| Static briefing, `quipu_context`, hybrid tactics | Not wired. `quipu_context` additionally needs an embedding model |
+| Hank ingest / what-if | Not built (roles d, e) |
+| Hank guard | **One policy:** `CitationGuard`, verdict `warn` only |
+| Engine validation behind it | **Working**, and it is what makes an illegal order impossible |
+
+**Grounding is measured, not assumed.** A knowledge layer that quietly stops being consulted
+looks exactly like a quiet day, so the record separates states that are easy to conflate:
+
+- `quipu_absent` — no retriever configured, as distinct from `quipu_degraded` (configured and
+  failed) and `quipu_hits == 0` (ran, found nothing).
+- `hank_absent` — no guard wired, as distinct from a guard that allowed. Both produce an allow;
+  only one is a deployment problem.
+- `quipu_facts` / `quipu_cited` / `utilisation` — what was offered, what the brain said it used,
+  and the ratio. `quipu_hits` counts what was *offered*; without citations, twelve facts
+  retrieved and all ignored is indistinguishable from twelve that drove the decision.
+
+Facts are injected **id-first** (`unit:formers Formers; terraforms terrain`) because the brain
+cannot cite what it cannot see, and the id is the node's own IRI — so a citation resolves back
+into the graph and to `smac:sourcedFrom`. Citations are filtered against what was actually
+offered: a model naming a fact nobody gave it is a hallucination, and laundering that into the
+provenance block would make the record assert that something informed a decision when nothing
+did.
+
+First measured utilisation, Haiku on a real turn-35 base-production decision: **1 of 7 facts
+cited**. Six were paid for and unread — which is a retrieval-tuning signal that did not exist
+before the instrumentation.
+
+> **Quipu's SPARQL engine implements neither `VALUES` nor `FILTER(?x IN (…))`, and also rejects
+> `FILTER NOT EXISTS`.** The third was found writing a provenance-completeness check ("which
+> typed nodes lack `smac:sourcedFrom`"), and it means negation-shaped questions have to be
+> computed client-side. All three are the same request: a way to express "not in this set". Both return
 > `unsupported graph pattern` / `unsupported FILTER expression` (verified against quipu 0.3.11).
 > The working equivalent is a `||` disjunction — `FILTER(?x = "a" || ?x = "b")` — which
 > `datalinks/quipu.py` builds. `OPTIONAL` and property paths do work. Either the queries below

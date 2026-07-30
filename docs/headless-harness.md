@@ -302,7 +302,7 @@ address failed for that reason, and the failure looks like success in a log.
 **What loading a savegame actually requires.** The engine performs a complete
 load-and-resume on itself in the replay/undo path at `0x5ADCD0`:
 
-```
+```c
 mod_load_daemon(path, 0)   // flag 0, not 1
 call 0x5FD120              // cdecl, no arguments
 GameHalted = 0

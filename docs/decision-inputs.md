@@ -71,7 +71,7 @@ terseness is a design goal.
 | # | Category | Fields |
 |---|---|---|
 | 1 | Subject | base name, id, coords; size (population); nutrient / mineral / energy surplus; minerals accumulated toward the current item; current item and turns remaining; drone and talent counts; facilities already built |
-| 2 | Action space | every legal build, each with: `id`, display name, **mineral cost**, **turns at current surplus**, category (unit / facility / project), one-line effect |
+| 2 | Action space | every legal build, each with: `id`, display name, **mineral cost**, **`turns_if_switched` / `turns_if_continued`** (computed — see below), category (unit / facility / project), and a one-line **role** (units) or **effect** (facilities) |
 | 3 | Local context | garrison strength in this base; visible hostile units within a few tiles; distance to the nearest known hostile base; whether this base is coastal |
 | 4 | Strategic context | faction energy reserve; base count; tech currently researched; social-engineering settings; who we are at war with |
 | 5 | Temporal context | what this base built in the last few turns (avoids oscillation); whether the current item was chosen by Claude or by Thinker |
@@ -83,11 +83,30 @@ terseness is a design goal.
 stateless brain will happily flip between two options every turn, accumulating nothing. Recent
 history is what makes a *stable* choice possible.
 
-**Known gap:** "turns at current surplus" requires mineral surplus, which the adapter has, but a
-partially-built item changes the arithmetic. Ship cost and accumulated minerals and let the brain
-do the division; do not pre-compute a number that will be subtly wrong.
+**Reversed after measurement.** This entry originally said: ship cost and accumulated minerals,
+let the brain divide, and do not pre-compute a figure that will be subtly wrong for a
+partially-built item. That was defensible in theory and wrong in practice. Across two runs on the
+*same* world view, a model computed `(33-4)/2` correctly once and then `22/2` the next time,
+silently dropping the 4 banked minerals it had just used. An arithmetic slip in the input to a
+strategic judgement is worse than a documented approximation.
 
-#### 2.1 What was actually missing — verified against live play, 2026-07-29
+So the adapter computes turns, and ships **two separately named numbers** rather than one
+ambiguous `turns`:
+
+| Field | Meaning |
+|---|---|
+| `turns_if_switched` | `ceil(cost / surplus)`, ignoring the bank — switching item category forfeits progress, so this is the conservative and usually correct read |
+| `turns_if_continued` | only on the item currently in production, where the bank does apply |
+
+A single `turns` field would have to pick one meaning and would be wrong half the time.
+`surplus <= 0` yields `null`, which is honest: a base with no mineral surplus cannot finish
+anything.
+
+The general lesson: **do not hand a model arithmetic you can do exactly.** The reason to prefer
+raw inputs is auditability, and that argument loses to a model that gets the sum wrong half the
+time on identical input.
+
+### 2.1 What was actually missing — verified against live play, 2026-07-29
 
 This is step 5 of §6 done for real, and it is the most useful part of the entry. **Both
 action-space fields were wrong on the first implementation, and neither error was visible in code
