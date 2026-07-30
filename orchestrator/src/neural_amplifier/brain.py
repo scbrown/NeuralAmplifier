@@ -17,7 +17,12 @@ from .contract import Choice, Orders, WorldView
 
 #: Default model. Chosen deliberately — see docs/observability.md for the cost
 #: and latency signals that should drive any change here.
-DEFAULT_MODEL = os.environ.get("NA_BRAIN_MODEL") or "claude-opus-5"
+#: Haiku 4.5 by design, not by cost-cutting reflex: it is the model this project is authorised to
+#: spend on, and a measured comparison found it reaches the SAME base.production choice as Opus 5
+#: with identical stability (1.00 over 5 runs each). It reads less of the grounding on the way
+#: there — utilisation 0.17 against 0.46 — which is a retrieval finding (na-373), not a reason to
+#: pay for a larger model. Override per run with NA_BRAIN_MODEL.
+DEFAULT_MODEL = os.environ.get("NA_BRAIN_MODEL") or "claude-haiku-4-5"
 
 #: Model for **non-gameplay** inference — K3's postgame extraction of `mem:`
 #: episodes from a decision log, and anything else that summarises rather than
