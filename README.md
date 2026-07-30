@@ -216,9 +216,11 @@ A third layer is the game's **own** standing intent, rather than knowledge about
   *retrieved*, not broadcast: a walk out from the resource an action spends reaches the plan
   saving it, the project it is saved for, and the strategy that project serves.
 
-  Measured on `base.hurry`: **0.60 → 1.00 stability**, with 9 runs in 10 naming the directive as
-  what decided them. That surface was never short of rules — it was short of knowing what else
-  81 energy credits were for.
+  Measured on `base.hurry`, a surface that splits 6/4 across ten identical prompts with no plan:
+  adding one priority-7 saving directive moved it to a **unanimous** `hurry:none`, and a second
+  plan on the same observation reached **0.80**. The directive was followed on every run of both.
+  That surface was never short of rules — it was short of knowing what else 81 energy credits
+  were for.
 
 Two decisions this is built to sharpen:
 

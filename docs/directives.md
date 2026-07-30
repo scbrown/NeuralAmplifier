@@ -139,10 +139,17 @@ Two rules keep the block honest:
 On the turn-35 `base.hurry` observation (University Base, Colony Pod, 81 credits to save seven
 turns, 82 in reserve), Haiku 4.5, ten runs each:
 
-| | stability | grounding utilisation | plan attention |
+| Plan | runs | stability | plan attention |
 |---|---|---|---|
-| No plan | **0.60** (6/4 split) | 0.90 | — |
-| One priority-7 saving directive | **1.00** (unanimous `hurry:none`) | 0.90 | 0.90 |
+| none | 10 | **0.60** (6/4 split) | — |
+| one priority-7 saving directive (`at_least 300`) | 10 | **1.00** (unanimous `hurry:none`) | 0.90 |
+| two directives, the second reached at hop 1 | 5 | **0.80** | 0.60 |
+
+The third row is the honest counterweight to the second: a different plan on the same
+observation moves the answer strongly toward `hurry:none` without pinning it. What replicates
+across both is the *direction* and the attention — the saving directive was followed on every
+run of both configurations. What does not replicate is the exact 1.00, so it should not be
+quoted as though the mechanism makes a contested surface deterministic.
 
 The surface was never short of *rules*. It was short of the opportunity cost of spending 81 of
 82 credits, and nothing in the world view had ever said what else that energy was for. See

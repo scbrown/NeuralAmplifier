@@ -15,6 +15,7 @@ from typing import Any, Protocol
 
 from .contract import Choice, Orders, WorldView
 from .metrics import vocabulary_prompt
+from .response import model_for, to_orders
 
 #: Default model. Chosen deliberately — see docs/observability.md for the cost
 #: and latency signals that should drive any change here.
@@ -155,7 +156,7 @@ class ClaudeBrain:
                 return client.messages.parse(
                     model=self.model,
                     max_tokens=16000,
-                    output_format=Orders,
+                    output_format=model_for(world_view.scope),
                     system=_SYSTEM,
                     messages=[{"role": "user", "content": world_view.model_dump_json()}],
                     **kwargs,
@@ -189,7 +190,7 @@ class ClaudeBrain:
         parsed = response.parsed_output
         if parsed is None:  # pragma: no cover - network path
             raise BrainError("model returned no parseable orders")
-        return Orders.model_validate(parsed)
+        return to_orders(parsed)
 
 
 _SYSTEM_TEMPLATE = """You are playing a faction in Sid Meier's Alpha Centauri.
