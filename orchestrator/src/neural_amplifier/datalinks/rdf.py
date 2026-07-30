@@ -17,7 +17,17 @@ from __future__ import annotations
 from collections.abc import Iterable, Iterator
 from dataclasses import dataclass
 
-from .parse import Ability, Chassis, Component, Datalinks, Facility, Reactor, Technology, Unit
+from .parse import (
+    Ability,
+    Chassis,
+    Component,
+    Datalinks,
+    Facility,
+    Reactor,
+    SocialModel,
+    Technology,
+    Unit,
+)
 
 NAMESPACE = "http://neuralamplifier.local/ontology/smac/"
 #: Per-class prefixes rather than one ``smac:``. Turtle's PN_LOCAL grammar does
@@ -33,6 +43,7 @@ PREFIXES = (
     f"@prefix rct:  <{NAMESPACE}reactor/> .",
     f"@prefix abil: <{NAMESPACE}ability/> .",
     f"@prefix comp: <{NAMESPACE}component/> .",
+    f"@prefix soc:  <{NAMESPACE}social/> .",
     f"@prefix src:  <{NAMESPACE}source/> .",
     "@prefix xsd:  <http://www.w3.org/2001/XMLSchema#> .",
     "@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .",
@@ -240,6 +251,34 @@ def unit(item: Unit, prov: Provenance) -> str:
     return _node(f"unit:{slug(item.name)}", "smac:Unit", props, prov)
 
 
+def social_model(item: SocialModel, prov: Provenance) -> str:
+    """A social-engineering choice, with its effect deltas as a readable summary.
+
+    ``smac:effectText`` carries the same rendered form the action space uses — "efficiency +2,
+    growth +2, support -1" — so retrieval finds an SE choice's meaning through the same query
+    shape as a facility's or an ability's, and one grounding path covers all three. The
+    structured deltas are emitted alongside it, because a summary string is for the prompt and
+    the numbers are for anything that has to compute.
+    """
+    summary = ", ".join(f"{name} {value:+d}" for name, value in item.effects)
+    props: list[tuple[str, str]] = [
+        ("rdfs:label", literal(item.name)),
+        ("smac:socialCategory", literal(item.category)),
+    ]
+    if summary:
+        props.append(("smac:effectText", literal(summary)))
+    for name, value in item.effects:
+        props.append((f"smac:effect{name.capitalize()}", str(value)))
+    if item.is_default:
+        # Worth stating rather than inferring from an absence: the default is the one model a
+        # faction always has, and "no effects" and "not parsed" look identical otherwise.
+        props.append(("smac:isDefaultModel", "true"))
+    if item.disabled:
+        props.append(("smac:disabled", "true"))
+    props += [("smac:requiresTech", f"tech:{slug(a)}") for a in item.requires]
+    return _node(f"soc:{slug(item.category)}-{slug(item.name)}", "smac:SocialModel", props, prov)
+
+
 def statements(links: Datalinks, prov: Provenance | None = None) -> Iterator[str]:
     provenance = prov or Provenance()
     for tech in links.technologies.values():
@@ -258,6 +297,8 @@ def statements(links: Datalinks, prov: Provenance | None = None) -> Iterator[str
         yield component(piece, provenance)
     for design in links.units.values():
         yield unit(design, provenance)
+    for model in links.social_models:
+        yield social_model(model, provenance)
 
 
 def turtle(links: Datalinks, prov: Provenance | None = None) -> str:

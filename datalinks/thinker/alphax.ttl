@@ -6,6 +6,7 @@
 @prefix rct:  <http://neuralamplifier.local/ontology/smac/reactor/> .
 @prefix abil: <http://neuralamplifier.local/ontology/smac/ability/> .
 @prefix comp: <http://neuralamplifier.local/ontology/smac/component/> .
+@prefix soc:  <http://neuralamplifier.local/ontology/smac/social/> .
 @prefix src:  <http://neuralamplifier.local/ontology/smac/source/> .
 @prefix xsd:  <http://www.w3.org/2001/XMLSchema#> .
 @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
@@ -3914,6 +3915,185 @@ unit:drop-colony-pod a smac:Unit ;
     smac:hasArmor comp:armor-scout ;
     smac:role "founds a new base elsewhere; does not grow the base that builds it" ;
     smac:requiresTech tech:mindmac ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+soc:politics-frontier a smac:SocialModel ;
+    rdfs:label "Frontier" ;
+    smac:socialCategory "Politics" ;
+    smac:isDefaultModel true ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+soc:politics-police-state a smac:SocialModel ;
+    rdfs:label "Police State" ;
+    smac:socialCategory "Politics" ;
+    smac:effectText "police +2, support +2, efficiency -2" ;
+    smac:effectPolice 2 ;
+    smac:effectSupport 2 ;
+    smac:effectEfficiency -2 ;
+    smac:requiresTech tech:docloy ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+soc:politics-democratic a smac:SocialModel ;
+    rdfs:label "Democratic" ;
+    smac:socialCategory "Politics" ;
+    smac:effectText "efficiency +2, growth +2, support -2" ;
+    smac:effectEfficiency 2 ;
+    smac:effectGrowth 2 ;
+    smac:effectSupport -2 ;
+    smac:requiresTech tech:ethcalc ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+soc:politics-fundamentalist a smac:SocialModel ;
+    rdfs:label "Fundamentalist" ;
+    smac:socialCategory "Politics" ;
+    smac:effectText "morale +1, probe +2, research -2" ;
+    smac:effectMorale 1 ;
+    smac:effectProbe 2 ;
+    smac:effectResearch -2 ;
+    smac:requiresTech tech:brain ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+soc:economics-simple a smac:SocialModel ;
+    rdfs:label "Simple" ;
+    smac:socialCategory "Economics" ;
+    smac:isDefaultModel true ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+soc:economics-free-market a smac:SocialModel ;
+    rdfs:label "Free Market" ;
+    smac:socialCategory "Economics" ;
+    smac:effectText "economy +2, planet -3, police -5" ;
+    smac:effectEconomy 2 ;
+    smac:effectPlanet -3 ;
+    smac:effectPolice -5 ;
+    smac:requiresTech tech:indecon ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+soc:economics-planned a smac:SocialModel ;
+    rdfs:label "Planned" ;
+    smac:socialCategory "Economics" ;
+    smac:effectText "growth +2, industry +1, efficiency -2" ;
+    smac:effectGrowth 2 ;
+    smac:effectIndustry 1 ;
+    smac:effectEfficiency -2 ;
+    smac:requiresTech tech:planets ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+soc:economics-green a smac:SocialModel ;
+    rdfs:label "Green" ;
+    smac:socialCategory "Economics" ;
+    smac:effectText "planet +2, efficiency +2, growth -2" ;
+    smac:effectPlanet 2 ;
+    smac:effectEfficiency 2 ;
+    smac:effectGrowth -2 ;
+    smac:requiresTech tech:centemp ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+soc:values-survival a smac:SocialModel ;
+    rdfs:label "Survival" ;
+    smac:socialCategory "Values" ;
+    smac:isDefaultModel true ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+soc:values-power a smac:SocialModel ;
+    rdfs:label "Power" ;
+    smac:socialCategory "Values" ;
+    smac:effectText "morale +2, support +2, industry -2" ;
+    smac:effectMorale 2 ;
+    smac:effectSupport 2 ;
+    smac:effectIndustry -2 ;
+    smac:requiresTech tech:milalg ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+soc:values-knowledge a smac:SocialModel ;
+    rdfs:label "Knowledge" ;
+    smac:socialCategory "Values" ;
+    smac:effectText "research +2, efficiency +1, probe -2" ;
+    smac:effectResearch 2 ;
+    smac:effectEfficiency 1 ;
+    smac:effectProbe -2 ;
+    smac:requiresTech tech:cyber ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+soc:values-wealth a smac:SocialModel ;
+    rdfs:label "Wealth" ;
+    smac:socialCategory "Values" ;
+    smac:effectText "industry +1, economy +1, morale -2" ;
+    smac:effectIndustry 1 ;
+    smac:effectEconomy 1 ;
+    smac:effectMorale -2 ;
+    smac:requiresTech tech:indauto ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+soc:future-society-none a smac:SocialModel ;
+    rdfs:label "None" ;
+    smac:socialCategory "Future Society" ;
+    smac:isDefaultModel true ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+soc:future-society-cybernetic a smac:SocialModel ;
+    rdfs:label "Cybernetic" ;
+    smac:socialCategory "Future Society" ;
+    smac:effectText "efficiency +2, planet +2, research +2, police -3" ;
+    smac:effectEfficiency 2 ;
+    smac:effectPlanet 2 ;
+    smac:effectResearch 2 ;
+    smac:effectPolice -3 ;
+    smac:requiresTech tech:digsent ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+soc:future-society-eudaimonic a smac:SocialModel ;
+    rdfs:label "Eudaimonic" ;
+    smac:socialCategory "Future Society" ;
+    smac:effectText "growth +2, economy +2, industry +2, morale -2" ;
+    smac:effectGrowth 2 ;
+    smac:effectEconomy 2 ;
+    smac:effectIndustry 2 ;
+    smac:effectMorale -2 ;
+    smac:requiresTech tech:eudaim ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+soc:future-society-thought-control a smac:SocialModel ;
+    rdfs:label "Thought Control" ;
+    smac:socialCategory "Future Society" ;
+    smac:effectText "police +2, morale +2, probe +2, support -3" ;
+    smac:effectPolice 2 ;
+    smac:effectMorale 2 ;
+    smac:effectProbe 2 ;
+    smac:effectSupport -3 ;
+    smac:requiresTech tech:willpow ;
     smac:appliesToEngine "thinker" ;
     smac:ruleTier "house-rule" ;
     smac:sourcedFrom src:alphax-txt .

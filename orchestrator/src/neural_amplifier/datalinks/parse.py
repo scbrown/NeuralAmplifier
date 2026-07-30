@@ -188,6 +188,32 @@ PLAN_ROLES: Final[dict[int, str]] = {
 
 
 @dataclass(frozen=True)
+class SocialModel:
+    """One social-engineering choice — a model within a category.
+
+    The `#SOCIO` block is positional rather than labelled: three header lines, then four groups
+    of four rows, and the group's index is the only thing that says which category a model
+    belongs to. Nothing in a row names its category.
+
+    ``effects`` is the whole reason this section is worth parsing. "Democratic" tells a brain
+    nothing; ``{"efficiency": 2, "growth": 2, "support": -1}`` is the actual decision. The file
+    writes those as repeated signs — ``++EFFIC``, ``-----POLICE`` — so magnitude is the number
+    of characters.
+    """
+
+    category: str
+    name: str
+    requires: tuple[str, ...]
+    disabled: bool
+    effects: tuple[tuple[str, int], ...]
+
+    @property
+    def is_default(self) -> bool:
+        """The first model in each category, available from the start with no effects."""
+        return not self.requires and not self.effects
+
+
+@dataclass(frozen=True)
 class Chassis:
     """A movement platform. Determines triad, speed, and the unit's name series."""
 
@@ -285,6 +311,7 @@ class Datalinks:
     chassis: dict[str, Chassis] = field(default_factory=dict)
     reactors: dict[str, Reactor] = field(default_factory=dict)
     abilities: dict[str, Ability] = field(default_factory=dict)
+    social_models: list[SocialModel] = field(default_factory=list)
 
     def design_space(self) -> int:
         """How many distinct unit designs the rules permit.
@@ -371,6 +398,75 @@ def _component(kind: str, row: Row) -> Component:
     )
 
 
+#: alphax.txt writes social effects as abbreviations; the record and the graph use the long
+#: names the engine's own struct uses, so an effect reads the same wherever it surfaces.
+SOCIAL_EFFECTS: Final[dict[str, str]] = {
+    "ECONOMY": "economy",
+    "EFFIC": "efficiency",
+    "SUPPORT": "support",
+    "TALENT": "talent",
+    "MORALE": "morale",
+    "POLICE": "police",
+    "GROWTH": "growth",
+    "PLANET": "planet",
+    "PROBE": "probe",
+    "INDUSTRY": "industry",
+    "RESEARCH": "research",
+}
+
+
+def social_effect(token: str) -> tuple[str, int] | None:
+    """``"++POLICE"`` -> ``("police", 2)``; ``"-----POLICE"`` -> ``("police", -5)``.
+
+    Magnitude is the count of sign characters, not a digit, so a five-step penalty is five
+    minus signs. Returns None for anything unrecognised rather than guessing — a silently
+    mis-parsed effect would put a confident wrong number in front of the brain.
+    """
+    token = token.strip()
+    if not token:
+        return None
+    sign = 0
+    idx = 0
+    while idx < len(token) and token[idx] in "+-":
+        sign += 1 if token[idx] == "+" else -1
+        idx += 1
+    name = SOCIAL_EFFECTS.get(token[idx:].strip().upper())
+    if name is None or sign == 0:
+        return None
+    return name, sign
+
+
+def _social_rows(rows: list[Row]) -> list[SocialModel]:
+    """Assign models to categories by position.
+
+    Three header lines then four groups of four. The category list is the third line, and a
+    model's category is its group index — there is no marker in the row itself, which is why
+    this cannot be done row-at-a-time like every other section.
+    """
+    if len(rows) < 4:
+        return []
+    categories = [c for c in rows[2].fields if c]
+    body = rows[3:]
+    out: list[SocialModel] = []
+    per = 4
+    for index, row in enumerate(body):
+        group = index // per
+        if group >= len(categories):
+            break
+        requires, disabled = prereqs(row.get(1))
+        effects = tuple(e for e in (social_effect(f) for f in row.fields[2:]) if e is not None)
+        out.append(
+            SocialModel(
+                category=categories[group],
+                name=row.get(0),
+                requires=requires,
+                disabled=disabled,
+                effects=effects,
+            )
+        )
+    return out
+
+
 def _chassis(row: Row) -> Chassis:
     """``name,gender, plural,gender, defensive,gender, garrison,gender, speed, triad, ...``
 
@@ -452,7 +548,13 @@ COMPONENT_SECTIONS = {"WEAPONS": "weapon", "DEFENSES": "armor"}
 def parse(text: str) -> Datalinks:
     """Read the sections we model. Unmodelled sections are skipped, not guessed."""
     out = Datalinks()
+    # SOCIO is the one section whose rows cannot be read independently: a model's category comes
+    # from its position relative to a header line, so the block has to be buffered.
+    socio: list[Row] = []
     for row in sections(text):
+        if row.section == "SOCIO":
+            socio.append(row)
+            continue
         if row.section == "TECHNOLOGY":
             tech = _technology(row)
             out.technologies[tech.name] = tech
@@ -475,6 +577,7 @@ def parse(text: str) -> Datalinks:
                 out.units[unit.name] = unit
         elif row.section in COMPONENT_SECTIONS:
             out.components.append(_component(COMPONENT_SECTIONS[row.section], row))
+    out.social_models = _social_rows(socio)
     return out
 
 

@@ -24,7 +24,7 @@ import json
 import urllib.error
 import urllib.request
 from dataclasses import replace
-from typing import Any
+from typing import Any, Final
 
 from ..contract import WorldView
 from ..knowledge import Grounding
@@ -46,28 +46,42 @@ def escape(value: str) -> str:
     return value.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n")
 
 
+#: Short forms for node families that already have a TTL prefix, so a citable id matches what
+#: the graph file calls the node. Anything not listed derives its prefix from the IRI path,
+#: which is what keeps this from needing an edit every time a node type is added — the first
+#: version hardcoded four families and silently emitted full IRIs for everything else.
+_IRI_PREFIXES: Final[dict[str, str]] = {
+    "facility": "fac",
+    "source": "src",
+    "component": "comp",
+    "reactor": "rct",
+    "ability": "abil",
+    "chassis": "chas",
+    "social": "soc",
+}
+
+
 def fact_id(iri: str) -> str:
     """A citable id that is also a pointer into the datalinks graph.
 
-    This is the node's own IRI, compacted against the known prefixes — ``unit:formers``,
-    ``fac:recycling-tanks``, ``tech:centauri-ecology``. It is deliberately NOT derived from
-    the label, which was the first implementation and was wrong: a label-derived slug looks
-    like an identifier while pointing at nothing, so a cited fact could not be traced back to
-    the node that produced it, nor to the source that node came from.
+    The node's own IRI, compacted — ``unit:formers``, ``soc:politics-police-state``. Compact
+    because a citation is repeated in the prompt and then again in the answer, and a full IRI is
+    both token-expensive and easy for a model to mistype.
 
-    Every fact therefore carries at least one pointer into datalinks by construction, and a
-    citation can be resolved and re-verified rather than merely counted.
+    Deliberately NOT derived from the label, which was the first implementation and was wrong: a
+    label-derived slug looks like an identifier while pointing at nothing, so a cited fact could
+    not be traced back to the node that produced it, nor to the source that node came from.
+    Every fact therefore carries a pointer into datalinks by construction, and a citation can be
+    resolved and re-verified rather than merely counted.
     """
-    for prefix, base in (
-        ("unit", f"{NAMESPACE}unit/"),
-        ("fac", f"{NAMESPACE}facility/"),
-        ("tech", f"{NAMESPACE}tech/"),
-        ("src", f"{NAMESPACE}source/"),
-    ):
-        if iri.startswith(base):
-            return f"{prefix}:{iri[len(base) :]}"
-    # An IRI we do not have a prefix for is still a pointer; do not silently rewrite it.
-    return iri
+    if not iri.startswith(NAMESPACE):
+        # Not ours. Still a pointer, so do not silently rewrite it.
+        return iri
+    rest = iri[len(NAMESPACE) :]
+    family, _, name = rest.partition("/")
+    if not name:
+        return rest
+    return f"{_IRI_PREFIXES.get(family, family)}:{name}"
 
 
 def _disjunction(variable: str, values: list[str]) -> str:

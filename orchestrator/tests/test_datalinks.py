@@ -347,3 +347,68 @@ def test_disabled_parts_do_not_inflate_the_design_space() -> None:
     links = parse("#REACTORS\nFission Plant, Fission, 1, None,\nGhost Core, Ghost, 9, Disable,\n")
     assert len(links.reactors) == 2
     assert links.reactors["Ghost Core"].disabled
+
+
+def test_social_models_carry_their_effect_deltas() -> None:
+    """ "Democratic" tells a brain nothing; the deltas are the actual decision.
+
+    Magnitudes are written as repeated signs in the file, so ``-----POLICE`` is -5, not -1.
+    """
+    from neural_amplifier.datalinks.parse import parse
+
+    links = parse(
+        "#SOCIO\n"
+        "ECONOMY, EFFIC, SUPPORT, TALENT, MORALE, POLICE,"
+        " GROWTH, PLANET, PROBE, INDUSTRY, RESEARCH\n"
+        "ECONOMY, EFFIC, SUPPORT, TALENT, MORALE, POLICE,"
+        " GROWTH, PLANET, PROBE, INDUSTRY, RESEARCH\n"
+        "Politics, Economics, Values, Future Society\n"
+        "Frontier, None,\n"
+        "Police State, DocLoy, ++POLICE, ++SUPPORT, --EFFIC\n"
+        "Democratic, EthCalc, ++EFFIC, ++GROWTH, --SUPPORT\n"
+        "Fundamentalist, Brain, +MORALE, ++PROBE, --RESEARCH\n"
+        "Simple, None,\n"
+        "Free Market, IndEcon, ++ECONOMY, ---PLANET, -----POLICE\n"
+    )
+    by_name = {m.name: m for m in links.social_models}
+    assert dict(by_name["Police State"].effects) == {"police": 2, "support": 2, "efficiency": -2}
+    assert dict(by_name["Free Market"].effects) == {"economy": 2, "planet": -3, "police": -5}
+
+
+def test_social_model_category_comes_from_position() -> None:
+    """Nothing in a row names its category — only its group index does.
+
+    This is the one section that cannot be parsed row-at-a-time, and getting it wrong would
+    silently file Economics models under Politics.
+    """
+    from neural_amplifier.datalinks.parse import parse
+
+    links = parse(
+        "#SOCIO\n"
+        "ECONOMY, EFFIC, SUPPORT, TALENT, MORALE, POLICE,"
+        " GROWTH, PLANET, PROBE, INDUSTRY, RESEARCH\n"
+        "ECONOMY, EFFIC, SUPPORT, TALENT, MORALE, POLICE,"
+        " GROWTH, PLANET, PROBE, INDUSTRY, RESEARCH\n"
+        "Politics, Economics\n"
+        "Frontier, None,\n"
+        "Police State, DocLoy, ++POLICE\n"
+        "Democratic, EthCalc, ++EFFIC\n"
+        "Fundamentalist, Brain, +MORALE\n"
+        "Simple, None,\n"
+        "Free Market, IndEcon, ++ECONOMY\n"
+    )
+    cats = {m.name: m.category for m in links.social_models}
+    assert cats["Police State"] == "Politics"
+    assert cats["Free Market"] == "Economics"
+    assert links.social_models[0].is_default
+
+
+def test_unrecognised_social_effect_is_dropped_not_guessed() -> None:
+    """A mis-parsed effect would put a confident wrong number in front of the brain."""
+    from neural_amplifier.datalinks.parse import social_effect
+
+    assert social_effect("++POLICE") == ("police", 2)
+    assert social_effect("-----POLICE") == ("police", -5)
+    assert social_effect("++NOTATHING") is None
+    assert social_effect("POLICE") is None  # no sign, so no magnitude
+    assert social_effect("") is None
