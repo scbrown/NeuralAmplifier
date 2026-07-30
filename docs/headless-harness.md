@@ -209,6 +209,92 @@ also simply the better way to work: the decision log stays visible next to the g
 The gate is off unless configured. `llm_factions=0` (the default) behaves exactly like stock
 Thinker, so an unconfigured build produces no observations rather than an error.
 
+### 3.0.1 How menu and dialog interaction actually works
+
+Measured on the gaming host, 2026-07-29, mostly by getting it wrong several times. This
+section exists so the next attempt starts from evidence instead of repeating the same
+four dead ends.
+
+**There are three distinct UI layers, and they behave completely differently.**
+
+| Layer | Pumped by | Can we drive it? |
+|---|---|---|
+| **Startup screen** — START GAME / QUICK START / LOAD GAME | the normal window loop, so `ModWinProc` runs | **Yes.** An in-process `PostMessage` click opens LOAD GAME |
+| **Modal dialogs** — the file picker, and anything drawn over the game | its own nested message pump | **No.** See below |
+| **In-game menu bar** — the `Menu` class at `0x5FB100` | normal loop | Yes, but it is not involved in startup |
+
+Conflating these wasted most of an evening. The startup screen was never the problem.
+
+**External input does not reach the game at all.** `terranx.exe` reads the mouse through
+DirectInput while running inside a Wine virtual desktop, so the X coordinate space is not
+the one it believes in. Tried and verified failing: window-message injection via
+`xdotool --window`, and XTEST with warped absolute coordinates. Both report success and
+change nothing. In-process `PostMessage` works, so all input must originate inside the
+DLL.
+
+**Modal dialogs freeze *everything* of ours, including a worker thread.** This is the
+finding that matters, and it is not obvious. The command channel is polled from
+`ModWinProc`, which the engine stops calling during a modal's nested pump — expected. So
+input was moved onto a dedicated thread, on the reasoning that `PostMessage` is
+thread-safe and a thread is independent of the message pump. **It is not.** A heartbeat
+counter proved it: the thread ticked normally at the startup screen, then froze at the
+exact instant the picker opened, and never resumed, while the process stayed alive.
+
+Two hypotheses were tested and eliminated along the way, both plausible and both wrong:
+
+- *The picker changes the working directory, so relative channel paths break.* No — the
+  process CWD was unchanged throughout.
+- *Thinker replaces the CRT's file locking with one global mutex (`patch.cpp:14-20`,
+  `1148-1159`) and our DLL shares `msvcrt` with the game, so `fopen` from the thread
+  deadlocks against the picker's directory I/O.* Genuinely plausible, and rewriting the
+  thread to use `CreateFile`/`ReadFile`/`DeleteFile` instead of stdio changed nothing.
+
+So the conclusion is architectural rather than a bug to fix: **while a modal dialog is
+open, no code of ours runs.** Anything requiring interaction inside a modal dialog is
+unreachable, and the only viable strategy is to never open one.
+
+**`0x68F21C` is a state flag, not a trigger.** Thinker calls it `GameHalted`; PRACX names
+the same address `pfGameNotStarted` (`gui.cpp`). Clearing it *asserts* that a game is
+running — it does not start one. Every early attempt to enter a session by writing this
+address failed for that reason, and the failure looks like success in a log.
+
+**What loading a savegame actually requires.** The engine performs a complete
+load-and-resume on itself in the replay/undo path at `0x5ADCD0`:
+
+```
+mod_load_daemon(path, 0)   // flag 0, not 1
+call 0x5FD120              // cdecl, no arguments
+GameHalted = 0
+```
+
+Replicated exactly, that reaches live state — correct turn, correct faction, nothing
+modal. But the **display stays on the startup screen**, because that path runs while
+already in a game and so never needs window setup. Attempting to bolt on the init calls
+from `0x58F450`'s tail (`0x50F440`, `0x6169D0`, `0x616950` with `ecx=0x9B90D8`) changed
+nothing.
+
+**Dead ends, recorded so they are not retried:**
+
+| Attempt | Result |
+|---|---|
+| Write `GameHalted = 0` after loading | State loads, stays on menu |
+| `0x58F450(1, arg2)`, `arg2 ∈ {0, 1}` | Loads, but raises the engine's own picker over the session |
+| `0x58F450(1, arg2)`, `arg2 ∈ {2, −1}` | No modal, but ends back at the startup screen |
+| Init calls from `0x58F450`'s tail | No effect |
+| Worker thread for input during modals | Thread freezes with the modal |
+| Hooking `mod_blink_timer` for startup work | Only patched in when `smooth_scrolling=1`; absent by default, so it silently never runs |
+
+**Testing this without a human or a screenshot.** After an autoload attempt, write `shot`
+to the command channel and read `na-command-result`:
+
+- no result file → a modal is blocking, or nothing of ours is running
+- `turn > 0` → savegame state loaded
+- `halted == 0` → the session is asserted
+
+The one thing this cannot see is *live state behind a still-rendered menu*, which was the
+actual failure for several iterations — so confirming the display genuinely needs a
+capture (`just game-screen shot`) or a window-visibility flag we have not identified.
+
 ### 3.1 The real blocker is menus, not rendering
 
 Xvfb solves the display. It does not solve the fact that a fresh `terranx.exe` boots to a main
