@@ -22,6 +22,7 @@ Read the design before writing code — it is source-grounded and will save you 
 | A Thinker hook, or choosing which faction slot Claude drives | [docs/thinker-adapter-notes.md](docs/thinker-adapter-notes.md) — esp. §5.0 slot modes |
 | Running the game unattended, dialogs, or the SMAC game fixture | [docs/headless-harness.md](docs/headless-harness.md) |
 | Deciding what an AI player must cover, or adding a decision hook | [docs/game-surface.md](docs/game-surface.md) |
+| Moving a surface to the LLM tier, or wondering why a decision is poor | [docs/decision-inputs.md](docs/decision-inputs.md) — the per-surface input checklist |
 | Tests, CI lanes, or fixtures | [docs/building-and-testing.md](docs/building-and-testing.md) |
 | Logging, metrics, tracing, or measuring coverage | [docs/observability.md](docs/observability.md) |
 | A GLSMAC mod or the GSE builtin | [docs/glsmac-integration-notes.md](docs/glsmac-integration-notes.md) |
