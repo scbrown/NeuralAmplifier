@@ -209,7 +209,48 @@ also simply the better way to work: the decision log stays visible next to the g
 The gate is off unless configured. `llm_factions=0` (the default) behaves exactly like stock
 Thinker, so an unconfigured build produces no observations rather than an error.
 
-### 3.0.1 How menu and dialog interaction actually works
+### 3.0.1 Loading a savegame unattended — the working sequence
+
+**Solved 2026-07-29.** `-na-autoload <path>` reaches a playable session with no human
+input: correct turn, correct faction, map rendered, no dialog on screen.
+
+The insight that mattered is a negative one. Every attempt to *construct* the
+menu-to-session transition failed (§3.0.2 lists six). So don't construct it — let the
+engine perform it, then swap the state:
+
+```text
+1. click QUICK START      starts a game. Critically it opens NO file picker, and
+                          modal dialogs freeze every thread we have (§3.0.2), so
+                          "never open a modal" is a hard constraint.
+2. press Enter            confirms the PLANETFALL intro dialog. A keystroke rather
+                          than a click: no coordinates, so a resolution change
+                          cannot break it.
+3. load the savegame      the engine's own replay/undo sequence, which works here
+                          precisely because we are now already in a game with the
+                          display up.
+```
+
+Step 3 is the engine's own code, copied from the replay path at `0x5ADCD0`:
+
+```c
+mod_load_daemon(path, 0)   // flag 0, not 1
+call 0x5FD120              // cdecl, no arguments
+GameHalted = 0
+```
+
+Implemented as a state machine in the fork's `neural.cpp`. It waits on observable
+conditions where they exist — `GameHalted` clearing is the real signal a session is live —
+and gives up after 40s rather than looping. The startup wait is 12s because firing earlier
+produced a *flawless log and a main menu*: the engine's own startup drew over the session
+we had just entered, which is indistinguishable from having done nothing.
+
+QUICK START needs coordinates, so they are stored as **fractions of the client area** and
+resolved through `GetClientRect`, not as pixels.
+
+The wasted map QUICK START generates is discarded a second later. Irrelevant for a
+harness.
+
+### 3.0.2 How menu and dialog interaction actually works
 
 Measured on the gaming host, 2026-07-29, mostly by getting it wrong several times. This
 section exists so the next attempt starts from evidence instead of repeating the same
@@ -284,7 +325,37 @@ nothing.
 | Worker thread for input during modals | Thread freezes with the modal |
 | Hooking `mod_blink_timer` for startup work | Only patched in when `smooth_scrolling=1`; absent by default, so it silently never runs |
 
-**Testing this without a human or a screenshot.** After an autoload attempt, write `shot`
+### 3.0.3 The command channel — driving and inspecting the game in-process
+
+External control of this game does not work at all (§3.0.2), so the fork carries its own
+channel. Two files in the game directory, two owners, deliberately separate so there is no
+race over who consumes a command:
+
+| File | Owner | Commands |
+|---|---|---|
+| `na-command` | the window procedure | `shot [path]`, `load <path>`, `observe <base_id>`, `enter <a> <b>` |
+| `na-input` | a worker thread | `click x y`, `dclick x y`, `key <vk>`, `text <s>` |
+
+Results are written to `na-command-result` / `na-input-result` as one JSON object carrying
+`turn` and `halted`, so a caller can tell *not processed yet* from *failed*.
+
+Notes that matter:
+
+- **`shot` is an in-process `BitBlt` to a 24-bit BMP**, not an X screenshot. It needs no
+  compositor, no portal permission and no X server, so it works identically under Xvfb.
+  Convert to PNG outside the game.
+- **`observe <base_id>` is the test loop.** It emits one `base.production` observation by
+  calling only the serialiser — never `mod_base_build` — so it has no effect on production,
+  minerals or the governor. It exists because in-game input cannot be driven at all, so
+  ending a turn on demand is impossible and waiting for natural upkeep is not a usable loop.
+- **The worker thread must not use stdio.** Thinker replaces the CRT's file locking with a
+  single global mutex (`patch.cpp:14-20`, `1148-1159`) and the DLL shares `msvcrt` with the
+  game, so the thread uses `CreateFile`/`ReadFile`/`DeleteFile` instead. (This was *not*
+  what caused the modal freeze — see §3.0.2 — but it is still the correct thing to do from
+  a second thread.)
+- **The channel dies inside modal dialogs**, thread included. Design around it.
+
+**Testing without a human or a screenshot.** After an autoload attempt, write `shot`
 to the command channel and read `na-command-result`:
 
 - no result file → a modal is blocking, or nothing of ours is running

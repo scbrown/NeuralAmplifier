@@ -87,6 +87,54 @@ history is what makes a *stable* choice possible.
 partially-built item changes the arithmetic. Ship cost and accumulated minerals and let the brain
 do the division; do not pre-compute a number that will be subtly wrong.
 
+#### 2.1 What was actually missing — verified against live play, 2026-07-29
+
+This is step 5 of §6 done for real, and it is the most useful part of the entry. **Both
+action-space fields were wrong on the first implementation, and neither error was visible in code
+review.** Only a running game exposed them.
+
+**The availability predicate was not an availability predicate.** `can_build_unit` / `can_build`
+look like the right tests and are not: they check proto-slot ownership, the colony/nutrient rule,
+sea adjacency and the unit cap, and **never check whether the prerequisite tech is known**. The
+result was **125 options** offered for a turn-35 base, including *Alien Artifact*, which cannot be
+built at all. The engine's own tests are `mod_veh_avail` and `mod_facility_avail`; with those the
+same base offers **8**, matching the game's own build menu.
+
+The general lesson: *a predicate whose name matches your intent is not evidence it implements your
+intent.* Find what the engine's own UI calls, and call that.
+
+**Cost was in the wrong unit, silently.** The engine stores item cost in "rows"; minerals is
+`cost * cost_factor`, and that factor varies by faction and difficulty. Base state reports
+`minerals_accumulated` in raw minerals, so the world view was mixing two units in one object.
+Colony Pod `cost: 3` next to `minerals_accumulated: 4` reads as *nearly affordable* and is
+actually 33 against 4 — the brain would have done confident arithmetic on incompatible numbers
+and produced fluent nonsense. Now normalised through `mod_cost_factor` and tagged
+`cost_unit: "minerals"` so the unit is explicit rather than assumed.
+
+The general lesson: **state the unit in the payload.** Two numbers in different units are worse
+than one number missing, because nothing downstream can detect the problem.
+
+Verified output, Gaia's Landing, turn 35 — 8 actions, costs in minerals, effects from
+`alphax.txt`:
+
+```text
+unit:0      Colony Pod                 33
+unit:1      Formers                    22
+unit:2      Scout Patrol               11
+unit:64     Synthmetal Garrison        33
+facility:3  Recycling Tanks            44   Bonus Resources
+facility:6  Recreation Commons         44   Fewer Drones
+facility:70 The Human Genome Project  220   +1 Talent Each Base
+facility:72 The Weather Paradigm      220   Terraform Rate +50%
+```
+
+**How to verify a new surface cheaply.** In-game input cannot be driven (see
+[headless-harness.md](headless-harness.md) §3.0.2), so turns cannot be ended on demand. Instead
+the fork exposes `observe <base_id>` on the command channel: it emits one observation by calling
+only the serialiser, never the decision function, so it has no side effects on a live game. Any
+new surface should ship an equivalent side-effect-free probe — otherwise verifying it means
+playing until it happens to fire.
+
 ---
 
 ## 3. `tech.choose` — which technology to research
