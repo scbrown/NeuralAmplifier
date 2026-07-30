@@ -134,6 +134,27 @@ if [ -f "$INI" ] && ! grep -q '^llm_factions' "$INI"; then
     log "added llm_factions=254 to thinker.ini"
 fi
 
+# ── Resolution sanity ───────────────────────────────────────────────────────
+#
+# video_mode=0 is fullscreen at the native desktop resolution. On a 4K display
+# that renders SMAC's fixed-size UI at a quarter of its intended scale — legible
+# in a screenshot, unusable to play. The game is not wrong and neither is the
+# setting; they just combine badly, so say so rather than let it surprise someone.
+if [ -f "$INI" ] && grep -q '^video_mode=0' "$INI"; then
+    width=""
+    if command -v xrandr >/dev/null 2>&1 && [ -n "${DISPLAY:-}" ]; then
+        width="$(DISPLAY="$DISPLAY" xrandr 2>/dev/null \
+            | grep -oP '\bconnected primary \K[0-9]+' | head -1)"
+    fi
+    if [ -n "$width" ] && [ "$width" -gt 2560 ]; then
+        warn "video_mode=0 (fullscreen at native ${width}px) will render the UI very small."
+        warn "For a playable window, set in $INI:"
+        warn "    video_mode=2      # borderless windowed"
+        warn "    window_width=2560"
+        warn "    window_height=1440"
+    fi
+fi
+
 [ "$cmd" = "build" ] && { log "built and installed; not launching"; exit 0; }
 
 # ── Launch ──────────────────────────────────────────────────────────────────
