@@ -17,7 +17,7 @@ from __future__ import annotations
 from collections.abc import Iterable, Iterator
 from dataclasses import dataclass
 
-from .parse import Datalinks, Facility, Technology, Unit
+from .parse import Ability, Chassis, Component, Datalinks, Facility, Reactor, Technology, Unit
 
 NAMESPACE = "http://neuralamplifier.local/ontology/smac/"
 #: Per-class prefixes rather than one ``smac:``. Turtle's PN_LOCAL grammar does
@@ -29,6 +29,10 @@ PREFIXES = (
     f"@prefix tech: <{NAMESPACE}tech/> .",
     f"@prefix fac:  <{NAMESPACE}facility/> .",
     f"@prefix unit: <{NAMESPACE}unit/> .",
+    f"@prefix chas: <{NAMESPACE}chassis/> .",
+    f"@prefix rct:  <{NAMESPACE}reactor/> .",
+    f"@prefix abil: <{NAMESPACE}ability/> .",
+    f"@prefix comp: <{NAMESPACE}component/> .",
     f"@prefix src:  <{NAMESPACE}source/> .",
     "@prefix xsd:  <http://www.w3.org/2001/XMLSchema#> .",
     "@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .",
@@ -141,6 +145,67 @@ def facility(item: Facility, prov: Provenance) -> str:
     return _node(f"fac:{slug(item.name)}", cls, props, prov)
 
 
+def chassis(item: Chassis, prov: Provenance) -> str:
+    props: list[tuple[str, str]] = [
+        ("rdfs:label", literal(item.name)),
+        ("smac:speed", str(item.speed)),
+        ("smac:triad", literal(item.triad_name)),
+    ]
+    if item.cargo:
+        props.append(("smac:cargoCapacity", str(item.cargo)))
+    if item.disabled:
+        props.append(("smac:disabled", "true"))
+    props += [("smac:requiresTech", f"tech:{slug(a)}") for a in item.requires]
+    return _node(f"chas:{slug(item.name)}", "smac:Chassis", props, prov)
+
+
+def reactor(item: Reactor, prov: Provenance) -> str:
+    props: list[tuple[str, str]] = [
+        ("rdfs:label", literal(item.name)),
+        ("smac:abbrev", literal(item.abbrev)),
+        ("smac:reactorPower", str(item.power)),
+    ]
+    if item.disabled:
+        props.append(("smac:disabled", "true"))
+    props += [("smac:requiresTech", f"tech:{slug(a)}") for a in item.requires]
+    return _node(f"rct:{slug(item.name)}", "smac:Reactor", props, prov)
+
+
+def ability(item: Ability, prov: Provenance) -> str:
+    """An ability, carrying the effect text the file already provides.
+
+    ``smac:effectText`` rather than a bespoke predicate, so retrieval finds an ability's
+    meaning through the same path it finds a facility's — one query shape, not two.
+    """
+    props: list[tuple[str, str]] = [
+        ("rdfs:label", literal(item.name)),
+        ("smac:costModifier", str(item.cost_modifier)),
+    ]
+    if item.abbrev:
+        props.append(("smac:abbrev", literal(item.abbrev)))
+    if item.description:
+        props.append(("smac:effectText", literal(item.description)))
+    if item.disabled:
+        props.append(("smac:disabled", "true"))
+    props += [("smac:requiresTech", f"tech:{slug(a)}") for a in item.requires]
+    return _node(f"abil:{slug(item.name)}", "smac:Ability", props, prov)
+
+
+def component(item: Component, prov: Provenance) -> str:
+    """A weapon or armour piece — one of the parts a design is assembled from."""
+    cls = {"weapon": "smac:Weapon", "armor": "smac:Armor"}.get(item.kind, "smac:Component")
+    props: list[tuple[str, str]] = [
+        ("rdfs:label", literal(item.name)),
+        ("smac:abbrev", literal(item.abbrev)),
+        ("smac:rating", str(item.rating)),
+        ("smac:cost", str(item.cost)),
+    ]
+    if item.disabled:
+        props.append(("smac:disabled", "true"))
+    props += [("smac:requiresTech", f"tech:{slug(a)}") for a in item.requires]
+    return _node(f"comp:{slug(item.kind)}-{slug(item.name)}", cls, props, prov)
+
+
 def unit(item: Unit, prov: Provenance) -> str:
     """A predefined unit design.
 
@@ -155,9 +220,13 @@ def unit(item: Unit, prov: Provenance) -> str:
     props: list[tuple[str, str]] = [
         ("rdfs:label", literal(item.name)),
         ("smac:plan", str(item.plan)),
-        ("smac:chassis", literal(item.chassis)),
-        ("smac:weapon", literal(item.weapon)),
-        ("smac:armor", literal(item.armor)),
+        # Parts as IRIs, not strings. A predefined design is a *composition*, and the whole
+        # point of modelling the parts is that the graph can then express the design space
+        # rather than the 26 rows someone happened to write down. A literal "Infantry" is a
+        # dead end; chas:infantry is a hop to speed, triad and prerequisite tech.
+        ("smac:hasChassis", f"chas:{slug(item.chassis)}"),
+        ("smac:hasWeapon", f"comp:weapon-{slug(item.weapon)}"),
+        ("smac:hasArmor", f"comp:armor-{slug(item.armor)}"),
     ]
     if item.role:
         props.append(("smac:role", literal(item.role)))
@@ -177,6 +246,16 @@ def statements(links: Datalinks, prov: Provenance | None = None) -> Iterator[str
         yield technology(tech, provenance)
     for item in links.facilities.values():
         yield facility(item, provenance)
+    # Distinct names per loop: reusing one `part` binding across differently-typed loops
+    # type-checks as whichever type came first, which mypy correctly rejected.
+    for platform in links.chassis.values():
+        yield chassis(platform, provenance)
+    for power in links.reactors.values():
+        yield reactor(power, provenance)
+    for special in links.abilities.values():
+        yield ability(special, provenance)
+    for piece in links.components:
+        yield component(piece, provenance)
     for design in links.units.values():
         yield unit(design, provenance)
 

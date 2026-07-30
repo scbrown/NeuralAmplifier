@@ -21,10 +21,10 @@ Two parsing traps this handles, both load-bearing:
 
 from __future__ import annotations
 
-from collections.abc import Iterator
+from collections.abc import Iterable, Iterator
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Final
+from typing import Final, Protocol
 
 #: Sentinels in a prerequisite column. Neither is a technology.
 NO_PREREQ = "None"
@@ -188,6 +188,51 @@ PLAN_ROLES: Final[dict[int, str]] = {
 
 
 @dataclass(frozen=True)
+class Chassis:
+    """A movement platform. Determines triad, speed, and the unit's name series."""
+
+    name: str
+    speed: int
+    triad: int
+    cargo: int
+    requires: tuple[str, ...]
+    disabled: bool
+
+    @property
+    def triad_name(self) -> str:
+        return {0: "land", 1: "sea", 2: "air"}.get(self.triad, "")
+
+
+@dataclass(frozen=True)
+class Reactor:
+    """A power plant. Multiplies effective hit points and divides component cost."""
+
+    name: str
+    abbrev: str
+    power: int
+    requires: tuple[str, ...]
+    disabled: bool
+
+
+@dataclass(frozen=True)
+class Ability:
+    """A special ability a design may carry.
+
+    ``description`` is why this section is worth parsing at all: unlike chassis or reactors,
+    abilities ship human-readable effect text in the file ("Terraform rate doubled", "Sees 2
+    spaces"). That is grounding the game already wrote, and it was being discarded.
+    """
+
+    name: str
+    abbrev: str
+    #: Cost modifier, not an absolute cost — it adjusts the design's computed price.
+    cost_modifier: int
+    requires: tuple[str, ...]
+    disabled: bool
+    description: str
+
+
+@dataclass(frozen=True)
 class Unit:
     """A predefined unit design from ``#UNITS``.
 
@@ -213,6 +258,22 @@ class Unit:
         return PLAN_ROLES.get(self.plan, "")
 
 
+class _Disableable(Protocol):
+    # A read-only property, not a mutable attribute: the part classes are frozen
+    # dataclasses, and a settable-attribute protocol does not match them.
+    @property
+    def disabled(self) -> bool: ...
+
+
+def _enabled(items: Iterable[_Disableable]) -> int:
+    """Count items the rules actually permit.
+
+    A ``Disable`` prerequisite means the entry exists in the file but is switched off, and
+    counting it would inflate the design space with things nobody can build.
+    """
+    return sum(1 for i in items if not i.disabled)
+
+
 @dataclass
 class Datalinks:
     """Everything parsed, keyed for lookup."""
@@ -221,6 +282,29 @@ class Datalinks:
     facilities: dict[str, Facility] = field(default_factory=dict)
     components: list[Component] = field(default_factory=list)
     units: dict[str, Unit] = field(default_factory=dict)
+    chassis: dict[str, Chassis] = field(default_factory=dict)
+    reactors: dict[str, Reactor] = field(default_factory=dict)
+    abilities: dict[str, Ability] = field(default_factory=dict)
+
+    def design_space(self) -> int:
+        """How many distinct unit designs the rules permit.
+
+        The predefined ``#UNITS`` list is 26 rows, which badly understates what a player may
+        actually build: a design is a chassis, a weapon, an armour, a reactor, and up to two
+        abilities. Counting it matters because an ontology that models only the predefined
+        designs describes a rounding error of the real space.
+
+        Abilities are counted as "none, one, or any unordered pair", which is the engine's
+        limit. Per-ability legality flags narrow this further, so treat the result as an upper
+        bound on the enabled catalogue rather than a precise count.
+        """
+        chassis = _enabled(self.chassis.values())
+        weapons = _enabled(c for c in self.components if c.kind == "weapon")
+        armour = _enabled(c for c in self.components if c.kind == "armor")
+        reactors = _enabled(self.reactors.values())
+        n = _enabled(self.abilities.values())
+        ability_choices = 1 + n + (n * (n - 1)) // 2
+        return chassis * weapons * armour * reactors * ability_choices
 
     @property
     def secret_projects(self) -> list[Facility]:
@@ -287,6 +371,48 @@ def _component(kind: str, row: Row) -> Component:
     )
 
 
+def _chassis(row: Row) -> Chassis:
+    """``name,gender, plural,gender, defensive,gender, garrison,gender, speed, triad, ...``
+
+    Every display name is followed by a gender marker (``M1``/``M2``), which is why the numeric
+    columns do not start where a naive reading expects. Only the first name is kept: the others
+    are the game's name series for the same platform, not separate facts.
+    """
+    requires, disabled = prereqs(row.get(14))
+    return Chassis(
+        name=row.get(0),
+        speed=row.number(8),
+        triad=row.number(9),
+        cargo=row.number(11),
+        requires=requires,
+        disabled=disabled,
+    )
+
+
+def _reactor(row: Row) -> Reactor:
+    requires, disabled = prereqs(row.get(3))
+    return Reactor(
+        name=row.get(0),
+        abbrev=row.get(1),
+        power=row.number(2),
+        requires=requires,
+        disabled=disabled,
+    )
+
+
+def _ability(row: Row) -> Ability:
+    """``name, cost-modifier, preq, abbrev, flag-bits, description``."""
+    requires, disabled = prereqs(row.get(2))
+    return Ability(
+        name=row.get(0),
+        abbrev=row.get(3),
+        cost_modifier=row.number(1),
+        requires=requires,
+        disabled=disabled,
+        description=", ".join(f for f in row.fields[5:] if f),
+    )
+
+
 def _unit(row: Row) -> Unit:
     """``name, chassis, weapon, armor, plan, cost, carry, preq, icon, ability-bits``.
 
@@ -333,6 +459,15 @@ def parse(text: str) -> Datalinks:
         elif row.section == "FACILITIES":
             facility = _facility(row)
             out.facilities[facility.name] = facility
+        elif row.section == "CHASSIS":
+            ch = _chassis(row)
+            out.chassis[ch.name] = ch
+        elif row.section == "REACTORS":
+            re_ = _reactor(row)
+            out.reactors[re_.name] = re_
+        elif row.section == "ABILITIES":
+            ab = _ability(row)
+            out.abilities[ab.name] = ab
         elif row.section == "UNITS":
             # The section opens with a count line, which is not a unit.
             if len(row.fields) > 1:

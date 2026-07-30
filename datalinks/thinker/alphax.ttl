@@ -2,6 +2,10 @@
 @prefix tech: <http://neuralamplifier.local/ontology/smac/tech/> .
 @prefix fac:  <http://neuralamplifier.local/ontology/smac/facility/> .
 @prefix unit: <http://neuralamplifier.local/ontology/smac/unit/> .
+@prefix chas: <http://neuralamplifier.local/ontology/smac/chassis/> .
+@prefix rct:  <http://neuralamplifier.local/ontology/smac/reactor/> .
+@prefix abil: <http://neuralamplifier.local/ontology/smac/ability/> .
+@prefix comp: <http://neuralamplifier.local/ontology/smac/component/> .
 @prefix src:  <http://neuralamplifier.local/ontology/smac/source/> .
 @prefix xsd:  <http://www.w3.org/2001/XMLSchema#> .
 @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
@@ -2806,12 +2810,801 @@ fac:empty-secret-project-64 a smac:SecretProject ;
     smac:ruleTier "house-rule" ;
     smac:sourcedFrom src:alphax-txt .
 
+chas:infantry a smac:Chassis ;
+    rdfs:label "Infantry" ;
+    smac:speed 1 ;
+    smac:triad "land" ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+chas:speeder a smac:Chassis ;
+    rdfs:label "Speeder" ;
+    smac:speed 2 ;
+    smac:triad "land" ;
+    smac:requiresTech tech:mobile ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+chas:hovertank a smac:Chassis ;
+    rdfs:label "Hovertank" ;
+    smac:speed 3 ;
+    smac:triad "land" ;
+    smac:requiresTech tech:nanomin ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+chas:foil a smac:Chassis ;
+    rdfs:label "Foil" ;
+    smac:speed 4 ;
+    smac:triad "sea" ;
+    smac:requiresTech tech:docflex ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+chas:cruiser a smac:Chassis ;
+    rdfs:label "Cruiser" ;
+    smac:speed 6 ;
+    smac:triad "sea" ;
+    smac:requiresTech tech:docinit ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+chas:needlejet a smac:Chassis ;
+    rdfs:label "Needlejet" ;
+    smac:speed 8 ;
+    smac:triad "air" ;
+    smac:requiresTech tech:docair ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+chas:copter a smac:Chassis ;
+    rdfs:label "Copter" ;
+    smac:speed 6 ;
+    smac:triad "air" ;
+    smac:requiresTech tech:mindmac ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+chas:gravship a smac:Chassis ;
+    rdfs:label "Gravship" ;
+    smac:speed 8 ;
+    smac:triad "air" ;
+    smac:requiresTech tech:gravity ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+chas:missile a smac:Chassis ;
+    rdfs:label "Missile" ;
+    smac:speed 16 ;
+    smac:triad "air" ;
+    smac:cargoCapacity 1 ;
+    smac:requiresTech tech:orbital ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+rct:fission-plant a smac:Reactor ;
+    rdfs:label "Fission Plant" ;
+    smac:abbrev "Fission" ;
+    smac:reactorPower 1 ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+rct:fusion-reactor a smac:Reactor ;
+    rdfs:label "Fusion Reactor" ;
+    smac:abbrev "Fusion" ;
+    smac:reactorPower 2 ;
+    smac:requiresTech tech:fusion ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+rct:quantum-chamber a smac:Reactor ;
+    rdfs:label "Quantum Chamber" ;
+    smac:abbrev "Quantum" ;
+    smac:reactorPower 3 ;
+    smac:requiresTech tech:quantum ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+rct:singularity-engine a smac:Reactor ;
+    rdfs:label "Singularity Engine" ;
+    smac:abbrev "Singularity" ;
+    smac:reactorPower 4 ;
+    smac:requiresTech tech:singmec ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+abil:super-former a smac:Ability ;
+    rdfs:label "Super Former" ;
+    smac:costModifier 1 ;
+    smac:abbrev "Super" ;
+    smac:effectText "Terraform rate doubled" ;
+    smac:requiresTech tech:ecoeng2 ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+abil:deep-radar a smac:Ability ;
+    rdfs:label "Deep Radar" ;
+    smac:costModifier 0 ;
+    smac:effectText "Sees 2 spaces" ;
+    smac:requiresTech tech:milalg ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+abil:cloaking-device a smac:Ability ;
+    rdfs:label "Cloaking Device" ;
+    smac:costModifier 1 ;
+    smac:abbrev "Cloaked" ;
+    smac:effectText "Invisible; Ignores ZOCs" ;
+    smac:requiresTech tech:surface ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+abil:amphibious-pods a smac:Ability ;
+    rdfs:label "Amphibious Pods" ;
+    smac:costModifier 1 ;
+    smac:abbrev "Amphibious" ;
+    smac:effectText "Attacks from ship" ;
+    smac:requiresTech tech:docinit ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+abil:drop-pods a smac:Ability ;
+    rdfs:label "Drop Pods" ;
+    smac:costModifier 2 ;
+    smac:abbrev "Drop" ;
+    smac:effectText "Makes air drops" ;
+    smac:requiresTech tech:mindmac ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+abil:air-superiority a smac:Ability ;
+    rdfs:label "Air Superiority" ;
+    smac:costModifier 1 ;
+    smac:abbrev "SAM" ;
+    smac:effectText "Attacks air units" ;
+    smac:requiresTech tech:docair ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+abil:deep-pressure-hull a smac:Ability ;
+    rdfs:label "Deep Pressure Hull" ;
+    smac:costModifier 1 ;
+    smac:abbrev "Sub" ;
+    smac:effectText "Operates underwater" ;
+    smac:requiresTech tech:metal ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+abil:carrier-deck a smac:Ability ;
+    rdfs:label "Carrier Deck" ;
+    smac:costModifier 1 ;
+    smac:abbrev "Carrier" ;
+    smac:effectText "Mobile Airbase" ;
+    smac:requiresTech tech:metal ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+abil:aaa-tracking a smac:Ability ;
+    rdfs:label "AAA Tracking" ;
+    smac:costModifier 1 ;
+    smac:abbrev "AAA" ;
+    smac:effectText "x2 vs. air attacks" ;
+    smac:requiresTech tech:milalg ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+abil:comm-jammer a smac:Ability ;
+    rdfs:label "Comm Jammer" ;
+    smac:costModifier -1 ;
+    smac:abbrev "ECM" ;
+    smac:effectText "+50% vs. fast units" ;
+    smac:requiresTech tech:subat ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+abil:antigrav-struts a smac:Ability ;
+    rdfs:label "Antigrav Struts" ;
+    smac:costModifier 1 ;
+    smac:abbrev "Grav" ;
+    smac:effectText "+1 movement rate (or +Reactor*2 for Air)" ;
+    smac:requiresTech tech:gravity ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+abil:empath-song a smac:Ability ;
+    rdfs:label "Empath Song" ;
+    smac:costModifier 2 ;
+    smac:abbrev "Empath" ;
+    smac:effectText "+50% attack vs. Psi" ;
+    smac:requiresTech tech:centemp ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+abil:polymorphic-encryption a smac:Ability ;
+    rdfs:label "Polymorphic Encryption" ;
+    smac:costModifier 1 ;
+    smac:abbrev "Secure" ;
+    smac:effectText "x2 cost to subvert" ;
+    smac:requiresTech tech:algor ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+abil:fungicide-tanks a smac:Ability ;
+    rdfs:label "Fungicide Tanks" ;
+    smac:costModifier 1 ;
+    smac:abbrev "Fungicidal" ;
+    smac:effectText "Clear fungus at double speed" ;
+    smac:requiresTech tech:fossil ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+abil:high-morale a smac:Ability ;
+    rdfs:label "High Morale" ;
+    smac:costModifier 1 ;
+    smac:abbrev "Trained" ;
+    smac:effectText "Gains morale upgrade" ;
+    smac:requiresTech tech:integ ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+abil:heavy-artillery a smac:Ability ;
+    rdfs:label "Heavy Artillery" ;
+    smac:costModifier -4 ;
+    smac:abbrev "Artillery" ;
+    smac:effectText "Bombards" ;
+    smac:requiresTech tech:poly ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+abil:clean-reactor a smac:Ability ;
+    rdfs:label "Clean Reactor" ;
+    smac:costModifier 2 ;
+    smac:abbrev "Clean" ;
+    smac:effectText "Requires no support" ;
+    smac:requiresTech tech:bioeng ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+abil:blink-displacer a smac:Ability ;
+    rdfs:label "Blink Displacer" ;
+    smac:costModifier 1 ;
+    smac:abbrev "Blink" ;
+    smac:effectText "Bypass base defenses" ;
+    smac:requiresTech tech:matter ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+abil:hypnotic-trance a smac:Ability ;
+    rdfs:label "Hypnotic Trance" ;
+    smac:costModifier -1 ;
+    smac:abbrev "Trance" ;
+    smac:effectText "+50% defense vs. Psi" ;
+    smac:requiresTech tech:brain ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+abil:heavy-transport a smac:Ability ;
+    rdfs:label "Heavy Transport" ;
+    smac:costModifier 1 ;
+    smac:abbrev "Heavy" ;
+    smac:effectText "+50% transport capacity" ;
+    smac:disabled true ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+abil:nerve-gas-pods a smac:Ability ;
+    rdfs:label "Nerve Gas Pods" ;
+    smac:costModifier 1 ;
+    smac:abbrev "X" ;
+    smac:effectText "Can +50% offense (Atrocity)" ;
+    smac:requiresTech tech:chemist ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+abil:repair-bay a smac:Ability ;
+    rdfs:label "Repair Bay" ;
+    smac:costModifier 1 ;
+    smac:abbrev "Repair" ;
+    smac:effectText "Repairs ground units on board" ;
+    smac:requiresTech tech:metal ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+abil:non-lethal-methods a smac:Ability ;
+    rdfs:label "Non-Lethal Methods" ;
+    smac:costModifier 1 ;
+    smac:abbrev "Police" ;
+    smac:effectText "x2 Police powers" ;
+    smac:requiresTech tech:integ ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+abil:slow-unit a smac:Ability ;
+    rdfs:label "Slow Unit" ;
+    smac:costModifier 0 ;
+    smac:abbrev "Slow" ;
+    smac:effectText "-1 moves" ;
+    smac:disabled true ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+abil:soporific-gas-pods a smac:Ability ;
+    rdfs:label "Soporific Gas Pods" ;
+    smac:costModifier 1 ;
+    smac:abbrev "Gas" ;
+    smac:effectText "-2 Enemy morale vs. non-native" ;
+    smac:requiresTech tech:bioadap ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+abil:dissociative-wave a smac:Ability ;
+    rdfs:label "Dissociative Wave" ;
+    smac:costModifier 2 ;
+    smac:abbrev "Wave" ;
+    smac:effectText "Fizzles special abilities" ;
+    smac:requiresTech tech:centpsi ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+abil:marine-detachment a smac:Ability ;
+    rdfs:label "Marine Detachment" ;
+    smac:costModifier 1 ;
+    smac:abbrev "Marine" ;
+    smac:effectText "Capture enemy ships" ;
+    smac:requiresTech tech:adapdoc ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+abil:fuel-nanocells a smac:Ability ;
+    rdfs:label "Fuel Nanocells" ;
+    smac:costModifier 1 ;
+    smac:abbrev "Nanocell" ;
+    smac:effectText "Increased air range" ;
+    smac:requiresTech tech:matcomp ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+abil:algorithmic-enhancement a smac:Ability ;
+    rdfs:label "Algorithmic Enhancement" ;
+    smac:costModifier 1 ;
+    smac:abbrev "Enhanced" ;
+    smac:effectText "Halves probe team failure" ;
+    smac:requiresTech tech:nanomin ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+comp:weapon-hand-weapons a smac:Weapon ;
+    rdfs:label "Hand Weapons" ;
+    smac:abbrev "Gun" ;
+    smac:rating 1 ;
+    smac:cost 1 ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+comp:weapon-laser a smac:Weapon ;
+    rdfs:label "Laser" ;
+    smac:abbrev "Laser" ;
+    smac:rating 2 ;
+    smac:cost 2 ;
+    smac:requiresTech tech:physic ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+comp:weapon-particle-impactor a smac:Weapon ;
+    rdfs:label "Particle Impactor" ;
+    smac:abbrev "Impact" ;
+    smac:rating 4 ;
+    smac:cost 4 ;
+    smac:requiresTech tech:chaos ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+comp:weapon-gatling-laser a smac:Weapon ;
+    rdfs:label "Gatling Laser" ;
+    smac:abbrev "Gatling" ;
+    smac:rating 5 ;
+    smac:cost 5 ;
+    smac:requiresTech tech:super ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+comp:weapon-missile-launcher a smac:Weapon ;
+    rdfs:label "Missile Launcher" ;
+    smac:abbrev "Missile" ;
+    smac:rating 6 ;
+    smac:cost 6 ;
+    smac:requiresTech tech:fossil ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+comp:weapon-chaos-gun a smac:Weapon ;
+    rdfs:label "Chaos Gun" ;
+    smac:abbrev "Chaos" ;
+    smac:rating 8 ;
+    smac:cost 8 ;
+    smac:requiresTech tech:string ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+comp:weapon-fusion-laser a smac:Weapon ;
+    rdfs:label "Fusion Laser" ;
+    smac:abbrev "Fusion" ;
+    smac:rating 10 ;
+    smac:cost 10 ;
+    smac:requiresTech tech:suplube ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+comp:weapon-tachyon-bolt a smac:Weapon ;
+    rdfs:label "Tachyon Bolt" ;
+    smac:abbrev "Tachyon" ;
+    smac:rating 12 ;
+    smac:cost 12 ;
+    smac:requiresTech tech:unified ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+comp:weapon-plasma-shard a smac:Weapon ;
+    rdfs:label "Plasma Shard" ;
+    smac:abbrev "Shard" ;
+    smac:rating 14 ;
+    smac:cost 14 ;
+    smac:requiresTech tech:space ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+comp:weapon-quantum-laser a smac:Weapon ;
+    rdfs:label "Quantum Laser" ;
+    smac:abbrev "Quantum" ;
+    smac:rating 16 ;
+    smac:cost 16 ;
+    smac:requiresTech tech:quanmac ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+comp:weapon-graviton-gun a smac:Weapon ;
+    rdfs:label "Graviton Gun" ;
+    smac:abbrev "Graviton" ;
+    smac:rating 20 ;
+    smac:cost 20 ;
+    smac:requiresTech tech:agrav ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+comp:weapon-singularity-laser a smac:Weapon ;
+    rdfs:label "Singularity Laser" ;
+    smac:abbrev "Singularity" ;
+    smac:rating 24 ;
+    smac:cost 24 ;
+    smac:requiresTech tech:consing ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+comp:weapon-resonance-laser a smac:Weapon ;
+    rdfs:label "Resonance Laser" ;
+    smac:abbrev "R-Laser" ;
+    smac:rating 6 ;
+    smac:cost 8 ;
+    smac:requiresTech tech:bioadap ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+comp:weapon-resonance-bolt a smac:Weapon ;
+    rdfs:label "Resonance Bolt" ;
+    smac:abbrev "R-Bolt" ;
+    smac:rating 12 ;
+    smac:cost 16 ;
+    smac:requiresTech tech:sentres ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+comp:weapon-string-disruptor a smac:Weapon ;
+    rdfs:label "String Disruptor" ;
+    smac:abbrev "String" ;
+    smac:rating 30 ;
+    smac:cost 40 ;
+    smac:requiresTech tech:bfg9000 ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+comp:weapon-psi-attack a smac:Weapon ;
+    rdfs:label "Psi Attack" ;
+    smac:abbrev "Psi" ;
+    smac:rating -1 ;
+    smac:cost 10 ;
+    smac:requiresTech tech:centpsi ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+comp:weapon-planet-buster a smac:Weapon ;
+    rdfs:label "Planet Buster" ;
+    smac:abbrev "Planet Buster" ;
+    smac:rating 99 ;
+    smac:cost 32 ;
+    smac:requiresTech tech:orbital ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+comp:weapon-colony-module a smac:Weapon ;
+    rdfs:label "Colony Module" ;
+    smac:abbrev "Colony Pod" ;
+    smac:rating 0 ;
+    smac:cost 10 ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+comp:weapon-terraforming-unit a smac:Weapon ;
+    rdfs:label "Terraforming Unit" ;
+    smac:abbrev "Formers" ;
+    smac:rating 0 ;
+    smac:cost 6 ;
+    smac:requiresTech tech:ecology ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+comp:weapon-troop-transport a smac:Weapon ;
+    rdfs:label "Troop Transport" ;
+    smac:abbrev "Transport" ;
+    smac:rating 0 ;
+    smac:cost 4 ;
+    smac:requiresTech tech:docflex ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+comp:weapon-supply-transport a smac:Weapon ;
+    rdfs:label "Supply Transport" ;
+    smac:abbrev "Supply" ;
+    smac:rating 0 ;
+    smac:cost 12 ;
+    smac:requiresTech tech:indauto ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+comp:weapon-probe-team a smac:Weapon ;
+    rdfs:label "Probe Team" ;
+    smac:abbrev "Probe Team" ;
+    smac:rating 0 ;
+    smac:cost 4 ;
+    smac:requiresTech tech:planets ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+comp:weapon-alien-artifact a smac:Weapon ;
+    rdfs:label "Alien Artifact" ;
+    smac:abbrev "Artifact" ;
+    smac:rating 0 ;
+    smac:cost 36 ;
+    smac:disabled true ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+comp:weapon-conventional-payload a smac:Weapon ;
+    rdfs:label "Conventional Payload" ;
+    smac:abbrev "Conventional" ;
+    smac:rating 12 ;
+    smac:cost 12 ;
+    smac:requiresTech tech:orbital ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+comp:weapon-tectonic-payload a smac:Weapon ;
+    rdfs:label "Tectonic Payload" ;
+    smac:abbrev "Tectonic" ;
+    smac:rating 0 ;
+    smac:cost 24 ;
+    smac:requiresTech tech:newmiss ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+comp:weapon-fungal-payload a smac:Weapon ;
+    rdfs:label "Fungal Payload" ;
+    smac:abbrev "Fungal" ;
+    smac:rating 0 ;
+    smac:cost 24 ;
+    smac:requiresTech tech:newmiss ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+comp:armor-no-armor a smac:Armor ;
+    rdfs:label "No Armor" ;
+    smac:abbrev "Scout" ;
+    smac:rating 1 ;
+    smac:cost 1 ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+comp:armor-synthmetal-armor a smac:Armor ;
+    rdfs:label "Synthmetal Armor" ;
+    smac:abbrev "Synthmetal" ;
+    smac:rating 2 ;
+    smac:cost 2 ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+comp:armor-plasma-steel-armor a smac:Armor ;
+    rdfs:label "Plasma Steel Armor" ;
+    smac:abbrev "Plasma" ;
+    smac:rating 3 ;
+    smac:cost 3 ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+comp:armor-silksteel-armor a smac:Armor ;
+    rdfs:label "Silksteel Armor" ;
+    smac:abbrev "Silksteel" ;
+    smac:rating 4 ;
+    smac:cost 4 ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+comp:armor-photon-wall a smac:Armor ;
+    rdfs:label "Photon Wall" ;
+    smac:abbrev "Photon" ;
+    smac:rating 5 ;
+    smac:cost 5 ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+comp:armor-probability-sheath a smac:Armor ;
+    rdfs:label "Probability Sheath" ;
+    smac:abbrev "Probability" ;
+    smac:rating 6 ;
+    smac:cost 6 ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+comp:armor-neutronium-armor a smac:Armor ;
+    rdfs:label "Neutronium Armor" ;
+    smac:abbrev "Neutronium" ;
+    smac:rating 8 ;
+    smac:cost 8 ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+comp:armor-antimatter-plate a smac:Armor ;
+    rdfs:label "Antimatter Plate" ;
+    smac:abbrev "Antimatter" ;
+    smac:rating 10 ;
+    smac:cost 10 ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+comp:armor-stasis-generator a smac:Armor ;
+    rdfs:label "Stasis Generator" ;
+    smac:abbrev "Stasis" ;
+    smac:rating 12 ;
+    smac:cost 12 ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+comp:armor-psi-defense a smac:Armor ;
+    rdfs:label "Psi Defense" ;
+    smac:abbrev "Psi" ;
+    smac:rating -1 ;
+    smac:cost 6 ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+comp:armor-pulse-3-armor a smac:Armor ;
+    rdfs:label "Pulse 3 Armor" ;
+    smac:abbrev "3-Pulse" ;
+    smac:rating 3 ;
+    smac:cost 5 ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+comp:armor-resonance-3-armor a smac:Armor ;
+    rdfs:label "Resonance 3 Armor" ;
+    smac:abbrev "3-Res" ;
+    smac:rating 3 ;
+    smac:cost 5 ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+comp:armor-pulse-8-armor a smac:Armor ;
+    rdfs:label "Pulse 8 Armor" ;
+    smac:abbrev "8-Pulse" ;
+    smac:rating 8 ;
+    smac:cost 11 ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+comp:armor-resonance-8-armor a smac:Armor ;
+    rdfs:label "Resonance 8 Armor" ;
+    smac:abbrev "8-Res" ;
+    smac:rating 8 ;
+    smac:cost 11 ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
 unit:colony-pod a smac:Unit ;
     rdfs:label "Colony Pod" ;
     smac:plan 8 ;
-    smac:chassis "Infantry" ;
-    smac:weapon "Colony Pod" ;
-    smac:armor "Scout" ;
+    smac:hasChassis chas:infantry ;
+    smac:hasWeapon comp:weapon-colony-pod ;
+    smac:hasArmor comp:armor-scout ;
     smac:role "founds a new base elsewhere; does not grow the base that builds it" ;
     smac:appliesToEngine "thinker" ;
     smac:ruleTier "house-rule" ;
@@ -2820,9 +3613,9 @@ unit:colony-pod a smac:Unit ;
 unit:formers a smac:Unit ;
     rdfs:label "Formers" ;
     smac:plan 9 ;
-    smac:chassis "Infantry" ;
-    smac:weapon "Formers" ;
-    smac:armor "Scout" ;
+    smac:hasChassis chas:infantry ;
+    smac:hasWeapon comp:weapon-formers ;
+    smac:hasArmor comp:armor-scout ;
     smac:role "terraforms terrain to improve tile yields" ;
     smac:requiresTech tech:ecology ;
     smac:appliesToEngine "thinker" ;
@@ -2832,9 +3625,9 @@ unit:formers a smac:Unit ;
 unit:scout-patrol a smac:Unit ;
     rdfs:label "Scout Patrol" ;
     smac:plan 3 ;
-    smac:chassis "Infantry" ;
-    smac:weapon "Gun" ;
-    smac:armor "Scout" ;
+    smac:hasChassis chas:infantry ;
+    smac:hasWeapon comp:weapon-gun ;
+    smac:hasArmor comp:armor-scout ;
     smac:role "explores and scouts terrain" ;
     smac:appliesToEngine "thinker" ;
     smac:ruleTier "house-rule" ;
@@ -2843,9 +3636,9 @@ unit:scout-patrol a smac:Unit ;
 unit:transport-foil a smac:Unit ;
     rdfs:label "Transport Foil" ;
     smac:plan 7 ;
-    smac:chassis "Foil" ;
-    smac:weapon "Transport" ;
-    smac:armor "Scout" ;
+    smac:hasChassis chas:foil ;
+    smac:hasWeapon comp:weapon-transport ;
+    smac:hasArmor comp:armor-scout ;
     smac:role "carries land units across water" ;
     smac:requiresTech tech:docflex ;
     smac:appliesToEngine "thinker" ;
@@ -2855,9 +3648,9 @@ unit:transport-foil a smac:Unit ;
 unit:sea-formers a smac:Unit ;
     rdfs:label "Sea Formers" ;
     smac:plan 9 ;
-    smac:chassis "Foil" ;
-    smac:weapon "Formers" ;
-    smac:armor "Scout" ;
+    smac:hasChassis chas:foil ;
+    smac:hasWeapon comp:weapon-formers ;
+    smac:hasArmor comp:armor-scout ;
     smac:role "terraforms terrain to improve tile yields" ;
     smac:disabled true ;
     smac:appliesToEngine "thinker" ;
@@ -2867,9 +3660,9 @@ unit:sea-formers a smac:Unit ;
 unit:supply-crawler a smac:Unit ;
     rdfs:label "Supply Crawler" ;
     smac:plan 10 ;
-    smac:chassis "Infantry" ;
-    smac:weapon "Supply" ;
-    smac:armor "Scout" ;
+    smac:hasChassis chas:infantry ;
+    smac:hasWeapon comp:weapon-supply ;
+    smac:hasArmor comp:armor-scout ;
     smac:role "ferries minerals or nutrients to another base" ;
     smac:requiresTech tech:indauto ;
     smac:appliesToEngine "thinker" ;
@@ -2879,9 +3672,9 @@ unit:supply-crawler a smac:Unit ;
 unit:probe-team a smac:Unit ;
     rdfs:label "Probe Team" ;
     smac:plan 11 ;
-    smac:chassis "Speeder" ;
-    smac:weapon "Probe Team" ;
-    smac:armor "Scout" ;
+    smac:hasChassis chas:speeder ;
+    smac:hasWeapon comp:weapon-probe-team ;
+    smac:hasArmor comp:armor-scout ;
     smac:role "infiltrates and sabotages rival factions" ;
     smac:requiresTech tech:planets ;
     smac:appliesToEngine "thinker" ;
@@ -2891,9 +3684,9 @@ unit:probe-team a smac:Unit ;
 unit:alien-artifact a smac:Unit ;
     rdfs:label "Alien Artifact" ;
     smac:plan 12 ;
-    smac:chassis "Infantry" ;
-    smac:weapon "Artifact" ;
-    smac:armor "Scout" ;
+    smac:hasChassis chas:infantry ;
+    smac:hasWeapon comp:weapon-artifact ;
+    smac:hasArmor comp:armor-scout ;
     smac:role "an artifact, not a fighting unit" ;
     smac:cost 10 ;
     smac:disabled true ;
@@ -2904,9 +3697,9 @@ unit:alien-artifact a smac:Unit ;
 unit:mind-worms a smac:Unit ;
     rdfs:label "Mind Worms" ;
     smac:plan 1 ;
-    smac:chassis "Infantry" ;
-    smac:weapon "Psi" ;
-    smac:armor "Psi" ;
+    smac:hasChassis chas:infantry ;
+    smac:hasWeapon comp:weapon-psi ;
+    smac:hasArmor comp:armor-psi ;
     smac:role "general-purpose combat unit" ;
     smac:cost 5 ;
     smac:requiresTech tech:centemp ;
@@ -2917,9 +3710,9 @@ unit:mind-worms a smac:Unit ;
 unit:isle-of-the-deep a smac:Unit ;
     rdfs:label "Isle of the Deep" ;
     smac:plan 7 ;
-    smac:chassis "Foil" ;
-    smac:weapon "Psi" ;
-    smac:armor "Psi" ;
+    smac:hasChassis chas:foil ;
+    smac:hasWeapon comp:weapon-psi ;
+    smac:hasArmor comp:armor-psi ;
     smac:role "carries land units across water" ;
     smac:cost 8 ;
     smac:carryCapacity 4 ;
@@ -2931,9 +3724,9 @@ unit:isle-of-the-deep a smac:Unit ;
 unit:locusts-of-chiron a smac:Unit ;
     rdfs:label "Locusts of Chiron" ;
     smac:plan 4 ;
-    smac:chassis "Gravship" ;
-    smac:weapon "Psi" ;
-    smac:armor "Psi" ;
+    smac:hasChassis chas:gravship ;
+    smac:hasWeapon comp:weapon-psi ;
+    smac:hasArmor comp:armor-psi ;
     smac:role "intercepts enemy aircraft" ;
     smac:cost 10 ;
     smac:requiresTech tech:centgen ;
@@ -2944,9 +3737,9 @@ unit:locusts-of-chiron a smac:Unit ;
 unit:unity-rover a smac:Unit ;
     rdfs:label "Unity Rover" ;
     smac:plan 3 ;
-    smac:chassis "Speeder" ;
-    smac:weapon "Gun" ;
-    smac:armor "Scout" ;
+    smac:hasChassis chas:speeder ;
+    smac:hasWeapon comp:weapon-gun ;
+    smac:hasArmor comp:armor-scout ;
     smac:role "explores and scouts terrain" ;
     smac:disabled true ;
     smac:appliesToEngine "thinker" ;
@@ -2956,9 +3749,9 @@ unit:unity-rover a smac:Unit ;
 unit:unity-scout-chopper a smac:Unit ;
     rdfs:label "Unity Scout Chopper" ;
     smac:plan 4 ;
-    smac:chassis "Copter" ;
-    smac:weapon "Gun" ;
-    smac:armor "Scout" ;
+    smac:hasChassis chas:copter ;
+    smac:hasWeapon comp:weapon-gun ;
+    smac:hasArmor comp:armor-scout ;
     smac:role "intercepts enemy aircraft" ;
     smac:disabled true ;
     smac:appliesToEngine "thinker" ;
@@ -2968,9 +3761,9 @@ unit:unity-scout-chopper a smac:Unit ;
 unit:unity-foil a smac:Unit ;
     rdfs:label "Unity Foil" ;
     smac:plan 7 ;
-    smac:chassis "Foil" ;
-    smac:weapon "Transport" ;
-    smac:armor "Scout" ;
+    smac:hasChassis chas:foil ;
+    smac:hasWeapon comp:weapon-transport ;
+    smac:hasArmor comp:armor-scout ;
     smac:role "carries land units across water" ;
     smac:disabled true ;
     smac:appliesToEngine "thinker" ;
@@ -2980,9 +3773,9 @@ unit:unity-foil a smac:Unit ;
 unit:sealurk a smac:Unit ;
     rdfs:label "Sealurk" ;
     smac:plan 6 ;
-    smac:chassis "Foil" ;
-    smac:weapon "Psi" ;
-    smac:armor "Psi" ;
+    smac:hasChassis chas:foil ;
+    smac:hasWeapon comp:weapon-psi ;
+    smac:hasArmor comp:armor-psi ;
     smac:role "controls sea zones" ;
     smac:cost 6 ;
     smac:requiresTech tech:centpsi ;
@@ -2993,9 +3786,9 @@ unit:sealurk a smac:Unit ;
 unit:spore-launcher a smac:Unit ;
     rdfs:label "Spore Launcher" ;
     smac:plan 0 ;
-    smac:chassis "Infantry" ;
-    smac:weapon "Psi" ;
-    smac:armor "Psi" ;
+    smac:hasChassis chas:infantry ;
+    smac:hasWeapon comp:weapon-psi ;
+    smac:hasArmor comp:armor-psi ;
     smac:role "attacks enemy units and bases" ;
     smac:cost 5 ;
     smac:requiresTech tech:bioadap ;
@@ -3006,9 +3799,9 @@ unit:spore-launcher a smac:Unit ;
 unit:battle-ogre-mk1 a smac:Unit ;
     rdfs:label "Battle Ogre MK1" ;
     smac:plan 0 ;
-    smac:chassis "Infantry" ;
-    smac:weapon "R-Laser" ;
-    smac:armor "3-Res" ;
+    smac:hasChassis chas:infantry ;
+    smac:hasWeapon comp:weapon-r-laser ;
+    smac:hasArmor comp:armor-3-res ;
     smac:role "attacks enemy units and bases" ;
     smac:cost 10 ;
     smac:disabled true ;
@@ -3019,9 +3812,9 @@ unit:battle-ogre-mk1 a smac:Unit ;
 unit:battle-ogre-mk2 a smac:Unit ;
     rdfs:label "Battle Ogre MK2" ;
     smac:plan 0 ;
-    smac:chassis "Infantry" ;
-    smac:weapon "R-Bolt" ;
-    smac:armor "8-Res" ;
+    smac:hasChassis chas:infantry ;
+    smac:hasWeapon comp:weapon-r-bolt ;
+    smac:hasArmor comp:armor-8-res ;
     smac:role "attacks enemy units and bases" ;
     smac:cost 15 ;
     smac:disabled true ;
@@ -3032,9 +3825,9 @@ unit:battle-ogre-mk2 a smac:Unit ;
 unit:battle-ogre-mk3 a smac:Unit ;
     rdfs:label "Battle Ogre MK3" ;
     smac:plan 0 ;
-    smac:chassis "Speeder" ;
-    smac:weapon "String" ;
-    smac:armor "Stasis" ;
+    smac:hasChassis chas:speeder ;
+    smac:hasWeapon comp:weapon-string ;
+    smac:hasArmor comp:armor-stasis ;
     smac:role "attacks enemy units and bases" ;
     smac:cost 20 ;
     smac:disabled true ;
@@ -3045,9 +3838,9 @@ unit:battle-ogre-mk3 a smac:Unit ;
 unit:fungal-tower a smac:Unit ;
     rdfs:label "Fungal Tower" ;
     smac:plan 3 ;
-    smac:chassis "Infantry" ;
-    smac:weapon "Psi" ;
-    smac:armor "Psi" ;
+    smac:hasChassis chas:infantry ;
+    smac:hasWeapon comp:weapon-psi ;
+    smac:hasArmor comp:armor-psi ;
     smac:role "explores and scouts terrain" ;
     smac:disabled true ;
     smac:appliesToEngine "thinker" ;
@@ -3057,9 +3850,9 @@ unit:fungal-tower a smac:Unit ;
 unit:unity-mining-laser a smac:Unit ;
     rdfs:label "Unity Mining Laser" ;
     smac:plan 0 ;
-    smac:chassis "Infantry" ;
-    smac:weapon "Laser" ;
-    smac:armor "Scout" ;
+    smac:hasChassis chas:infantry ;
+    smac:hasWeapon comp:weapon-laser ;
+    smac:hasArmor comp:armor-scout ;
     smac:role "attacks enemy units and bases" ;
     smac:disabled true ;
     smac:appliesToEngine "thinker" ;
@@ -3069,9 +3862,9 @@ unit:unity-mining-laser a smac:Unit ;
 unit:sea-escape-pod a smac:Unit ;
     rdfs:label "Sea Escape Pod" ;
     smac:plan 8 ;
-    smac:chassis "Foil" ;
-    smac:weapon "Colony Pod" ;
-    smac:armor "Scout" ;
+    smac:hasChassis chas:foil ;
+    smac:hasWeapon comp:weapon-colony-pod ;
+    smac:hasArmor comp:armor-scout ;
     smac:role "founds a new base elsewhere; does not grow the base that builds it" ;
     smac:disabled true ;
     smac:appliesToEngine "thinker" ;
@@ -3081,9 +3874,9 @@ unit:sea-escape-pod a smac:Unit ;
 unit:unity-gunship a smac:Unit ;
     rdfs:label "Unity Gunship" ;
     smac:plan -1 ;
-    smac:chassis "Foil" ;
-    smac:weapon "Gun" ;
-    smac:armor "Scout" ;
+    smac:hasChassis chas:foil ;
+    smac:hasWeapon comp:weapon-gun ;
+    smac:hasArmor comp:armor-scout ;
     smac:disabled true ;
     smac:appliesToEngine "thinker" ;
     smac:ruleTier "house-rule" ;
@@ -3092,9 +3885,9 @@ unit:unity-gunship a smac:Unit ;
 unit:trance-infantry a smac:Unit ;
     rdfs:label "Trance Infantry" ;
     smac:plan 3 ;
-    smac:chassis "Infantry" ;
-    smac:weapon "Gun" ;
-    smac:armor "Scout" ;
+    smac:hasChassis chas:infantry ;
+    smac:hasWeapon comp:weapon-gun ;
+    smac:hasArmor comp:armor-scout ;
     smac:role "explores and scouts terrain" ;
     smac:requiresTech tech:brain ;
     smac:appliesToEngine "thinker" ;
@@ -3104,9 +3897,9 @@ unit:trance-infantry a smac:Unit ;
 unit:police-garrison a smac:Unit ;
     rdfs:label "Police Garrison" ;
     smac:plan 2 ;
-    smac:chassis "Infantry" ;
-    smac:weapon "Gun" ;
-    smac:armor "Scout" ;
+    smac:hasChassis chas:infantry ;
+    smac:hasWeapon comp:weapon-gun ;
+    smac:hasArmor comp:armor-scout ;
     smac:role "defends a base or position" ;
     smac:requiresTech tech:integ ;
     smac:appliesToEngine "thinker" ;
@@ -3116,9 +3909,9 @@ unit:police-garrison a smac:Unit ;
 unit:drop-colony-pod a smac:Unit ;
     rdfs:label "Drop Colony Pod" ;
     smac:plan 8 ;
-    smac:chassis "Infantry" ;
-    smac:weapon "Colony Pod" ;
-    smac:armor "Scout" ;
+    smac:hasChassis chas:infantry ;
+    smac:hasWeapon comp:weapon-colony-pod ;
+    smac:hasArmor comp:armor-scout ;
     smac:role "founds a new base elsewhere; does not grow the base that builds it" ;
     smac:requiresTech tech:mindmac ;
     smac:appliesToEngine "thinker" ;

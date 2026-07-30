@@ -278,3 +278,72 @@ def test_the_header_stops_at_the_first_section() -> None:
     )
     assert "Stock rules" in header(text)
     assert "Thinker Mod" not in header(text)
+
+
+def test_design_space_dwarfs_the_predefined_unit_list() -> None:
+    """The point of modelling components rather than the 26 predefined designs.
+
+    ``#UNITS`` lists 26 rows. What a player may actually build is a chassis, a weapon, an
+    armour, a reactor and up to two abilities — millions of combinations. An ontology that
+    models only the predefined designs describes a rounding error of the real space, so the
+    parts have to be first-class nodes.
+    """
+    from neural_amplifier.datalinks.parse import parse
+
+    text = """#CHASSIS
+Infantry,M1,  Squad,M1,      Sentinels,M2,   Garrison,M1,  1, 0, 0, 0, 1, 1, None,     Shock,M2,   Elite,M1,
+Foil,M1,      Skimship,M1,   Hoverboat,M1,   Coastal,M1,   4, 1, 0, 0, 2, 4, DocFlex,  Mega,M2,    Super,M1,
+
+#REACTORS
+Fission Plant, Fission, 1, None,
+Fusion Reactor, Fusion, 2, Fusion,
+
+#WEAPONS
+Hand Weapons, Gun, 1, 0, 1, None, 0, 0,
+Laser, Laser, 2, 0, 2, Physic, 0, 0,
+
+#DEFENSES
+No Armor, Scout, 1, 0, 1, None, 0, 0,
+Synthmetal, Synth, 2, 0, 2, IndBase, 0, 0,
+
+#ABILITIES
+Super Former, 1, EcoEng2, Super, 000000010111, Terraform rate doubled
+Deep Radar, 0, MilAlg, , 010000111111, Sees 2 spaces
+
+#UNITS
+2
+Colony Pod, Infantry, Colony Pod, Scout, 8, 0, 0, None, -1, 00
+Formers, Infantry, Formers, Scout, 9, 0, 0, Ecology, -1, 00
+"""
+    links = parse(text)
+    assert len(links.units) == 2
+    assert len(links.chassis) == 2
+    assert len(links.reactors) == 2
+    assert len(links.abilities) == 2
+
+    # 2 chassis x 2 weapons x 2 armour x 2 reactors x (none|one of 2|the pair) = 16 x 4
+    assert links.design_space() == 2 * 2 * 2 * 2 * (1 + 2 + 1)
+    assert links.design_space() > len(links.units)
+
+
+def test_abilities_keep_the_effect_text_the_file_supplies() -> None:
+    """Abilities are the one component class that ships human-readable meaning.
+
+    That text was being discarded, which mattered: it is grounding the game already wrote.
+    """
+    from neural_amplifier.datalinks.parse import parse
+
+    links = parse(
+        "#ABILITIES\nSuper Former, 1, EcoEng2, Super, 000000010111, Terraform rate doubled\n"
+    )
+    assert links.abilities["Super Former"].description == "Terraform rate doubled"
+    assert links.abilities["Super Former"].requires == ("EcoEng2",)
+
+
+def test_disabled_parts_do_not_inflate_the_design_space() -> None:
+    """A ``Disable`` prerequisite means present in the file but switched off."""
+    from neural_amplifier.datalinks.parse import parse
+
+    links = parse("#REACTORS\nFission Plant, Fission, 1, None,\nGhost Core, Ghost, 9, Disable,\n")
+    assert len(links.reactors) == 2
+    assert links.reactors["Ghost Core"].disabled
