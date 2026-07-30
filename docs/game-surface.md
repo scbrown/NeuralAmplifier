@@ -71,7 +71,7 @@ Per-unit orders fire separately as the engine iterates units (`mod_enemy_turn`
 
 ## 2.5 Instrumentation status — measured 2026-07-29
 
-**3 of 77 surfaces emit a decision record.** The registry is frozen at 77
+**4 of 77 surfaces emit a decision record.** The registry is frozen at 77
 (`orchestrator/surfaces.py`), partitioned by contract scope: `base` 25, `unit` 32, `turn` 20.
 
 | Surface | Scope | Seam | Action space | Probe |
@@ -79,6 +79,7 @@ Per-unit orders fire separately as the engine iterates units (`mod_enemy_turn`
 | `base.production` | base | `mod_base_build` | engine-authoritative, costed in minerals, roles + effects | `observe <base_id>` |
 | `faction.tech` | turn | `mod_tech_selection` | `tech_avail`, with the AI's own valuation weights | `observe-tech <faction_id>` |
 | `faction.se` | turn | `mod_social_ai` | legal (field, model) pairs with effect deltas | `observe-se <faction_id>` |
+| `base.hurry` | base | `mod_base_hurry` (wrapped) | hurry / don't, with credit cost and turns saved; unaffordable option omitted | `observe-hurry <base_id>` |
 
 All three are **observation only** — Thinker's choice still executes. `apply <base_id>
 <action_id>` closes the loop for `base.production`, validated against the engine's own
@@ -89,7 +90,26 @@ availability tests, so an illegal order is rejected rather than applied.
 turns is otherwise unverifiable without playing until it happens. A probe calls the serialiser
 and never the decision function.
 
-### What the 74 remaining actually divide into
+### Grounding utilisation scales with how narrow the action space is
+
+Measured with the same model (Haiku) on two surfaces, same graph, same retrieval path:
+
+| Surface | Options | Facts offered | Cited | Utilisation |
+|---|---|---|---|---|
+| `base.production` | 8 | 7 | 1 | **0.14** |
+| `base.hurry` | 2 | 1 | 1 | **1.00** |
+
+The wide surface paid for six facts nobody read. That is not a model failure — retrieval fetched
+one fact per offered action, and a decision only turns on a few of them. It is a retrieval-tuning
+signal, and it did not exist before citations were instrumented.
+
+Worth recording separately: on `base.hurry` the brain **disagreed with the deterministic tier**,
+which declined to hurry, and justified it numerically — "100 of 139 credits to save 15 turns,
+preserving 39". That is the value proposition working: not a better rule lookup, a judgement about
+whether the reserve is better spent than held. Whether it is *right* is a separate question that
+needs outcome measurement over a game, not a single decision.
+
+### What the 73 remaining actually divide into
 
 The gap is not uniform, and the interesting split is not by scope:
 
