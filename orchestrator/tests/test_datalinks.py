@@ -291,8 +291,8 @@ def test_design_space_dwarfs_the_predefined_unit_list() -> None:
     from neural_amplifier.datalinks.parse import parse
 
     text = """#CHASSIS
-Infantry,M1,  Squad,M1,      Sentinels,M2,   Garrison,M1,  1, 0, 0, 0, 1, 1, None,     Shock,M2,   Elite,M1,
-Foil,M1,      Skimship,M1,   Hoverboat,M1,   Coastal,M1,   4, 1, 0, 0, 2, 4, DocFlex,  Mega,M2,    Super,M1,
+Infantry,M1, Squad,M1, Sentinels,M2, Garrison,M1, 1, 0, 0, 0, 1, 1, None, Shock,M2, Elite,M1,
+Foil,M1, Skimship,M1, Hoverboat,M1, Coastal,M1, 4, 1, 0, 0, 2, 4, DocFlex, Mega,M2, Super,M1,
 
 #REACTORS
 Fission Plant, Fission, 1, None,
