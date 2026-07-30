@@ -24,6 +24,11 @@ class Validation:
     kept: list[Choice] = field(default_factory=list)
     unknown: list[str] = field(default_factory=list)
     duplicates: list[str] = field(default_factory=list)
+    #: Carried through untouched from the brain's answer. Validation rules on ACTIONS; a
+    #: citation is not an action and is not something this layer can judge. Dropping it here
+    #: made every downstream citation look absent, so the guard reported "grounding unread"
+    #: on decisions that had cited correctly.
+    cited: list[str] = field(default_factory=list)
 
     @property
     def adherent(self) -> bool:
@@ -31,7 +36,7 @@ class Validation:
         return not self.unknown
 
     def orders(self, notes: str | None = None, degraded: bool = False) -> Orders:
-        return Orders(choices=self.kept, notes=notes, degraded=degraded)
+        return Orders(choices=self.kept, notes=notes, degraded=degraded, cited=self.cited)
 
 
 def validate(orders: Orders, world_view: WorldView) -> Validation:
@@ -41,7 +46,7 @@ def validate(orders: Orders, world_view: WorldView) -> Validation:
     would silently change what the turn does.
     """
     legal = world_view.action_ids()
-    result = Validation()
+    result = Validation(cited=list(orders.cited))
     seen: set[str] = set()
 
     for choice in orders.choices:

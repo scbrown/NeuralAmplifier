@@ -88,3 +88,42 @@ def test_duplicate_citations_counted_once() -> None:
 def test_orders_carry_citations() -> None:
     assert Orders().cited == []
     assert Orders(cited=["f1", "f2"]).cited == ["f1", "f2"]
+
+
+def test_latency_stamping_does_not_drop_fields() -> None:
+    """Regression: ``_with_latency`` used to rebuild Grounding field by field.
+
+    It silently lost ``fact_ids`` the moment that field was added — retrieval returned ids,
+    the record showed none, and utilisation read as unmeasurable on every single decision.
+    The bug is invisible in isolation and only shows up end to end, which is exactly why it
+    survived. ``dataclasses.replace`` cannot forget a field.
+    """
+    from neural_amplifier.knowledge import _with_latency
+
+    g = Grounding(facts=("a", "b"), fact_ids=("f1", "f2"), degraded=False, reason="why")
+    stamped = _with_latency(g, 42)
+    assert stamped.latency_ms == 42
+    assert stamped.fact_ids == ("f1", "f2")
+    assert stamped.facts == ("a", "b")
+    assert stamped.reason == "why"
+
+
+def test_validation_preserves_citations() -> None:
+    """Regression: validation rebuilt Orders from three fields and dropped ``cited``.
+
+    Same shape of bug as above, and the visible symptom was the guard reporting "grounding
+    unread" on decisions that had cited correctly. Validation rules on ACTIONS; a citation is
+    not an action and is not this layer's to judge.
+    """
+    from neural_amplifier.contract import Action, Choice, WorldView
+    from neural_amplifier.validate import validate
+
+    wv = WorldView(
+        engine="thinker",
+        scope="base",
+        turn=1,
+        faction="Gaians",
+        action_space=[Action(id="unit:1", action="Formers")],
+    )
+    orders = Orders(choices=[Choice(action_id="unit:1")], cited=["unit:formers"])
+    assert validate(orders, wv).orders().cited == ["unit:formers"]

@@ -75,7 +75,22 @@ class Orchestrator:
         # Retrieval annotates the prompt; it cannot widen the action space.
         grounding = retrieve(self.retriever, world_view)
         if grounding.facts:
-            world_view = world_view.model_copy(update={"grounding": list(grounding.facts)})
+            # Facts are injected id-first: "unit:formers Formers; terraforms terrain".
+            #
+            # The id has to be visible for two reasons. The brain cannot cite what it cannot
+            # see, and Orders.cited is the only evidence that retrieval influenced the answer
+            # rather than merely preceded it. And the citation guard reads the offered set back
+            # out of this block, so injecting bare text made every citation look fabricated.
+            #
+            # A retriever that does not label its facts still works; the lines are then plain
+            # text and utilisation is unmeasurable rather than zero.
+            ids = grounding.fact_ids
+            lines = (
+                [f"{fid} {text}" for fid, text in zip(ids, grounding.facts, strict=True)]
+                if len(ids) == len(grounding.facts)
+                else list(grounding.facts)
+            )
+            world_view = world_view.model_copy(update={"grounding": lines})
 
         # Store *after* gating and grounding, so the stored bytes are exactly
         # what the brain saw and the record's hash addresses them. Storing the

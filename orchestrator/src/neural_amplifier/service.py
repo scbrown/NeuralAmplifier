@@ -48,6 +48,26 @@ def _build_retriever() -> object | None:
     return QuipuRetriever(url, engine=os.environ.get("NA_ENGINE", "thinker"))
 
 
+def _build_guard(retriever: object | None) -> object | None:
+    """The citation-integrity guard, on whenever grounding is.
+
+    Not separately opt-in: citation integrity is meaningless without retrieval, and
+    meaningful the moment there is any. It needs no external service and never denies, so the
+    cost of having it on is one set comparison per decision and the benefit is that a
+    fabricated or unread citation stops being invisible.
+
+    Set NA_HANK_GUARD=0 to disable. When Hank's own POST /guard lands it replaces this, and
+    the verdict shape is already what that surface returns.
+    """
+    if retriever is None:
+        return None
+    if os.environ.get("NA_HANK_GUARD", "1").lower() in {"0", "false", "no"}:
+        return None
+    from .hank import CitationGuard
+
+    return CitationGuard()
+
+
 def _otel_requested() -> bool:
     return os.environ.get("NA_OTEL", "").lower() in {"1", "true", "yes"}
 
@@ -74,12 +94,14 @@ def create_app(
     # Without this a run's log references inputs nobody kept, and replay
     # (observability step 7) has nothing to feed back.
     store_path = os.environ.get("NA_WORLD_VIEW_STORE")
+    resolved_retriever = _build_retriever()
     orchestrator = Orchestrator(
         brain=brain or build_brain(),
         log=resolved_log,
         sinks=resolved_sinks,
         store=WorldViewStore(store_path) if store_path else None,
-        retriever=_build_retriever(),  # type: ignore[arg-type]
+        retriever=resolved_retriever,  # type: ignore[arg-type]
+        guard=_build_guard(resolved_retriever),  # type: ignore[arg-type]
     )
     app.state.orchestrator = orchestrator
 

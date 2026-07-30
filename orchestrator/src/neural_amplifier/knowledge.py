@@ -28,7 +28,7 @@ from __future__ import annotations
 
 import time
 from collections.abc import Iterable
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Literal, Protocol, runtime_checkable
 
 from .contract import Orders, WorldView
@@ -227,20 +227,16 @@ def _elapsed(started: float) -> int:
 
 
 def _with_latency(grounding: Grounding, latency_ms: int) -> Grounding:
-    return Grounding(
-        facts=grounding.facts,
-        degraded=grounding.degraded,
-        reason=grounding.reason,
-        latency_ms=latency_ms,
-    )
+    """Stamp latency without rebuilding the object field by field.
+
+    This used to enumerate fields, and it silently dropped ``fact_ids`` the moment that field
+    was added — retrieval returned ids, the record showed none, and utilisation read as
+    unmeasurable on every decision. ``replace`` cannot forget a field, which is the whole
+    reason to use it here.
+    """
+    return replace(grounding, latency_ms=latency_ms)
 
 
 def _with_ruling_latency(ruling: Ruling, latency_ms: int) -> Ruling:
-    return Ruling(
-        verdict=ruling.verdict,
-        stripped=ruling.stripped,
-        advisories=ruling.advisories,
-        degraded=ruling.degraded,
-        reason=ruling.reason,
-        latency_ms=latency_ms,
-    )
+    """Same reasoning as ``_with_latency`` — never enumerate fields to copy."""
+    return replace(ruling, latency_ms=latency_ms)

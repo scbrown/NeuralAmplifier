@@ -60,6 +60,18 @@ class KnowledgeBlock(BaseModel):
     #: (``*_degraded``) or ran and found nothing (``quipu_hits == 0``).
     quipu_absent: bool = False
     hank_absent: bool = False
+
+    @property
+    def utilisation(self) -> float | None:
+        """Fraction of offered facts the model said it used.
+
+        ``None`` when nothing was offered or the retriever does not label its facts —
+        deliberately not 0.0, which reads as "the model ignored the grounding".
+        """
+        if not self.quipu_facts:
+            return None
+        return len(self.quipu_cited) / len(self.quipu_facts)
+
     hank_verdict: str | None = None
     stripped: list[str] = Field(default_factory=list)
     advisories: list[str] = Field(default_factory=list)
