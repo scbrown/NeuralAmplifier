@@ -118,6 +118,33 @@ omitted (the orchestrator treats missing sections as "not available on this engi
   so a run of pure fallbacks is distinguishable from a run of real decisions — see
   [observability.md](observability.md) §5.4.
 
+## Standing plan (orchestrator-injected)
+
+Four fields carry directives across the contract. Full design in
+[directives.md](directives.md).
+
+**On the world view**, all orchestrator-injected — an adapter never sets them:
+
+| Field | Meaning |
+|---|---|
+| `directives` | `DirectiveStatus[]` — the standing plan relevant to *this* decision, each with its current measured value, whether it is satisfied, and the `via`/`hop` path that reached it |
+| `tradeoffs` | `Tradeoff[]` — what each action would cost each directive: the metric delta, the projected value, whether it `would_violate`, and `setback_turns` where a rate is known |
+
+**Adapter-supplied**, and the reason any of the above can exist:
+
+| Field | Meaning |
+|---|---|
+| `metrics` | `{name: number}` — engine-neutral named measurements, using the vocabulary in `metrics.py`. This is the one place the orchestrator reads numbers by name, and it is safe precisely because the adapter did the engine-specific work of naming them (invariant 2) |
+| `Action.effects` | `{metric: delta}` — an action's immediate, known effect on named metrics. Without it a trade-off cannot be computed and a priority number has nothing to be weighed against |
+
+**On orders**, from the model:
+
+| Field | Meaning |
+|---|---|
+| `directives` | Directives this decision places on future ones. Empty for almost every decision |
+| `followed` | Ids of standing directives that changed this choice — the attention signal, filtered against what was actually offered, exactly as `cited` is |
+| `overrode` | Ids knowingly worked against. Recorded, not prevented: a plan that can never be broken is a plan that loses games |
+
 ## Telemetry fields
 
 Three optional, additive fields carry observability without changing the shape of the exchange

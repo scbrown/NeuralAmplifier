@@ -206,6 +206,20 @@ So the brain is backed by two sibling services (design:
   the per-faction, fog-limited board graph in memory and runs a strategic **policy guard** and
   **what-if** analysis on proposed orders before they apply.
 
+A third layer is the game's **own** standing intent, rather than knowledge about the game:
+
+- **[Directives](docs/directives.md) — measurable strategy that outlives one decision.** A
+  long-horizon choice (which tech path, which social model) issues a directive that later
+  decisions are shown, with its current value, its priority, and what each option would cost it.
+  A directive may only reference a metric the world view actually reports — so "keep energy
+  reserves above 300" is expressible and checkable, and "play aggressively" is refused. They are
+  *retrieved*, not broadcast: a walk out from the resource an action spends reaches the plan
+  saving it, the project it is saved for, and the strategy that project serves.
+
+  Measured on `base.hurry`: **0.60 → 1.00 stability**, with 9 runs in 10 naming the directive as
+  what decided them. That surface was never short of rules — it was short of knowing what else
+  81 energy credits were for.
+
 Two decisions this is built to sharpen:
 
 - **Unit design** — at the unit workshop, retrieve the doctrine's recommended **prototypes**

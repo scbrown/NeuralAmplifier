@@ -517,3 +517,37 @@ def test_hops_can_be_bounded() -> None:
 
     assert {h.directive.id: h.hop for h in one.hits if h.hop <= 1}.keys() >= {"a", "b"}
     assert [h.hop for h in two.hits if h.directive.id == "c"] == [2]
+
+
+def test_unrelated_directives_are_not_used_as_padding() -> None:
+    """Room in the block is not a reason to fill it.
+
+    Measured before this rule: with 16 directives in the plan, half of a four-slot block went to
+    entries whose own explanation read "not related to this decision". That costs prompt space on
+    every decision and teaches the model that most of the block is noise, which is the fastest way
+    to have it stop reading the two entries that matter.
+    """
+    relevant_one = saving(id="fund", metric="energy_reserves")
+    world = view(metrics={"energy_reserves": 82}, actions=_hurry_actions())
+
+    selection = relevant([relevant_one, *_many(10)], world, limit=8)
+
+    assert [h.directive.id for h in selection.hits] == ["fund"]
+    assert len(selection.dropped) == 10
+
+
+def test_a_measurable_directive_is_still_worth_a_slot() -> None:
+    """It can at least be checked here, which is how a slow drift gets noticed."""
+    drifting = saving(id="grow", metric="base_count", target=9.0)
+    world = view(metrics={"energy_reserves": 82, "base_count": 4}, actions=_hurry_actions())
+
+    assert "grow" in [h.directive.id for h in relevant([drifting], world).hits]
+
+
+def test_survival_intent_is_shown_even_though_unrelated() -> None:
+    critical = saving(
+        id="hold-hq", metric="drone_total", comparator="at_most", target=2.0, priority=10
+    )
+    world = view(metrics={"energy_reserves": 82}, actions=_hurry_actions())
+
+    assert "hold-hq" in [h.directive.id for h in relevant([critical, *_many(10)], world).hits]

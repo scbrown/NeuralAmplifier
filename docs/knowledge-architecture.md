@@ -354,6 +354,31 @@ before the instrumentation.
 > `IN` in this document as pseudocode for the disjunction — [quipu#51](https://github.com/scbrown/quipu/issues/51),
 > [quipu#52](https://github.com/scbrown/quipu/issues/52).
 
+## Directives — the game's own standing intent
+
+The three planes above hold knowledge *about* the game. They do not hold what **this** game has
+decided to do. A long-horizon surface can reason about a path over many turns, and until
+[directives.md](directives.md) that conclusion died with the response — the next
+`base.production` call started from nothing.
+
+Directives are deliberately **not** a fourth knowledge plane, and do not live in Quipu:
+
+- They are **per-game, mutable and short-lived**, where every plane above is either canonical
+  (datalinks), curated (doctrine) or accumulated across games (learned memory). A plan for turn
+  35 of this game is not knowledge; it is state.
+- They are **measured, not retrieved for truth**. A fact is offered because it is true; a
+  directive is offered because it bears on this decision and comes attached to what its metric
+  currently reads.
+
+They compose with the planes rather than competing. Doctrine says a rover rush suits a shared
+continent; a directive is this game committing to one, with a deadline and a number. And when a
+directive proves out or fails, that outcome is what the **learned-memory** plane should record —
+doctrine seeds, a directive commits, memory learns.
+
+Precedence is unchanged: the action space still binds and grounding still advises. A directive
+sits below both — it can only steer among already-legal, already-grounded options, and a
+decision may override it and say so.
+
 ## Honesty — what's blocked or net-new
 
 - Roles (c)/(d)/(e) are a **real expansion of Hank's mandate** (code-graph → general in-memory

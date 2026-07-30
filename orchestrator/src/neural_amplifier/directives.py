@@ -214,6 +214,7 @@ def relevant(
     frontier_entities = {e for e in entity_ids if e}
 
     hits: dict[str, Hit] = {}
+    unreached: list[str] = []
 
     def _record(directive: Directive, hop: int, via: str, score: int) -> bool:
         """First path wins. The shortest route is both the strongest and the clearest to read."""
@@ -245,8 +246,16 @@ def relevant(
                 entity = shared[0]
                 _record(directive, hop, f"{frontier[entity]} → {entity}", max(4 - hop, 1))
 
-    # Everything else is ranked but not excluded: a directive merely measurable here is worth
-    # showing if room remains, and survival-level intent is shown regardless of relevance.
+    # A directive the walk never reached is not shown, even when there is room. Padding the block
+    # out to the limit with plans this decision cannot affect costs prompt space on every
+    # decision and teaches the model that most of the block is noise — which is the fastest way
+    # to have it stop reading the two entries that matter. Measured: with 16 directives in the
+    # plan, half of a four-slot block went to entries whose own explanation read "not related to
+    # this decision".
+    #
+    # The two exceptions earn their place. Survival-level intent is shown because a plan nobody
+    # is told about cannot be followed. A directive whose metric this world view reports is shown
+    # because it can at least be checked here, which is how a slow drift gets noticed by someone.
     for directive in live:
         if directive.id in hits:
             continue
@@ -255,13 +264,16 @@ def relevant(
         elif directive.metric in reported:
             _record(directive, hops + 1, f"{directive.metric} is measurable here", 1)
         else:
-            _record(directive, hops + 1, "not related to this decision", 0)
+            unreached.append(directive.id)
 
     ranked = sorted(
         hits.values(),
         key=lambda h: (-h.score, h.hop, -h.directive.priority, -(h.directive.issued_turn or 0)),
     )
-    return Selection(hits=ranked[:limit], dropped=[h.directive.id for h in ranked[limit:]])
+    return Selection(
+        hits=ranked[:limit],
+        dropped=[h.directive.id for h in ranked[limit:]] + unreached,
+    )
 
 
 def evaluate(
