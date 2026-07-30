@@ -193,14 +193,37 @@ OBS="$PLAY_DIR/na-observations.jsonl"
 before=0
 [ -f "$OBS" ] && before="$(wc -l < "$OBS")"
 
+# ── Resume where you left off ───────────────────────────────────────────────
+#
+# The point of this is iteration: rebuilding the DLL means restarting the game, and
+# restarting should not cost you your position. Thinker autosaves every turn when
+# autosave_interval=1, so the newest saves/auto/Autosave_<year>.sav is the last
+# completed turn — that is what we hand to -na-autoload.
+#
+# Newest by mtime, not by the year in the filename: a restarted or reloaded game can
+# write a lower year than one already on disk, and mtime is what "where I left off"
+# actually means. NA_RESUME=0 opts out and boots to the menu.
+resume_args=()
+if [ "${NA_RESUME:-1}" != "0" ]; then
+    latest_save="$(ls -t "$PLAY_DIR"/saves/auto/*.sav 2>/dev/null | head -1 || true)"
+    if [ -n "$latest_save" ]; then
+        # The game resolves this relative to its own directory.
+        rel="saves/auto/$(basename "$latest_save")"
+        resume_args=(-na-autoload "$rel")
+        log "resuming $rel ($(date -r "$latest_save" +%H:%M:%S))"
+    else
+        warn "no autosave found — booting to the main menu"
+    fi
+fi
+
 cd "$PLAY_DIR"
 if [ "$cmd" = "headless" ]; then
     command -v xvfb-run >/dev/null || die "xvfb-run missing — run scripts/setup-host.sh"
     log "launching on a virtual display (Xvfb)"
-    xvfb-run -a --server-args="-screen 0 1280x1024x24" wine thinker.exe || true
+    xvfb-run -a --server-args="-screen 0 1280x1024x24" wine thinker.exe "${resume_args[@]}" || true
 else
     log "launching on display ${DISPLAY:-<none>}"
-    wine thinker.exe || true
+    wine thinker.exe "${resume_args[@]}" || true
 fi
 
 # ── Report ──────────────────────────────────────────────────────────────────
