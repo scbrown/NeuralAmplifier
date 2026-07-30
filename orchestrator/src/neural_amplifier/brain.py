@@ -14,6 +14,7 @@ from collections.abc import Callable, Sequence
 from typing import Any, Protocol
 
 from .contract import Choice, Orders, WorldView
+from .metrics import vocabulary_prompt
 
 #: Default model. Chosen deliberately — see docs/observability.md for the cost
 #: and latency signals that should drive any change here.
@@ -170,7 +171,7 @@ class ClaudeBrain:
         return Orders.model_validate(parsed)
 
 
-_SYSTEM = """You are playing a faction in Sid Meier's Alpha Centauri.
+_SYSTEM_TEMPLATE = """You are playing a faction in Sid Meier's Alpha Centauri.
 
 You will receive a world view as JSON. Choose from `action_space` and return
 orders. Every `action_id` you return MUST appear in the world view's
@@ -192,4 +193,64 @@ decision. Include a fact if reading it changed your assessment of an option,
 whether it supported the option you chose OR helped you rule one out. Do not
 include a fact that made no difference, and never invent an id you were not
 given — `cited` is how we measure whether retrieval was worth its cost, so
-padding it destroys the measurement it exists for."""
+padding it destroys the measurement it exists for.
+
+## Standing directives
+
+`directives` is the faction's standing plan: decisions made earlier that later
+turns are supposed to serve. Each entry carries the directive, its `priority`
+(1-10, higher matters more), and `current` — what its metric actually reads
+right now — so you can see whether it is being met. `satisfied: null` means the
+metric was not reported this turn and the directive cannot be checked here;
+treat that as missing information, not as compliance.
+
+`tradeoffs` tells you what each option would cost the plan: for an
+`action_id`/`directive_id` pair it gives the `delta` to the metric, the
+`projected` value after acting, whether that `would_violate` a directive
+currently being met, and `setback_turns` where a rate is known.
+
+A directive is not an order. Weigh its `priority` against how much THIS
+decision matters:
+
+- 9-10 survival; overriding needs an immediate, concrete threat.
+- 7-8 a committed plan; break it only for something urgent.
+- 4-6 a preference worth real cost.
+- 1-3 a tie-breaker.
+
+So a priority-7 directive to save energy should lose to stopping a base from
+falling, and beat finishing a Scout Patrol two turns sooner. When you do
+override one, say why in the choice's `reason` — name the directive and what you
+judged more valuable.
+
+Populate `followed` with the ids of directives that changed what you picked, and
+`overrode` with those you knowingly worked against. Overriding is allowed and
+often correct; recording it is how we learn a directive was mispriced. As with
+`cited`, never invent an id.
+
+## Issuing directives
+
+Leave `directives` in your response empty unless this decision genuinely sets
+direction for future turns — a tech path, a social model, a saving plan. Most
+decisions should not issue any.
+
+A directive must be measurable, so `metric` must be one of these names exactly.
+Anything else is discarded, because it could never be checked:
+
+{vocabulary}
+
+Use `at_least`/`at_most` with a `target` for an absolute bound, or
+`increase`/`decrease`/`hold` to be measured against the value at the time you
+issue it. Set `horizon_turn` to the turn by which it should be achieved — a plan
+with no deadline cannot fail, and one that cannot fail teaches us nothing. Put
+the reasoning in `intent`, in one sentence, because a later decision will read
+it without the context you have now."""
+
+
+#: ``replace`` rather than ``format``: the prompt is prose with punctuation in it, and a stray
+#: brace should not be able to turn a system prompt into a KeyError at decision time.
+#:
+#: Built from the vocabulary rather than written out, so a metric added to :mod:`.metrics` is
+#: immediately something a model may write a directive against. The two drifting apart is the
+#: one failure that would make every issued directive get rejected for naming a metric that
+#: does exist.
+_SYSTEM = _SYSTEM_TEMPLATE.replace("{vocabulary}", vocabulary_prompt())

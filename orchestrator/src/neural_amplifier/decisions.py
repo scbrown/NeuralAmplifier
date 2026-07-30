@@ -81,6 +81,51 @@ class KnowledgeBlock(BaseModel):
     hank_latency_ms: int = 0
 
 
+class PlanBlock(BaseModel):
+    """What the standing plan did to this decision.
+
+    The same measurement logic as :class:`KnowledgeBlock`, for the same reason. A directive
+    mechanism that is never read is worse than none — it costs prompt tokens on every decision
+    and buys the *appearance* of strategy. These fields are how that stops being an opinion:
+
+    * ``in_force`` against ``followed`` gives an attention rate, exactly as offered-vs-cited
+      gives grounding utilisation.
+    * ``overrode`` gives an override rate per directive. A priority-7 plan overridden on every
+      decision was mispriced; one never overridden may be costing more than it admits.
+    * ``unmeasurable`` counts directives whose metric this world view did not report. Non-zero
+      is an adapter gap, and it must not be confused with a directive that is merely unsatisfied.
+    """
+
+    model_config = ConfigDict(extra="allow")
+
+    in_force: list[str] = Field(default_factory=list)
+    followed: list[str] = Field(default_factory=list)
+    overrode: list[str] = Field(default_factory=list)
+    #: Directives in force whose metric was absent from this world view — cannot be checked
+    #: here, as distinct from checked and failing.
+    unmeasurable: list[str] = Field(default_factory=list)
+    #: Directives in force that this world view says are not satisfied.
+    unsatisfied: list[str] = Field(default_factory=list)
+    #: Ids this decision issued, and why any were refused.
+    issued: list[str] = Field(default_factory=list)
+    rejected: list[str] = Field(default_factory=list)
+    #: Actions that would have broken a currently satisfied directive, as ``action_id:id``.
+    conflicts: list[str] = Field(default_factory=list)
+    #: No directive store was configured, as distinct from one that is simply empty.
+    plan_absent: bool = False
+
+    @property
+    def attention(self) -> float | None:
+        """Fraction of in-force directives this decision said it acted on.
+
+        ``None`` when none were in force — deliberately not 0.0, which reads as "the model
+        ignored the plan".
+        """
+        if not self.in_force:
+            return None
+        return len(self.followed) / len(self.in_force)
+
+
 class DecisionRecord(BaseModel):
     """One decision. See ``docs/observability.md`` §2."""
 
@@ -126,6 +171,9 @@ class DecisionRecord(BaseModel):
 
     #: What Quipu and Hank contributed (``docs/observability.md`` §7).
     knowledge: KnowledgeBlock = Field(default_factory=KnowledgeBlock)
+
+    #: What the standing plan contributed (``directives.py``).
+    plan: PlanBlock = Field(default_factory=lambda: PlanBlock())
 
     model: str | None = None
     tokens: Tokens = Field(default_factory=Tokens)

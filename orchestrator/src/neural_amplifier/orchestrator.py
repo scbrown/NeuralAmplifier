@@ -16,8 +16,15 @@ from dataclasses import asdict, dataclass
 from typing import TYPE_CHECKING
 
 from .brain import Brain, BrainError
-from .contract import Orders, WorldView
-from .decisions import DecisionLog, DecisionRecord, KnowledgeBlock, world_view_hash
+from .contract import Directive, Orders, WorldView
+from .decisions import (
+    DecisionLog,
+    DecisionRecord,
+    KnowledgeBlock,
+    PlanBlock,
+    world_view_hash,
+)
+from .directives import DirectiveStore, accept, evaluate, tradeoffs
 from .fog import Redaction, redact
 from .knowledge import Guard, Knowledge, Retriever, apply, retrieve, rule, summarise
 from .telemetry import Emitter, Sink
@@ -47,6 +54,7 @@ class Orchestrator:
         store: WorldViewStore | None = None,
         retriever: Retriever | None = None,
         guard: Guard | None = None,
+        plan: DirectiveStore | None = None,
     ) -> None:
         self.brain = brain
         self.log = log
@@ -61,6 +69,9 @@ class Orchestrator:
         # decision, never a stalled turn (``knowledge.py``).
         self.retriever = retriever
         self.guard = guard
+        # The standing plan. Absent means every decision is made on its own, which is where
+        # this project started and is still a legitimate way to run.
+        self.plan = plan
 
     def decide(self, world_view: WorldView) -> Result:
         started = time.monotonic()
@@ -91,6 +102,11 @@ class Orchestrator:
                 else list(grounding.facts)
             )
             world_view = world_view.model_copy(update={"grounding": lines})
+
+        # Standing plan, measured against this turn, plus what each option would cost it.
+        # Injected before the store for the same reason grounding is: the stored bytes must be
+        # exactly what the brain saw, or a replay is not a replay.
+        world_view = self._with_directives(world_view)
 
         # Store *after* gating and grounding, so the stored bytes are exactly
         # what the brain saw and the record's hash addresses them. Storing the
@@ -132,6 +148,11 @@ class Orchestrator:
 
         final = self._fallback(world_view) if degrade_reason is not None else allowed
 
+        # Harvest any plan this decision issued, after the choice is settled. A rejected
+        # directive costs an advisory, never the decision it arrived with — the move may be
+        # right even where the plan attached to it was not expressible.
+        recorded, plan_rejections = self._issue(orders.directives, world_view, degrade_reason)
+
         record = self._record(
             world_view=world_view,
             orders=final,
@@ -140,12 +161,94 @@ class Orchestrator:
             unknown=len(checked.unknown),
             fog=fog,
             knowledge=summarise(grounding, ruling, self.guard is not None, cited=orders.cited),
+            plan=self._plan_block(
+                world_view,
+                orders,
+                issued=recorded,
+                rejected=plan_rejections,
+                configured=self.plan is not None,
+            ),
         )
         # One emit call. Every layer is a projection of *this* object — see the
         # module docstring in ``telemetry.py`` for why that is load-bearing.
         self.telemetry.emit(record)
 
         return Result(orders=final, record=record)
+
+    def _with_directives(self, world_view: WorldView) -> WorldView:
+        """Inject the standing plan, measured, plus what each option would cost it.
+
+        Both halves or neither. A directive without its current value asks the model to guess
+        whether it is relevant; a directive without the trade-off asks it to guess the cost of
+        ignoring one. The pair is what makes "this plan is priority 7" a comparison rather than
+        an assertion.
+
+        Wrapped so a broken plan file cannot cost a turn — same rule as retrieval (invariant 9).
+        """
+        if self.plan is None:
+            return world_view
+        try:
+            in_force = self.plan.in_force(world_view.turn)
+            if not in_force:
+                return world_view
+            return world_view.model_copy(
+                update={
+                    "directives": evaluate(in_force, world_view),
+                    "tradeoffs": tradeoffs(in_force, world_view) or None,
+                }
+            )
+        except Exception:  # noqa: BLE001 — a plan we cannot read is a less-informed decision
+            return world_view
+
+    def _issue(
+        self, issued: list[Directive], world_view: WorldView, degraded: str | None
+    ) -> tuple[list[str], list[str]]:
+        """Record directives this decision placed on later ones.
+
+        Returns the ids actually stored and one message per refusal. Nothing is accepted from a
+        degraded decision: the fallback did not reason about anything, so a plan attributed to it
+        would be a plan nobody made — and it would then steer every decision afterwards.
+        """
+        if self.plan is None or not issued:
+            return [], []
+        if degraded is not None:
+            return [], [f"{len(issued)} directive(s) discarded: the decision itself degraded"]
+        try:
+            accepted, rejected = accept(issued, world_view)
+            self.plan.add(accepted)
+            return [d.id for d in accepted], rejected
+        except Exception as exc:  # noqa: BLE001 — see _with_directives
+            return [], [f"could not record directives: {type(exc).__name__}: {exc}"]
+
+    @staticmethod
+    def _plan_block(
+        world_view: WorldView,
+        orders: Orders,
+        issued: list[str],
+        rejected: list[str],
+        configured: bool,
+    ) -> PlanBlock:
+        """The measurement half. See :class:`PlanBlock` for why each field is here."""
+        statuses = world_view.directives or []
+        in_force = [s.directive.id for s in statuses]
+        offered = set(in_force)
+        return PlanBlock(
+            in_force=in_force,
+            # Filtered against what was actually in force, exactly as ``cited`` is filtered
+            # against the offered facts: an id the model invented must not inflate attention.
+            followed=[d for d in dict.fromkeys(orders.followed) if d in offered],
+            overrode=[d for d in dict.fromkeys(orders.overrode) if d in offered],
+            unmeasurable=[s.directive.id for s in statuses if s.satisfied is None],
+            unsatisfied=[s.directive.id for s in statuses if s.satisfied is False],
+            issued=issued,
+            rejected=rejected,
+            conflicts=[
+                f"{t.action_id}:{t.directive_id}"
+                for t in (world_view.tradeoffs or [])
+                if t.would_violate
+            ],
+            plan_absent=not configured,
+        )
 
     def _fallback(self, world_view: WorldView) -> Orders:
         """The safe default: end the turn where possible, else do nothing.
@@ -172,6 +275,7 @@ class Orchestrator:
         unknown: int,
         fog: Redaction,
         knowledge: Knowledge,
+        plan: PlanBlock,
     ) -> DecisionRecord:
         fairness = world_view.fairness
         return DecisionRecord(
@@ -195,6 +299,7 @@ class Orchestrator:
             latency_ms=latency_ms,
             adherence_violations=unknown,
             knowledge=KnowledgeBlock(**asdict(knowledge)),
+            plan=plan,
             redacted_deltas=fog.removed,
             fog_enforced=fog.enforced,
         )

@@ -76,7 +76,12 @@ def to_world_view(record: dict[str, Any]) -> WorldView:
     which is what they exist for.
     """
     actions = [
-        Action(id=str(a["id"]), action=str(a.get("name", a["id"])), **_extras(a))
+        Action(
+            id=str(a["id"]),
+            action=str(a.get("name", a["id"])),
+            effects=_effects(a),
+            **_extras(a),
+        )
         for a in record.get("action_space", [])
     ]
     scope = "base" if "base_id" in record else "turn"
@@ -111,8 +116,59 @@ def to_world_view(record: dict[str, Any]) -> WorldView:
         surface_id=record.get("surface_id"),
         action_space=actions,
         subjects=subjects,
+        metrics=_metrics(record),
         economy=passthrough or None,
     )
+
+
+#: Adapter ``base_state`` keys mapped onto the metric vocabulary. Renames rather than passthrough
+#: because the vocabulary is engine-neutral and the adapter's key names are not: the adapter calls
+#: it ``turns_if_waiting``, which is this base's ``turns_to_completion``.
+_METRIC_KEYS = {
+    "energy_reserves": "energy_reserves",
+    "energy_income": "energy_income",
+    "mineral_surplus": "mineral_surplus",
+    "minerals_remaining": "minerals_remaining",
+    "turns_if_waiting": "turns_to_completion",
+    "pop_size": "pop_size",
+    "base_count": "base_count",
+    "labs_output": "labs_output",
+}
+
+
+def _metrics(record: dict[str, Any]) -> dict[str, float] | None:
+    """Named measurements a directive can be written against.
+
+    Pulled from wherever this adapter happens to put them, which is exactly the engine-shaped
+    knowledge that belongs in this bridge and not in the orchestrator. Absent keys are simply
+    absent: a metric we cannot report must read as unmeasurable downstream, never as zero.
+    """
+    out: dict[str, float] = {}
+    for source in (record, record.get("base_state") or {}, record.get("faction_state") or {}):
+        if not isinstance(source, dict):
+            continue
+        for key, name in _METRIC_KEYS.items():
+            value = source.get(key)
+            if isinstance(value, int | float) and not isinstance(value, bool):
+                out[name] = float(value)
+    return out or None
+
+
+def _effects(action: dict[str, Any]) -> dict[str, float] | None:
+    """An action's immediate, known effect on named metrics.
+
+    Derived from the adapter's ``cost``/``cost_unit`` pair, which is the only effect it currently
+    declares. Without this the orchestrator cannot compute what an option costs a standing
+    directive, and a priority number has nothing to be weighed against.
+    """
+    cost = action.get("cost")
+    unit = action.get("cost_unit")
+    if not isinstance(cost, int | float) or not cost:
+        return None
+    metric = {"credits": "energy_reserves", "minerals": "minerals_remaining"}.get(str(unit))
+    if metric is None:
+        return None
+    return {metric: -float(cost)}
 
 
 def _extras(action: dict[str, Any]) -> dict[str, Any]:
@@ -149,6 +205,11 @@ def main() -> int:
     ap.add_argument("-n", "--runs", type=int, default=10)
     ap.add_argument("--brain", default="scripted", choices=["scripted", "claude"])
     ap.add_argument("--quipu", help="quipu-server base URL, to include grounding")
+    ap.add_argument(
+        "--plan",
+        type=Path,
+        help="directive store JSON, to put a standing plan in front of the decision",
+    )
     args = ap.parse_args()
 
     record = load_observation(args.observations, args.surface)
@@ -165,10 +226,17 @@ def main() -> int:
     # which reads in a record as "Hank was down", not as "nobody asked it".
     from neural_amplifier.service import build_guard
 
+    plan = None
+    if args.plan:
+        from neural_amplifier.directives import DirectiveStore
+
+        plan = DirectiveStore(args.plan)
+
     orchestrator = Orchestrator(
         brain=build_brain(args.brain),
         retriever=retriever,
         guard=build_guard(retriever),  # type: ignore[arg-type]
+        plan=plan,
     )
 
     choices: list[str] = []
@@ -176,6 +244,10 @@ def main() -> int:
     degraded = 0
     reasons: set[str] = set()
     advisories: collections.Counter[str] = collections.Counter()
+    followed: collections.Counter[str] = collections.Counter()
+    overrode: collections.Counter[str] = collections.Counter()
+    unmeasurable: collections.Counter[str] = collections.Counter()
+    attentions: list[float] = []
     for _ in range(args.runs):
         result = orchestrator.decide(world_view)
         picked = [c.action_id for c in result.orders.choices]
@@ -196,6 +268,15 @@ def main() -> int:
         # Those want different fixes, and only the count tells them apart.
         for advisory in result.record.knowledge.advisories:
             advisories[advisory] += 1
+        block = result.record.plan
+        for did in block.followed:
+            followed[did] += 1
+        for did in block.overrode:
+            overrode[did] += 1
+        for did in block.unmeasurable:
+            unmeasurable[did] += 1
+        if block.attention is not None:
+            attentions.append(block.attention)
 
     counts = collections.Counter(choices)
     top, top_n = counts.most_common(1)[0]
@@ -225,6 +306,20 @@ def main() -> int:
         print(f"utilisation    mean {statistics.mean(utilisations):.2f}")
     else:
         print("utilisation    n/a  (no grounding — pass --quipu to measure it)")
+
+    if attentions:
+        print(f"plan attention mean {statistics.mean(attentions):.2f}")
+        # Followed and overrode side by side, because either number alone misleads. A directive
+        # that is always overridden was mispriced; one that is never mentioned is steering nothing.
+        for did in sorted(set(followed) | set(overrode) | set(unmeasurable)):
+            bits = []
+            if followed[did]:
+                bits.append(f"followed {followed[did]}/{args.runs}")
+            if overrode[did]:
+                bits.append(f"overrode {overrode[did]}/{args.runs}")
+            if unmeasurable[did]:
+                bits.append(f"UNMEASURABLE {unmeasurable[did]}/{args.runs}")
+            print(f"  {did:<28} {', '.join(bits)}")
 
     if advisories:
         print()
