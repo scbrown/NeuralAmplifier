@@ -143,7 +143,10 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("observations", type=Path)
     ap.add_argument("--surface", default="base.production")
-    ap.add_argument("-n", "--runs", type=int, default=5)
+    # Ten, not five. Five reported 1.00 for base.hurry and the very next sample disagreed; the
+    # same surface splits 6/4 over ten runs. Five samples cannot tell stable from lucky, and the
+    # whole point of this harness is to stop guessing about that.
+    ap.add_argument("-n", "--runs", type=int, default=10)
     ap.add_argument("--brain", default="scripted", choices=["scripted", "claude"])
     ap.add_argument("--quipu", help="quipu-server base URL, to include grounding")
     args = ap.parse_args()
