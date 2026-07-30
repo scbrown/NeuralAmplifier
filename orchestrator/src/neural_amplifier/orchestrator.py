@@ -124,7 +124,7 @@ class Orchestrator:
             latency_ms=int((time.monotonic() - started) * 1000),
             unknown=len(checked.unknown),
             fog=fog,
-            knowledge=summarise(grounding, ruling, self.guard is not None),
+            knowledge=summarise(grounding, ruling, self.guard is not None, cited=orders.cited),
         )
         # One emit call. Every layer is a projection of *this* object — see the
         # module docstring in ``telemetry.py`` for why that is load-bearing.

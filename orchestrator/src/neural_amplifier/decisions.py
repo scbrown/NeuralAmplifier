@@ -51,6 +51,15 @@ class KnowledgeBlock(BaseModel):
     model_config = ConfigDict(extra="allow")
 
     quipu_hits: int = 0
+    #: Ids of the facts offered to the model, and the subset it said it used. The gap
+    #: between them is the only evidence retrieval mattered — ``quipu_hits`` counts what
+    #: was offered, not what was read.
+    quipu_facts: list[str] = Field(default_factory=list)
+    quipu_cited: list[str] = Field(default_factory=list)
+    #: No retriever / no guard was configured, as distinct from one that ran and failed
+    #: (``*_degraded``) or ran and found nothing (``quipu_hits == 0``).
+    quipu_absent: bool = False
+    hank_absent: bool = False
     hank_verdict: str | None = None
     stripped: list[str] = Field(default_factory=list)
     advisories: list[str] = Field(default_factory=list)

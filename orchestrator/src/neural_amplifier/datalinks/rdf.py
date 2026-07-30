@@ -17,7 +17,7 @@ from __future__ import annotations
 from collections.abc import Iterable, Iterator
 from dataclasses import dataclass
 
-from .parse import Datalinks, Facility, Technology
+from .parse import Datalinks, Facility, Technology, Unit
 
 NAMESPACE = "http://neuralamplifier.local/ontology/smac/"
 #: Per-class prefixes rather than one ``smac:``. Turtle's PN_LOCAL grammar does
@@ -28,6 +28,7 @@ PREFIXES = (
     f"@prefix smac: <{NAMESPACE}> .",
     f"@prefix tech: <{NAMESPACE}tech/> .",
     f"@prefix fac:  <{NAMESPACE}facility/> .",
+    f"@prefix unit: <{NAMESPACE}unit/> .",
     f"@prefix src:  <{NAMESPACE}source/> .",
     "@prefix xsd:  <http://www.w3.org/2001/XMLSchema#> .",
     "@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .",
@@ -140,12 +141,44 @@ def facility(item: Facility, prov: Provenance) -> str:
     return _node(f"fac:{slug(item.name)}", cls, props, prov)
 
 
+def unit(item: Unit, prov: Provenance) -> str:
+    """A predefined unit design.
+
+    ``smac:role`` is the point of this node. It is derived from the engine's own plan
+    number, so "what is this unit for" becomes a retrievable fact with provenance rather
+    than prose embedded in an adapter. Measured need: a model given only a name and a cost
+    picked a Colony Pod believing it would grow the base that built it.
+
+    Cost is emitted only when non-zero. A 0 in the file means "derive it from the chassis,
+    weapon and armour", and publishing that as ``smac:cost 0`` would assert a free unit.
+    """
+    props: list[tuple[str, str]] = [
+        ("rdfs:label", literal(item.name)),
+        ("smac:plan", str(item.plan)),
+        ("smac:chassis", literal(item.chassis)),
+        ("smac:weapon", literal(item.weapon)),
+        ("smac:armor", literal(item.armor)),
+    ]
+    if item.role:
+        props.append(("smac:role", literal(item.role)))
+    if item.cost:
+        props.append(("smac:cost", str(item.cost)))
+    if item.carry:
+        props.append(("smac:carryCapacity", str(item.carry)))
+    if item.disabled:
+        props.append(("smac:disabled", "true"))
+    props += [("smac:requiresTech", f"tech:{slug(abbrev)}") for abbrev in item.requires]
+    return _node(f"unit:{slug(item.name)}", "smac:Unit", props, prov)
+
+
 def statements(links: Datalinks, prov: Provenance | None = None) -> Iterator[str]:
     provenance = prov or Provenance()
     for tech in links.technologies.values():
         yield technology(tech, provenance)
     for item in links.facilities.values():
         yield facility(item, provenance)
+    for design in links.units.values():
+        yield unit(design, provenance)
 
 
 def turtle(links: Datalinks, prov: Provenance | None = None) -> str:

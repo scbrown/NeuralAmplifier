@@ -144,3 +144,9 @@ class Orders(_Model):
     choices: list[Choice] = Field(default_factory=list)
     notes: str | None = None
     degraded: bool = False
+    #: Ids of the grounding facts the brain relied on. The only signal that retrieval
+    #: influenced the answer rather than merely preceding it — a decision made with
+    #: twelve facts all ignored is otherwise indistinguishable from one they drove.
+    #: Ids not present in the offered set are discarded on the way to the record, so a
+    #: hallucinated citation cannot inflate the measured utilisation.
+    cited: list[str] = Field(default_factory=list)

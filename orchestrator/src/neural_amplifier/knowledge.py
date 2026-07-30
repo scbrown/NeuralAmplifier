@@ -27,6 +27,7 @@ validation, and nothing here can widen the action space.
 from __future__ import annotations
 
 import time
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 from typing import Literal, Protocol, runtime_checkable
 
@@ -42,6 +43,11 @@ class Grounding:
     #: Ranked facts to put in front of the model. Deliberately opaque strings —
     #: the orchestrator never learns the graph, only that it was consulted.
     facts: tuple[str, ...] = ()
+    #: Stable, short id per fact, positionally aligned with ``facts``. These are what
+    #: the brain cites and what lands on the record, so a run can be audited without
+    #: storing the fact text twice. Empty means the retriever does not label its
+    #: facts, and utilisation is then unmeasurable rather than zero.
+    fact_ids: tuple[str, ...] = ()
     #: Retrieval couldn't run. Not the same as "found nothing": one is a less
     #: informed decision, the other is a genuinely empty result.
     degraded: bool = False
@@ -72,13 +78,44 @@ class Knowledge:
     """The provenance block that lands on the decision record."""
 
     quipu_hits: int = 0
+    #: Ids of the facts put in front of the model.
+    quipu_facts: list[str] = field(default_factory=list)
+    #: Ids the model said it relied on. The gap between this and ``quipu_facts`` is the
+    #: only evidence that retrieval *mattered*: a run where twelve facts were retrieved
+    #: and all ignored is otherwise indistinguishable from one where they drove the
+    #: decision, because ``quipu_hits`` counts what was offered, not what was used.
+    quipu_cited: list[str] = field(default_factory=list)
+    #: True when no retriever was configured at all. Distinct from ``quipu_degraded``
+    #: (one was configured and failed) and from ``hits == 0`` (it ran and found
+    #: nothing). Collapsing the three is how a knowledge layer silently stops being
+    #: wired and nobody notices for weeks.
+    quipu_absent: bool = False
     hank_verdict: Verdict | None = None
     stripped: list[str] = field(default_factory=list)
     advisories: list[str] = field(default_factory=list)
     quipu_degraded: bool = False
     hank_degraded: bool = False
+    #: True when no guard was configured. A guard that is down allows, and a guard that
+    #: was never wired also allows — but only one of those is a deployment problem, and
+    #: the record has to say which.
+    hank_absent: bool = False
     quipu_latency_ms: int = 0
     hank_latency_ms: int = 0
+
+    @property
+    def cited(self) -> int:
+        return len(self.quipu_cited)
+
+    @property
+    def utilisation(self) -> float | None:
+        """Fraction of offered facts the model said it used.
+
+        ``None`` when nothing was offered or the retriever does not label facts —
+        deliberately not 0.0, which would read as "the model ignored the grounding".
+        """
+        if not self.quipu_facts:
+            return None
+        return len(self.quipu_cited) / len(self.quipu_facts)
 
     @property
     def consulted(self) -> bool:
@@ -107,7 +144,8 @@ class Guard(Protocol):
 def retrieve(retriever: Retriever | None, world_view: WorldView) -> Grounding:
     """Run retrieval, absorbing any failure into a degraded result."""
     if retriever is None:
-        return Grounding()
+        # Absent, not empty. summarise() turns this into quipu_absent.
+        return Grounding(reason="no retriever configured")
     started = time.monotonic()
     try:
         result = retriever.retrieve(world_view)
@@ -152,15 +190,33 @@ def apply(orders: Orders, ruling: Ruling) -> Orders:
     return orders.model_copy(update={"choices": kept})
 
 
-def summarise(grounding: Grounding, ruling: Ruling, guarded: bool) -> Knowledge:
-    """Fold both results into the record's provenance block."""
+def summarise(
+    grounding: Grounding,
+    ruling: Ruling,
+    guarded: bool,
+    cited: Iterable[str] = (),
+) -> Knowledge:
+    """Fold both results into the record's provenance block.
+
+    ``cited`` is the set of fact ids the brain said it relied on. Only ids that were
+    actually offered are recorded: a model naming a fact it was never given is a
+    hallucination, and laundering it into the provenance block would make the record
+    lie about what informed the decision.
+    """
+    offered = list(grounding.fact_ids)
+    offered_set = set(offered)
+    used = [c for c in dict.fromkeys(cited) if c in offered_set]
     return Knowledge(
         quipu_hits=grounding.hits,
+        quipu_facts=offered,
+        quipu_cited=used,
+        quipu_absent=grounding.reason == "no retriever configured",
         hank_verdict=ruling.verdict if guarded else None,
         stripped=list(ruling.stripped),
         advisories=list(ruling.advisories),
         quipu_degraded=grounding.degraded,
         hank_degraded=ruling.degraded,
+        hank_absent=not guarded,
         quipu_latency_ms=grounding.latency_ms,
         hank_latency_ms=ruling.latency_ms,
     )

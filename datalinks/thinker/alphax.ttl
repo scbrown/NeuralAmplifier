@@ -1,6 +1,7 @@
 @prefix smac: <http://neuralamplifier.local/ontology/smac/> .
 @prefix tech: <http://neuralamplifier.local/ontology/smac/tech/> .
 @prefix fac:  <http://neuralamplifier.local/ontology/smac/facility/> .
+@prefix unit: <http://neuralamplifier.local/ontology/smac/unit/> .
 @prefix src:  <http://neuralamplifier.local/ontology/smac/source/> .
 @prefix xsd:  <http://www.w3.org/2001/XMLSchema#> .
 @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
@@ -2801,6 +2802,325 @@ fac:empty-secret-project-64 a smac:SecretProject ;
     smac:aiPriorityTech 2 ;
     smac:aiPriorityWealth 2 ;
     smac:aiPriorityGrowth 2 ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+unit:colony-pod a smac:Unit ;
+    rdfs:label "Colony Pod" ;
+    smac:plan 8 ;
+    smac:chassis "Infantry" ;
+    smac:weapon "Colony Pod" ;
+    smac:armor "Scout" ;
+    smac:role "founds a new base elsewhere; does not grow the base that builds it" ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+unit:formers a smac:Unit ;
+    rdfs:label "Formers" ;
+    smac:plan 9 ;
+    smac:chassis "Infantry" ;
+    smac:weapon "Formers" ;
+    smac:armor "Scout" ;
+    smac:role "terraforms terrain to improve tile yields" ;
+    smac:requiresTech tech:ecology ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+unit:scout-patrol a smac:Unit ;
+    rdfs:label "Scout Patrol" ;
+    smac:plan 3 ;
+    smac:chassis "Infantry" ;
+    smac:weapon "Gun" ;
+    smac:armor "Scout" ;
+    smac:role "explores and scouts terrain" ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+unit:transport-foil a smac:Unit ;
+    rdfs:label "Transport Foil" ;
+    smac:plan 7 ;
+    smac:chassis "Foil" ;
+    smac:weapon "Transport" ;
+    smac:armor "Scout" ;
+    smac:role "carries land units across water" ;
+    smac:requiresTech tech:docflex ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+unit:sea-formers a smac:Unit ;
+    rdfs:label "Sea Formers" ;
+    smac:plan 9 ;
+    smac:chassis "Foil" ;
+    smac:weapon "Formers" ;
+    smac:armor "Scout" ;
+    smac:role "terraforms terrain to improve tile yields" ;
+    smac:disabled true ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+unit:supply-crawler a smac:Unit ;
+    rdfs:label "Supply Crawler" ;
+    smac:plan 10 ;
+    smac:chassis "Infantry" ;
+    smac:weapon "Supply" ;
+    smac:armor "Scout" ;
+    smac:role "ferries minerals or nutrients to another base" ;
+    smac:requiresTech tech:indauto ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+unit:probe-team a smac:Unit ;
+    rdfs:label "Probe Team" ;
+    smac:plan 11 ;
+    smac:chassis "Speeder" ;
+    smac:weapon "Probe Team" ;
+    smac:armor "Scout" ;
+    smac:role "infiltrates and sabotages rival factions" ;
+    smac:requiresTech tech:planets ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+unit:alien-artifact a smac:Unit ;
+    rdfs:label "Alien Artifact" ;
+    smac:plan 12 ;
+    smac:chassis "Infantry" ;
+    smac:weapon "Artifact" ;
+    smac:armor "Scout" ;
+    smac:role "an artifact, not a fighting unit" ;
+    smac:cost 10 ;
+    smac:disabled true ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+unit:mind-worms a smac:Unit ;
+    rdfs:label "Mind Worms" ;
+    smac:plan 1 ;
+    smac:chassis "Infantry" ;
+    smac:weapon "Psi" ;
+    smac:armor "Psi" ;
+    smac:role "general-purpose combat unit" ;
+    smac:cost 5 ;
+    smac:requiresTech tech:centemp ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+unit:isle-of-the-deep a smac:Unit ;
+    rdfs:label "Isle of the Deep" ;
+    smac:plan 7 ;
+    smac:chassis "Foil" ;
+    smac:weapon "Psi" ;
+    smac:armor "Psi" ;
+    smac:role "carries land units across water" ;
+    smac:cost 8 ;
+    smac:carryCapacity 4 ;
+    smac:requiresTech tech:centmed ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+unit:locusts-of-chiron a smac:Unit ;
+    rdfs:label "Locusts of Chiron" ;
+    smac:plan 4 ;
+    smac:chassis "Gravship" ;
+    smac:weapon "Psi" ;
+    smac:armor "Psi" ;
+    smac:role "intercepts enemy aircraft" ;
+    smac:cost 10 ;
+    smac:requiresTech tech:centgen ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+unit:unity-rover a smac:Unit ;
+    rdfs:label "Unity Rover" ;
+    smac:plan 3 ;
+    smac:chassis "Speeder" ;
+    smac:weapon "Gun" ;
+    smac:armor "Scout" ;
+    smac:role "explores and scouts terrain" ;
+    smac:disabled true ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+unit:unity-scout-chopper a smac:Unit ;
+    rdfs:label "Unity Scout Chopper" ;
+    smac:plan 4 ;
+    smac:chassis "Copter" ;
+    smac:weapon "Gun" ;
+    smac:armor "Scout" ;
+    smac:role "intercepts enemy aircraft" ;
+    smac:disabled true ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+unit:unity-foil a smac:Unit ;
+    rdfs:label "Unity Foil" ;
+    smac:plan 7 ;
+    smac:chassis "Foil" ;
+    smac:weapon "Transport" ;
+    smac:armor "Scout" ;
+    smac:role "carries land units across water" ;
+    smac:disabled true ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+unit:sealurk a smac:Unit ;
+    rdfs:label "Sealurk" ;
+    smac:plan 6 ;
+    smac:chassis "Foil" ;
+    smac:weapon "Psi" ;
+    smac:armor "Psi" ;
+    smac:role "controls sea zones" ;
+    smac:cost 6 ;
+    smac:requiresTech tech:centpsi ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+unit:spore-launcher a smac:Unit ;
+    rdfs:label "Spore Launcher" ;
+    smac:plan 0 ;
+    smac:chassis "Infantry" ;
+    smac:weapon "Psi" ;
+    smac:armor "Psi" ;
+    smac:role "attacks enemy units and bases" ;
+    smac:cost 5 ;
+    smac:requiresTech tech:bioadap ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+unit:battle-ogre-mk1 a smac:Unit ;
+    rdfs:label "Battle Ogre MK1" ;
+    smac:plan 0 ;
+    smac:chassis "Infantry" ;
+    smac:weapon "R-Laser" ;
+    smac:armor "3-Res" ;
+    smac:role "attacks enemy units and bases" ;
+    smac:cost 10 ;
+    smac:disabled true ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+unit:battle-ogre-mk2 a smac:Unit ;
+    rdfs:label "Battle Ogre MK2" ;
+    smac:plan 0 ;
+    smac:chassis "Infantry" ;
+    smac:weapon "R-Bolt" ;
+    smac:armor "8-Res" ;
+    smac:role "attacks enemy units and bases" ;
+    smac:cost 15 ;
+    smac:disabled true ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+unit:battle-ogre-mk3 a smac:Unit ;
+    rdfs:label "Battle Ogre MK3" ;
+    smac:plan 0 ;
+    smac:chassis "Speeder" ;
+    smac:weapon "String" ;
+    smac:armor "Stasis" ;
+    smac:role "attacks enemy units and bases" ;
+    smac:cost 20 ;
+    smac:disabled true ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+unit:fungal-tower a smac:Unit ;
+    rdfs:label "Fungal Tower" ;
+    smac:plan 3 ;
+    smac:chassis "Infantry" ;
+    smac:weapon "Psi" ;
+    smac:armor "Psi" ;
+    smac:role "explores and scouts terrain" ;
+    smac:disabled true ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+unit:unity-mining-laser a smac:Unit ;
+    rdfs:label "Unity Mining Laser" ;
+    smac:plan 0 ;
+    smac:chassis "Infantry" ;
+    smac:weapon "Laser" ;
+    smac:armor "Scout" ;
+    smac:role "attacks enemy units and bases" ;
+    smac:disabled true ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+unit:sea-escape-pod a smac:Unit ;
+    rdfs:label "Sea Escape Pod" ;
+    smac:plan 8 ;
+    smac:chassis "Foil" ;
+    smac:weapon "Colony Pod" ;
+    smac:armor "Scout" ;
+    smac:role "founds a new base elsewhere; does not grow the base that builds it" ;
+    smac:disabled true ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+unit:unity-gunship a smac:Unit ;
+    rdfs:label "Unity Gunship" ;
+    smac:plan -1 ;
+    smac:chassis "Foil" ;
+    smac:weapon "Gun" ;
+    smac:armor "Scout" ;
+    smac:disabled true ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+unit:trance-infantry a smac:Unit ;
+    rdfs:label "Trance Infantry" ;
+    smac:plan 3 ;
+    smac:chassis "Infantry" ;
+    smac:weapon "Gun" ;
+    smac:armor "Scout" ;
+    smac:role "explores and scouts terrain" ;
+    smac:requiresTech tech:brain ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+unit:police-garrison a smac:Unit ;
+    rdfs:label "Police Garrison" ;
+    smac:plan 2 ;
+    smac:chassis "Infantry" ;
+    smac:weapon "Gun" ;
+    smac:armor "Scout" ;
+    smac:role "defends a base or position" ;
+    smac:requiresTech tech:integ ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+unit:drop-colony-pod a smac:Unit ;
+    rdfs:label "Drop Colony Pod" ;
+    smac:plan 8 ;
+    smac:chassis "Infantry" ;
+    smac:weapon "Colony Pod" ;
+    smac:armor "Scout" ;
+    smac:role "founds a new base elsewhere; does not grow the base that builds it" ;
+    smac:requiresTech tech:mindmac ;
     smac:appliesToEngine "thinker" ;
     smac:ruleTier "house-rule" ;
     smac:sourcedFrom src:alphax-txt .

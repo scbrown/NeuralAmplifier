@@ -24,6 +24,7 @@ from __future__ import annotations
 from collections.abc import Iterator
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Final
 
 #: Sentinels in a prerequisite column. Neither is a technology.
 NO_PREREQ = "None"
@@ -161,6 +162,57 @@ class Component:
     disabled: bool
 
 
+#: What the engine's plan number means, in words. The engine classifies every unit
+#: design by plan (``PLAN_COLONY = 8``, ``PLAN_TERRAFORM = 9``, …), and that number is
+#: what the ``#UNITS`` rows carry in column 4. Naming them here rather than in the
+#: adapter matters: a brain given only "Colony Pod" and a cost has to fall back on its
+#: own recollection of a 1999 game, and a real model did exactly that — it picked a
+#: Colony Pod believing it would grow the base that built it.
+PLAN_ROLES: Final[dict[int, str]] = {
+    0: "attacks enemy units and bases",
+    1: "general-purpose combat unit",
+    2: "defends a base or position",
+    3: "explores and scouts terrain",
+    4: "intercepts enemy aircraft",
+    5: "destroys a base outright",
+    6: "controls sea zones",
+    7: "carries land units across water",
+    8: "founds a new base elsewhere; does not grow the base that builds it",
+    9: "terraforms terrain to improve tile yields",
+    10: "ferries minerals or nutrients to another base",
+    11: "infiltrates and sabotages rival factions",
+    12: "an artifact, not a fighting unit",
+    13: "tectonic missile",
+    14: "fungal missile",
+}
+
+
+@dataclass(frozen=True)
+class Unit:
+    """A predefined unit design from ``#UNITS``.
+
+    Cost is often 0, meaning "derive it from the chassis, weapon and armour" — the
+    engine computes it, so a 0 here is not missing data and must not be reported as a
+    price.
+    """
+
+    name: str
+    chassis: str
+    weapon: str
+    armor: str
+    #: The engine's own classification. See ``PLAN_ROLES``.
+    plan: int
+    #: 0 means the engine computes it from components.
+    cost: int
+    carry: int
+    requires: tuple[str, ...]
+    disabled: bool
+
+    @property
+    def role(self) -> str:
+        return PLAN_ROLES.get(self.plan, "")
+
+
 @dataclass
 class Datalinks:
     """Everything parsed, keyed for lookup."""
@@ -168,6 +220,7 @@ class Datalinks:
     technologies: dict[str, Technology] = field(default_factory=dict)
     facilities: dict[str, Facility] = field(default_factory=dict)
     components: list[Component] = field(default_factory=list)
+    units: dict[str, Unit] = field(default_factory=dict)
 
     @property
     def secret_projects(self) -> list[Facility]:
@@ -234,6 +287,28 @@ def _component(kind: str, row: Row) -> Component:
     )
 
 
+def _unit(row: Row) -> Unit:
+    """``name, chassis, weapon, armor, plan, cost, carry, preq, icon, ability-bits``.
+
+    Column 4 is the plan, which is what makes a unit's *purpose* available as game data
+    rather than as prose someone typed. Verified against the engine's enum: Colony Pod
+    is 8 (PLAN_COLONY), Formers 9 (PLAN_TERRAFORM), Scout Patrol 3 (PLAN_RECON),
+    Supply Crawler 10 (PLAN_SUPPLY), Probe Team 11 (PLAN_PROBE).
+    """
+    requires, disabled = prereqs(row.get(7))
+    return Unit(
+        name=row.get(0),
+        chassis=row.get(1),
+        weapon=row.get(2),
+        armor=row.get(3),
+        plan=row.number(4),
+        cost=row.number(5),
+        carry=row.number(6),
+        requires=requires,
+        disabled=disabled,
+    )
+
+
 def _is_int(value: str) -> bool:
     try:
         int(value)
@@ -242,9 +317,9 @@ def _is_int(value: str) -> bool:
     return True
 
 
-#: Sections parsed today. Chassis, units, terrain, and the social-engineering
-#: tables share the file but not the shape, and are tracked separately rather
-#: than half-parsed — a partial fact tagged canonical is worse than a missing one.
+#: Sections parsed today. Chassis, terrain, and the social-engineering tables share
+#: the file but not the shape, and are tracked separately rather than half-parsed — a
+#: partial fact tagged canonical is worse than a missing one.
 COMPONENT_SECTIONS = {"WEAPONS": "weapon", "DEFENSES": "armor"}
 
 
@@ -258,6 +333,11 @@ def parse(text: str) -> Datalinks:
         elif row.section == "FACILITIES":
             facility = _facility(row)
             out.facilities[facility.name] = facility
+        elif row.section == "UNITS":
+            # The section opens with a count line, which is not a unit.
+            if len(row.fields) > 1:
+                unit = _unit(row)
+                out.units[unit.name] = unit
         elif row.section in COMPONENT_SECTIONS:
             out.components.append(_component(COMPONENT_SECTIONS[row.section], row))
     return out
