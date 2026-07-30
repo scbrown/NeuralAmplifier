@@ -223,7 +223,7 @@ def cmd_verify(args: argparse.Namespace) -> int:
     wrong: list[tuple[str, str, str]] = []
     ok = 0
 
-    for rel, (want_sha, want_size) in sorted(expected.items()):
+    for rel, (want_sha, _want_size) in sorted(expected.items()):
         p = root / rel
         if not p.is_file():
             missing.append(rel)

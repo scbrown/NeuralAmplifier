@@ -80,6 +80,13 @@ def to_world_view(record: dict[str, Any]) -> WorldView:
         for a in record.get("action_space", [])
     ]
     scope = "base" if "base_id" in record else "turn"
+    # The entity the decision is about, where the adapter names one. ``base.hurry`` asks whether
+    # to rush ``item``, and without this the surface retrieves nothing at all — none of its
+    # action labels ("Hurry production") exist in any datalinks.
+    #
+    # Knowing that this adapter calls it ``item`` is exactly the adapter-shaped knowledge this
+    # bridge exists to hold, and exactly what the orchestrator must not contain.
+    subjects = [str(record["item"])] if record.get("item") else None
     passthrough = {
         k: v
         for k, v in record.items()
@@ -103,6 +110,7 @@ def to_world_view(record: dict[str, Any]) -> WorldView:
         faction=str(record.get("faction") or f"faction-{record.get('faction_id')}"),
         surface_id=record.get("surface_id"),
         action_space=actions,
+        subjects=subjects,
         economy=passthrough or None,
     )
 
@@ -149,12 +157,22 @@ def main() -> int:
 
         retriever = QuipuRetriever(args.quipu, engine=world_view.engine)
 
-    orchestrator = Orchestrator(brain=build_brain(args.brain), retriever=retriever)
+    # The guard built exactly as the service builds it. Constructing the orchestrator directly
+    # used to skip it entirely, so every run this harness ever recorded carried hank_absent —
+    # which reads in a record as "Hank was down", not as "nobody asked it".
+    from neural_amplifier.service import build_guard
+
+    orchestrator = Orchestrator(
+        brain=build_brain(args.brain),
+        retriever=retriever,
+        guard=build_guard(retriever),  # type: ignore[arg-type]
+    )
 
     choices: list[str] = []
     utilisations: list[float] = []
     degraded = 0
     reasons: set[str] = set()
+    advisories: collections.Counter[str] = collections.Counter()
     for _ in range(args.runs):
         result = orchestrator.decide(world_view)
         picked = [c.action_id for c in result.orders.choices]
@@ -170,6 +188,11 @@ def main() -> int:
             degraded += 1
             if result.record.degrade_reason:
                 reasons.add(result.record.degrade_reason)
+        # Counted, not just listed: a citation problem that shows up on one run of five is a
+        # model wobbling, and one that shows up on all five is a retrieval or ontology bug.
+        # Those want different fixes, and only the count tells them apart.
+        for advisory in result.record.knowledge.advisories:
+            advisories[advisory] += 1
 
     counts = collections.Counter(choices)
     top, top_n = counts.most_common(1)[0]
@@ -199,6 +222,12 @@ def main() -> int:
         print(f"utilisation    mean {statistics.mean(utilisations):.2f}")
     else:
         print("utilisation    n/a  (no grounding — pass --quipu to measure it)")
+
+    if advisories:
+        print()
+        print("guard          citation advisories (runs affected)")
+        for advisory, count in advisories.most_common():
+            print(f"  {count}/{args.runs}  {advisory}")
     return 0
 
 

@@ -208,7 +208,12 @@ class QuipuRetriever:
         return rows
 
     def retrieve(self, world_view: WorldView) -> Grounding:
-        labels = list(dict.fromkeys(a.action for a in world_view.action_space))[: self.limit]
+        # Subjects first, then the action labels. A surface that names a subject is asking a
+        # question ABOUT it — every option concerns the same entity — so if the budget or the
+        # limit has to drop something, the subject is the last thing to go. Surfaces that name
+        # no subject are unaffected, which is every surface that predates this.
+        candidates = list(world_view.subjects or []) + [a.action for a in world_view.action_space]
+        labels = list(dict.fromkeys(candidates))[: self.limit]
         if not labels:
             return Grounding()
         rows = self.query(build_query(labels, self.engine))

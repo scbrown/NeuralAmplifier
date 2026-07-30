@@ -179,6 +179,79 @@ def test_duplicate_actions_are_asked_for_once() -> None:
     assert retriever.queries[0].count("?label = ") == 1
 
 
+# --- subjects: surfaces that decide ABOUT an entity ------------------------
+
+
+def _hurry_view(subjects: list[str] | None) -> WorldView:
+    """A ``base.hurry`` world view: two options, neither of them a datalinks entity."""
+    return WorldView(
+        engine="thinker",
+        scope="base",
+        turn=35,
+        faction="University",
+        surface_id="base.hurry",
+        action_space=[
+            Action(id="hurry:none", action="Do not hurry"),
+            Action(id="hurry:now", action="Hurry production"),
+        ],
+        subjects=subjects,
+    )
+
+
+def test_a_surface_whose_actions_are_not_entities_retrieves_via_its_subject() -> None:
+    """The ``base.hurry`` regression.
+
+    "Hurry production" and "Do not hurry" are verbs, not things — neither resolves in any
+    datalinks, so keying retrieval purely off action labels made the entire surface ungrounded.
+    Measured consequence: 0.60 stability, the least stable surface we have, decided with zero
+    facts in the prompt.
+    """
+    retriever = FakeQuipu([])
+    retriever.retrieve(_hurry_view(["Colony Pod"]))
+    assert '?label = "Colony Pod"' in retriever.queries[0]
+
+
+def test_the_subject_is_asked_for_before_the_action_labels() -> None:
+    """Order matters under a limit or a token budget.
+
+    On a surface that names a subject, every option is about that one entity, so the subject is
+    the least droppable fact in the payload — not the most.
+    """
+    retriever = FakeQuipu([], limit=1)
+    retriever.retrieve(_hurry_view(["Colony Pod"]))
+    query = retriever.queries[0]
+    assert '?label = "Colony Pod"' in query
+    assert query.count("?label = ") == 1
+
+
+def test_no_subject_leaves_retrieval_exactly_as_it_was() -> None:
+    """Additive by construction: every surface that predates ``subjects`` is untouched."""
+    with_field = FakeQuipu([])
+    with_field.retrieve(view("Recycling Tanks", "Energy Bank"))
+    unset = FakeQuipu([])
+    unset.retrieve(_hurry_view(None))
+
+    assert with_field.queries[0].count("?label = ") == 2
+    assert unset.queries[0].count("?label = ") == 2  # the two action labels, as before
+
+
+def test_a_subject_that_repeats_an_action_label_is_asked_for_once() -> None:
+    """``base.production`` could legitimately name the item it is already offering."""
+    retriever = FakeQuipu([])
+    retriever.retrieve(
+        WorldView(
+            engine="thinker",
+            scope="base",
+            turn=1,
+            faction="GAIANS",
+            surface_id="base.production",
+            action_space=[Action(id="a0", action="Colony Pod")],
+            subjects=["Colony Pod"],
+        )
+    )
+    assert retriever.queries[0].count("?label = ") == 1
+
+
 def test_a_rejected_query_raises_rather_than_returning_nothing() -> None:
     """The seam turns this into a degraded decision. Swallowing it here would
     make a broken query indistinguishable from a turn with no known rules."""

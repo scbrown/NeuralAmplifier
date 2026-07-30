@@ -48,8 +48,15 @@ def _build_retriever() -> object | None:
     return QuipuRetriever(url, engine=os.environ.get("NA_ENGINE", "thinker"))
 
 
-def _build_guard(retriever: object | None) -> object | None:
+def build_guard(retriever: object | None) -> object | None:
     """The citation-integrity guard, on whenever grounding is.
+
+    Public because ``Orchestrator`` takes the guard as an argument and does not default it, so
+    every caller that builds an orchestrator itself decides independently whether to instrument
+    it — and the stability harness silently decided "no" for its entire life, recording
+    ``hank_absent`` on every measured decision. That is indistinguishable in a record from Hank
+    being down. One function, so "a fully instrumented orchestrator" means the same thing
+    everywhere.
 
     Not separately opt-in: citation integrity is meaningless without retrieval, and
     meaningful the moment there is any. It needs no external service and never denies, so the
@@ -101,7 +108,7 @@ def create_app(
         sinks=resolved_sinks,
         store=WorldViewStore(store_path) if store_path else None,
         retriever=resolved_retriever,  # type: ignore[arg-type]
-        guard=_build_guard(resolved_retriever),  # type: ignore[arg-type]
+        guard=build_guard(resolved_retriever),  # type: ignore[arg-type]
     )
     app.state.orchestrator = orchestrator
 

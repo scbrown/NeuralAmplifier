@@ -91,6 +91,22 @@ class WorldView(_Model):
     #: does not report contact, so the fog gate cannot run — see ``fog.py``.
     contacts: list[str] | None = None
 
+    #: Datalinks entities this decision is *about*, as distinct from the entities it
+    #: chooses *between*.
+    #:
+    #: Retrieval keys off action labels, which is right for a surface that picks among
+    #: named things — ``base.production`` offers "Colony Pod" and the graph has a node
+    #: called "Colony Pod". It is empty for a surface that asks a question about one
+    #: entity: ``base.hurry`` offers "Hurry production" / "Do not hurry", neither of
+    #: which is in any datalinks, so the whole surface retrieved zero facts and the
+    #: brain decided it with no grounding at all (measured: 0.60 stability, the least
+    #: stable surface we have).
+    #:
+    #: The subject is named here rather than dug out of ``economy`` because the
+    #: orchestrator must not learn where a particular engine files it (invariant 2).
+    #: The adapter knows what its decision is about; this is where it says so.
+    subjects: list[str] | None = None
+
     # Engine-dependent sections, passed through to the prompt untouched.
     scores: dict[str, Any] | None = None
     economy: dict[str, Any] | None = None
