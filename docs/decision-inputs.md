@@ -117,6 +117,13 @@ terseness is a design goal.
 | 7 | Fairness | the active handicap ledger for this faction |
 | 8 | Exclusions | anything outside this faction's fog; other factions' production; unmet factions' existence |
 
+**Measured stability, five identical prompts.** 4 of 5 chose Colony Pod, 1 chose Formers —
+`stability 0.80`, `utilisation 0.20`. Both choices were legal and defensible. That is low enough
+to matter on a decision re-evaluated every turn and high enough that the earlier alarm about
+oscillation was overstated: an uncontrolled pair of disagreeing runs turned out to be this same
+one-in-five, not evidence of a coin flip. Run it with
+[`scripts/decision_stability.py`](../scripts/decision_stability.py).
+
 **Why category 5 is on this list.** Production decisions are re-evaluated constantly, and a
 stateless brain will happily flip between two options every turn, accumulating nothing. Recent
 history is what makes a *stable* choice possible.
@@ -139,6 +146,17 @@ ambiguous `turns`:
 A single `turns` field would have to pick one meaning and would be wrong half the time.
 `surplus <= 0` yields `null`, which is honest: a base with no mineral surplus cannot finish
 anything.
+
+**Confirmed a second way, and more strongly than intended.** Across five byte-identical prompts,
+one run asserted *"nearly-complete Colony Pod (18/33 minerals done)"* — the world view said
+`minerals_accumulated: 4`. It fabricated a state value it had been handed correctly. **And it still
+decided correctly**, because it took `turns_if_continued: 15` from the field rather than deriving
+it.
+
+So a precomputed field does not only guard against bad arithmetic, which is why it was added. It
+also **contains a misread input**: the error stayed in the prose and never reached the choice.
+A world view that makes the brain derive things is one where a misreading propagates into the
+decision instead of stopping at the narration.
 
 The general lesson: **do not hand a model arithmetic you can do exactly.** The reason to prefer
 raw inputs is auditability, and that argument loses to a model that gets the sum wrong half the
