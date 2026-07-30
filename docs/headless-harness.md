@@ -195,6 +195,17 @@ On prefix architecture: `setup-environment.sh` notes that a `WINEARCH=win32` pre
 That holds for older Wine; **Wine 9+ runs 32-bit binaries in a default 64-bit prefix via
 new-wow64**, and SMAC was verified booting that way here on Wine 11.9.
 
+Two display settings that are not optional in practice, both measured on a 4K host:
+
+| Symptom | Cause | Fix |
+|---|---|---|
+| UI renders at a quarter scale, unreadable | `video_mode=0` is fullscreen at the *native* desktop resolution, and SMAC's UI is fixed-size | `video_mode=2` (borderless windowed) with `window_width=2560`, `window_height=1440` |
+| Clicks land far from the cursor | Wine maps pointer coordinates against the full desktop while the window is at the game's resolution | A Wine **virtual desktop** at exactly the game's resolution, so Wine owns window and coordinate space together |
+
+`play-thinker.sh` sets the virtual desktop automatically from `window_width`/`window_height`
+(disable with `NA_VIRTUAL_DESKTOP=`) and warns about the resolution combination. Windowed mode is
+also simply the better way to work: the decision log stays visible next to the game.
+
 The gate is off unless configured. `llm_factions=0` (the default) behaves exactly like stock
 Thinker, so an unconfigured build produces no observations rather than an error.
 

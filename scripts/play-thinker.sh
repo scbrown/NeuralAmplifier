@@ -167,6 +167,28 @@ if [ ! -d "$WINEPREFIX" ]; then
     wineboot -u >/dev/null 2>&1 || warn "wineboot reported an error; continuing"
 fi
 
+# ── Wine virtual desktop ────────────────────────────────────────────────────
+#
+# Without this, borderless windowed mode gives a window at the game's resolution
+# while Wine maps pointer coordinates against the full desktop — so on a 4K screen
+# running the game at 2560x1440 the cursor lands "waaay off" from where you click.
+# Measured on the gaming host.
+#
+# A Wine virtual desktop at exactly the game's resolution makes Wine own the
+# window and the coordinate space together, and the pointer lines up. It also
+# keeps the game windowed, which is what you want if you're watching the decision
+# log while playing.
+if [ "$cmd" != "headless" ]; then
+    res="$(grep -oP '^window_width=\K[0-9]+' "$INI" 2>/dev/null || true)x$(grep -oP '^window_height=\K[0-9]+' "$INI" 2>/dev/null || true)"
+    if [ "$res" != "x" ] && [ -n "${NA_VIRTUAL_DESKTOP:-1}" ]; then
+        wine reg add 'HKEY_CURRENT_USER\Software\Wine\Explorer' \
+            /v Desktop /t REG_SZ /d Default /f >/dev/null 2>&1 || true
+        wine reg add 'HKEY_CURRENT_USER\Software\Wine\Explorer\Desktops' \
+            /v Default /t REG_SZ /d "$res" /f >/dev/null 2>&1 || true
+        log "wine virtual desktop $res (set NA_VIRTUAL_DESKTOP= to disable)"
+    fi
+fi
+
 OBS="$PLAY_DIR/na-observations.jsonl"
 before=0
 [ -f "$OBS" ] && before="$(wc -l < "$OBS")"
