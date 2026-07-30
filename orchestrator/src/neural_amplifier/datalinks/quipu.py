@@ -21,7 +21,6 @@ works, and ``OPTIONAL`` works — verified against quipu 0.3.11.
 from __future__ import annotations
 
 import json
-import re
 import urllib.error
 import urllib.request
 from dataclasses import replace
@@ -47,14 +46,28 @@ def escape(value: str) -> str:
     return value.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n")
 
 
-def fact_id(label: str) -> str:
-    """A short, stable id the brain can cite.
+def fact_id(iri: str) -> str:
+    """A citable id that is also a pointer into the datalinks graph.
 
-    Derived from the label rather than assigned a counter, so the same fact keeps the same
-    id across turns and across runs — which is what makes utilisation comparable over a
-    game instead of only within one decision.
+    This is the node's own IRI, compacted against the known prefixes — ``unit:formers``,
+    ``fac:recycling-tanks``, ``tech:centauri-ecology``. It is deliberately NOT derived from
+    the label, which was the first implementation and was wrong: a label-derived slug looks
+    like an identifier while pointing at nothing, so a cited fact could not be traced back to
+    the node that produced it, nor to the source that node came from.
+
+    Every fact therefore carries at least one pointer into datalinks by construction, and a
+    citation can be resolved and re-verified rather than merely counted.
     """
-    return "f:" + re.sub(r"[^a-z0-9]+", "-", label.lower()).strip("-")
+    for prefix, base in (
+        ("unit", f"{NAMESPACE}unit/"),
+        ("fac", f"{NAMESPACE}facility/"),
+        ("tech", f"{NAMESPACE}tech/"),
+        ("src", f"{NAMESPACE}source/"),
+    ):
+        if iri.startswith(base):
+            return f"{prefix}:{iri[len(base) :]}"
+    # An IRI we do not have a prefix for is still a pointer; do not silently rewrite it.
+    return iri
 
 
 def _disjunction(variable: str, values: list[str]) -> str:
@@ -78,8 +91,9 @@ def build_query(labels: list[str], engine: str) -> str:
     engines = [UNIVERSAL_ENGINE] if engine == UNIVERSAL_ENGINE else [UNIVERSAL_ENGINE, engine]
     return f"""PREFIX smac: <{NAMESPACE}>
 PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
-SELECT ?label ?effect ?role ?tier ?maint WHERE {{
+SELECT ?f ?label ?effect ?role ?tier ?maint ?src WHERE {{
   ?f rdfs:label ?label ;
+     smac:sourcedFrom ?src ;
      smac:ruleTier ?tier ;
      smac:appliesToEngine ?eng
   OPTIONAL {{ ?f smac:effectText ?effect }}
@@ -116,8 +130,20 @@ def format_row(row: dict[str, Any]) -> str:
         if row.get(key):
             parts.append(str(row[key]))
     tier = row.get("tier")
-    if tier and tier != "canonical":
-        parts.append(f"[{tier}]")
+    src = row.get("src")
+    # Tier and source travel with the fact. A house-rule stat presented as canonical is the
+    # failure this whole plane exists to prevent, and a fact whose origin cannot be named is
+    # not auditable — the model is entitled to know both.
+    # The tier is annotated only when it is NOT canonical: tagging every canonical fact
+    # is noise on the common case, and noise is what stops people reading the tag that
+    # matters. The SOURCE is annotated always — a fact whose origin cannot be named is not
+    # auditable, and every fact is required to carry at least one pointer into datalinks.
+    tag = tier if tier and tier != "canonical" else ""
+    if src:
+        origin = fact_id(str(src))
+        tag = f"{tag} · {origin}" if tag else origin
+    if tag:
+        parts.append(f"[{tag}]")
     return "; ".join(parts)
 
 
@@ -176,6 +202,7 @@ class QuipuRetriever:
         # engine offered the choices, not in whatever order the store returns.
         by_label = {str(r.get("label")): r for r in rows}
         matched = [label for label in labels if label in by_label]
+        node_of = {label: str(by_label[label].get("f", "")) for label in matched}
         facts = [Fact(format_row(by_label[label]), kind="rule") for label in matched]
 
         if self.token_budget > 0:
@@ -186,7 +213,7 @@ class QuipuRetriever:
             # everything retrieved — otherwise a dropped fact still looks citable and
             # utilisation is computed against a prompt the model never saw.
             ids = tuple(
-                fact_id(label)
+                fact_id(node_of[label])
                 for label, fact in zip(matched, facts, strict=True)
                 if fact.text in kept
             )
@@ -194,5 +221,5 @@ class QuipuRetriever:
 
         return Grounding(
             facts=tuple(f.text for f in facts),
-            fact_ids=tuple(fact_id(label) for label in matched),
+            fact_ids=tuple(fact_id(node_of[label]) for label in matched),
         )

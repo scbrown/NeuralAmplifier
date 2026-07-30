@@ -16,6 +16,7 @@ import pytest
 from neural_amplifier.brain import ScriptedBrain
 from neural_amplifier.contract import Action, WorldView
 from neural_amplifier.datalinks.quipu import (
+    NAMESPACE,
     QuipuRetriever,
     build_query,
     escape,
@@ -91,10 +92,22 @@ def test_a_non_canonical_tier_is_shown_to_the_model() -> None:
     assert format_row(row).endswith("[house-rule]")
 
 
-def test_canonical_facts_are_not_annotated() -> None:
-    """Tagging every canonical fact would be noise on the common case."""
-    row = {"label": "Recycling Tanks", "cost": 4, "effect": "Bonus Resources", "tier": "canonical"}
-    assert "[" not in format_row(row)
+def test_canonical_tier_is_not_annotated_but_the_source_always_is() -> None:
+    """Two different jobs for the bracket, and only one is suppressible.
+
+    Tagging every canonical fact with its tier is noise on the common case, and noise is
+    what stops people reading the tag that matters. The source is different: a fact whose
+    origin cannot be named is not auditable, and every fact is required to carry at least
+    one pointer back into datalinks. So canonical facts lose the tier and keep the source.
+    """
+    row = {"label": "Recycling Tanks", "effect": "Bonus Resources", "tier": "canonical"}
+    assert "canonical" not in format_row(row)
+    assert "[" not in format_row(row)  # no tier, and no source supplied here
+
+    sourced = {**row, "src": f"{NAMESPACE}source/alphax-txt"}
+    out = format_row(sourced)
+    assert "canonical" not in out
+    assert "[src:alphax-txt]" in out
 
 
 def test_zero_maintenance_is_omitted() -> None:
