@@ -149,4 +149,16 @@ class Orders(_Model):
     #: twelve facts all ignored is otherwise indistinguishable from one they drove.
     #: Ids not present in the offered set are discarded on the way to the record, so a
     #: hallucinated citation cannot inflate the measured utilisation.
-    cited: list[str] = Field(default_factory=list)
+    cited: list[str] = Field(
+        default_factory=list,
+        # The description matters: with structured output the model reads the JSON schema, and a
+        # bare `array of strings` gets ignored no matter what the system prompt says. Measured —
+        # explaining `cited` only in the system prompt left it empty on every run.
+        description=(
+            "Ids of the grounding facts that actually influenced this decision. Each entry in the"
+            " world view's `grounding` list starts with its id, e.g. `unit:colony-pod`. Include a"
+            " fact if reading it changed your assessment of an option — whether it supported the"
+            " option you chose or helped you rule one out. Omit facts that made no difference, and"
+            " never invent an id you were not given."
+        ),
+    )

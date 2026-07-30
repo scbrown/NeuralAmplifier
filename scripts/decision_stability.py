@@ -122,9 +122,12 @@ def build_brain(kind: str) -> Any:
 
         return ScriptedBrain()
     if kind == "claude":
-        from neural_amplifier.brain import build_brain as build
+        # ClaudeBrain directly rather than service.build_brain, which gates on NA_BRAIN=claude so
+        # that tests and CI cannot make a paid call by accident. Here the --brain flag IS the
+        # explicit opt-in, so requiring the env var as well would be a second lock on the same door.
+        from neural_amplifier.brain import ClaudeBrain
 
-        return build()
+        return ClaudeBrain()
     raise SystemExit(f"unknown brain: {kind}")
 
 
@@ -150,6 +153,8 @@ def main() -> int:
 
     choices: list[str] = []
     utilisations: list[float] = []
+    degraded = 0
+    reasons: set[str] = set()
     for _ in range(args.runs):
         result = orchestrator.decide(world_view)
         picked = [c.action_id for c in result.orders.choices]
@@ -157,6 +162,14 @@ def main() -> int:
         used = result.record.knowledge.utilisation
         if used is not None:
             utilisations.append(used)
+        # A brain that failed still returns a safe answer — that is the point of degrading rather
+        # than stalling. But it makes stability meaningless: the fallback is one fixed answer, so a
+        # fully broken brain measures 1.00. This went unnoticed once, when the anthropic package was
+        # missing and five fallbacks were reported as a perfectly stable model.
+        if result.record.degraded:
+            degraded += 1
+            if result.record.degrade_reason:
+                reasons.add(result.record.degrade_reason)
 
     counts = collections.Counter(choices)
     top, top_n = counts.most_common(1)[0]
@@ -172,6 +185,14 @@ def main() -> int:
     print()
     # Modal share, not entropy: the question is "would this decision be the same next turn",
     # and the share of the most common answer says that directly.
+    if degraded:
+        print(f"!! DEGRADED     {degraded} of {args.runs} runs — the brain did not decide these")
+        for reason in sorted(reasons):
+            print(f"   reason       {reason}")
+        if degraded == args.runs:
+            print("   stability below is meaningless: the fallback is a single fixed answer")
+        print()
+
     print(f"stability      {top_n / args.runs:.2f}  (modal answer {top!r})")
     print(f"distinct       {len(counts)} of {args.runs} runs")
     if utilisations:

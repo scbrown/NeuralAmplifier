@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import os
 from collections.abc import Callable, Sequence
-from typing import Protocol
+from typing import Any, Protocol
 
 from .contract import Choice, Orders, WorldView
 
@@ -90,9 +90,46 @@ class ClaudeBrain:
 
     name = "claude"
 
-    def __init__(self, model: str = DEFAULT_MODEL, effort: str = "high") -> None:
+    def __init__(self, model: str = DEFAULT_MODEL, effort: str | None = "high") -> None:
         self.model = model
+        #: None omits output_config entirely. Not every model accepts effort — it is rejected
+        #: outright on Haiku 4.5 and Sonnet 4.5 — and sending it unconditionally turned every
+        #: decision into a degraded fallback with a 400 that the orchestrator dutifully absorbed.
         self.effort = effort
+
+    def _supports_effort(self, client: Any) -> bool:
+        """Ask the API whether this model takes THIS effort level.
+
+        Queried rather than hardcoded as a model list, because such a list is wrong the moment a
+        model ships. Cached per instance: the answer cannot change for a fixed model id.
+
+        The per-level flag, not the coarse ``effort.supported``: support is not all-or-nothing.
+        Opus 4.5 accepts low/medium/high but rejects xhigh/max, so a model that "supports effort"
+        can still 400 on the level we happen to ask for.
+
+        A probe that cannot answer returns False, which omits effort and costs at most a
+        default-effort request. Sending an unsupported level costs the entire decision — that is
+        what turned five Haiku 4.5 runs into five degraded fallbacks.
+        """
+        cached = getattr(self, "_effort_ok", None)
+        if cached is not None:
+            return bool(cached)
+        ok = False
+        try:
+            caps = client.models.retrieve(self.model).capabilities
+            # Pydantic model in the SDK, plain dict in tests and fakes — support both rather than
+            # making the probe's correctness depend on which one it was handed.
+            effort = caps["effort"] if isinstance(caps, dict) else caps.effort
+            level = (
+                effort[self.effort]
+                if isinstance(effort, dict)
+                else getattr(effort, str(self.effort))
+            )
+            ok = bool(level["supported"] if isinstance(level, dict) else level.supported)
+        except Exception:  # noqa: BLE001 — a capability probe must never fail a decision
+            ok = False
+        self._effort_ok = ok
+        return ok
 
     def decide(self, world_view: WorldView) -> Orders:
         try:
@@ -104,13 +141,16 @@ class ClaudeBrain:
 
         client = anthropic.Anthropic()
         try:
+            kwargs: dict[str, Any] = {}
+            if self.effort and self._supports_effort(client):
+                kwargs["output_config"] = {"effort": self.effort}
             response = client.messages.parse(
                 model=self.model,
                 max_tokens=16000,
                 output_format=Orders,
-                output_config={"effort": self.effort},
                 system=_SYSTEM,
                 messages=[{"role": "user", "content": world_view.model_dump_json()}],
+                **kwargs,
             )
         except Exception as exc:  # pragma: no cover - network path
             raise BrainError(str(exc)) from exc
@@ -134,4 +174,17 @@ rejected. Give a short, concrete reason for each choice.
 
 If the world view carries a `fairness` block with handicaps, those are rule
 advantages you actually hold. Reason about them honestly rather than ignoring
-them."""
+them.
+
+If the world view carries a `grounding` list, each entry is a retrieved fact in
+the form `<id> <text>` — for example
+`unit:colony-pod Colony Pod; founds a new base elsewhere`. These are the game's
+own rules, and a `[house-rule]` tag means the fact comes from a mod rather than
+the base game.
+
+Populate `cited` with the ids of the facts that actually influenced your
+decision. Include a fact if reading it changed your assessment of an option,
+whether it supported the option you chose OR helped you rule one out. Do not
+include a fact that made no difference, and never invent an id you were not
+given — `cited` is how we measure whether retrieval was worth its cost, so
+padding it destroys the measurement it exists for."""
