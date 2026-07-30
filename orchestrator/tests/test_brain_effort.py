@@ -202,3 +202,47 @@ def test_a_refusal_is_still_a_brain_error(
 
     with pytest.raises(BrainError):
         _run(monkeypatch, ClaudeBrain(effort="high"), world_view, client)
+
+
+def test_a_grammar_compilation_timeout_is_retried_once(
+    monkeypatch: pytest.MonkeyPatch, world_view: WorldView
+) -> None:
+    """Observed on 1 run in 10 once ``Orders`` grew nested directive objects.
+
+    Not a bad request — the identical payload succeeds on a second attempt because the server-side
+    grammar compile is cached. Without the retry, invariant 9 does its job and the turn quietly
+    degrades to the native answer, which is correct behaviour and a worse decision.
+    """
+    client = _FakeClient(_FakeModels({"high": True}), ORDERS)
+    calls = {"n": 0}
+    real = client.messages.parse
+
+    def flaky(**kwargs: Any) -> Any:
+        calls["n"] += 1
+        if calls["n"] == 1:
+            raise RuntimeError("Error code: 400 - Grammar compilation timed out.")
+        return real(**kwargs)
+
+    client.messages.parse = flaky  # type: ignore[method-assign]
+
+    _run(monkeypatch, ClaudeBrain(model="claude-opus-5", effort="high"), world_view, client)
+
+    assert calls["n"] == 2
+
+
+def test_a_genuine_bad_request_is_not_retried(
+    monkeypatch: pytest.MonkeyPatch, world_view: WorldView
+) -> None:
+    """Retrying a real 400 turns one clear failure into two and hides the cause."""
+    client = _FakeClient(_FakeModels({"high": True}), ORDERS)
+    calls = {"n": 0}
+
+    def broken(**kwargs: Any) -> Any:
+        calls["n"] += 1
+        raise RuntimeError("Error code: 400 - This model does not support the effort parameter.")
+
+    client.messages.parse = broken  # type: ignore[method-assign]
+
+    with pytest.raises(BrainError):
+        _run(monkeypatch, ClaudeBrain(model="claude-opus-5", effort="high"), world_view, client)
+    assert calls["n"] == 1

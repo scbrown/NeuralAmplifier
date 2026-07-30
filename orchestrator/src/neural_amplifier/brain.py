@@ -137,6 +137,34 @@ class ClaudeBrain:
         self._effort_ok = ok
         return ok
 
+    def _parse(self, client: Any, world_view: WorldView, kwargs: dict[str, Any]) -> Any:
+        """One call, retried once on a transient structured-output failure.
+
+        ``Grammar compilation timed out`` appeared on 1 run in 10 after ``Orders`` grew nested
+        directive objects — the schema got heavier and the server-side grammar build occasionally
+        misses its deadline. It is not a bad request: the identical payload succeeds on a second
+        attempt, because the compile is cached.
+
+        Worth a retry specifically because the alternative is invariant 9 doing its job — the turn
+        degrades to the native answer, which is correct behaviour and a silently worse decision.
+        Only this one error class is retried; a genuine 400 should fail loudly and immediately.
+        """
+        attempts = 2
+        for attempt in range(attempts):
+            try:
+                return client.messages.parse(
+                    model=self.model,
+                    max_tokens=16000,
+                    output_format=Orders,
+                    system=_SYSTEM,
+                    messages=[{"role": "user", "content": world_view.model_dump_json()}],
+                    **kwargs,
+                )
+            except Exception as exc:  # noqa: BLE001 — re-raised below unless retryable
+                if attempt + 1 >= attempts or "grammar compilation" not in str(exc).lower():
+                    raise
+        raise AssertionError("unreachable")  # pragma: no cover
+
     def decide(self, world_view: WorldView) -> Orders:
         try:
             import anthropic
@@ -150,14 +178,7 @@ class ClaudeBrain:
             kwargs: dict[str, Any] = {}
             if self.effort and self._supports_effort(client):
                 kwargs["output_config"] = {"effort": self.effort}
-            response = client.messages.parse(
-                model=self.model,
-                max_tokens=16000,
-                output_format=Orders,
-                system=_SYSTEM,
-                messages=[{"role": "user", "content": world_view.model_dump_json()}],
-                **kwargs,
-            )
+            response = self._parse(client, world_view, kwargs)
         except Exception as exc:  # pragma: no cover - network path
             raise BrainError(str(exc)) from exc
 
@@ -204,6 +225,13 @@ right now — so you can see whether it is being met. `satisfied: null` means th
 metric was not reported this turn and the directive cannot be checked here;
 treat that as missing information, not as compliance.
 
+Each entry also carries `via` and `hop`, which say how it reached you. `hop: 0`
+means this decision directly moves what the directive is about. A higher hop
+means it was reached through another directive — `fund-weather-paradigm →
+fac:the-weather-paradigm` means the plan you are about to affect is itself
+serving that project. Read the chain: it is why the resource you are spending is
+not merely quantity but something already committed.
+
 `tradeoffs` tells you what each option would cost the plan: for an
 `action_id`/`directive_id` pair it gives the `delta` to the metric, the
 `projected` value after acting, whether that `would_violate` a directive
@@ -243,7 +271,15 @@ Use `at_least`/`at_most` with a `target` for an absolute bound, or
 issue it. Set `horizon_turn` to the turn by which it should be achieved — a plan
 with no deadline cannot fail, and one that cannot fail teaches us nothing. Put
 the reasoning in `intent`, in one sentence, because a later decision will read
-it without the context you have now."""
+it without the context you have now.
+
+Set `entities` to the grounding fact ids the directive is about — the same ids
+you would put in `cited`, e.g. `fac:the-planetary-transit-system` for a plan to
+fund that project. This is how the directive is found again: a game can carry
+hundreds of them, so a later decision is shown only the ones touching what it is
+deciding on. A directive with no entities is still found through its `metric`,
+which names the resource at stake, but one that is about a specific project and
+does not name it may never be shown to the decision that could serve it."""
 
 
 #: ``replace`` rather than ``format``: the prompt is prose with punctuation in it, and a stray

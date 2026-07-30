@@ -102,6 +102,19 @@ class Directive(_Model):
     #: an observation, and asking a model to report a number it was just shown is an invitation
     #: to paraphrase it wrong.
     baseline: float | None = None
+    #: Datalinks entities this directive is about, as grounding fact ids —
+    #: ``fac:the-planetary-transit-system`` for a plan to fund that project.
+    #:
+    #: These are **lookup keys**, not decoration. A game can accumulate hundreds of directives,
+    #: and putting all of them in front of every decision would cost more than it could possibly
+    #: return — so a decision gets the ones that touch what it is deciding about. Entities are one
+    #: half of that; ``metric`` is the other, since it names the resource at stake and an action
+    #: that spends energy credits should pull every directive saving them.
+    #:
+    #: A directive therefore always has at least one pointer into the graph, because ``metric``
+    #: is mandatory. ``entities`` is what connects it to the specific thing it is for.
+    entities: list[str] = Field(default_factory=list)
+
     issued_turn: int | None = None
     #: The turn after which this stops applying. ``None`` means it stands until revoked, which
     #: should be rare: a plan with no horizon cannot fail, and one that cannot fail teaches
@@ -131,6 +144,13 @@ class DirectiveStatus(_Model):
     current: float | None = None
     satisfied: bool | None = None
     detail: str | None = None
+    #: How this directive was reached from the decision — "hurry:now changes energy_reserves by
+    #: -81" at hop 0, or "fund-weather-paradigm → fac:the-weather-paradigm" further out. The
+    #: chain is the reasoning: without it a decision has to guess why a plan is in front of it,
+    #: and with it the 81 credits are visibly earmarked for a project serving a larger aim.
+    via: str | None = None
+    #: Steps from the decision. 0 means this decision directly moves what the directive is about.
+    hop: int = 0
 
 
 class Tradeoff(_Model):

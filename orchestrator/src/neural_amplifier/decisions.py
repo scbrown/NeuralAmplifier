@@ -111,6 +111,11 @@ class PlanBlock(BaseModel):
     rejected: list[str] = Field(default_factory=list)
     #: Actions that would have broken a currently satisfied directive, as ``action_id:id``.
     conflicts: list[str] = Field(default_factory=list)
+    #: Directives in force that this decision was NOT shown, because relevance selection capped
+    #: the list. Recorded because a silent cap is what makes a plan look served when it was never
+    #: read — with hundreds of directives in a late game, "not mentioned" and "never offered" are
+    #: completely different problems and only this distinguishes them.
+    not_shown: list[str] = Field(default_factory=list)
     #: No directive store was configured, as distinct from one that is simply empty.
     plan_absent: bool = False
 

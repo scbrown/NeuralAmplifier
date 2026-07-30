@@ -24,7 +24,7 @@ from .decisions import (
     PlanBlock,
     world_view_hash,
 )
-from .directives import DirectiveStore, accept, evaluate, tradeoffs
+from .directives import DirectiveStore, accept, evaluate, relevant, tradeoffs
 from .fog import Redaction, redact
 from .knowledge import Guard, Knowledge, Retriever, apply, retrieve, rule, summarise
 from .telemetry import Emitter, Sink
@@ -106,7 +106,10 @@ class Orchestrator:
         # Standing plan, measured against this turn, plus what each option would cost it.
         # Injected before the store for the same reason grounding is: the stored bytes must be
         # exactly what the brain saw, or a replay is not a replay.
-        world_view = self._with_directives(world_view)
+        # The grounding ids double as this decision's entity set: they are exactly the datalinks
+        # nodes retrieval matched for the options and subjects on offer, which is what a directive
+        # links to. Nothing extra needs resolving.
+        world_view, dropped = self._with_directives(world_view, grounding.fact_ids)
 
         # Store *after* gating and grounding, so the stored bytes are exactly
         # what the brain saw and the record's hash addresses them. Storing the
@@ -167,6 +170,7 @@ class Orchestrator:
                 issued=recorded,
                 rejected=plan_rejections,
                 configured=self.plan is not None,
+                dropped=dropped,
             ),
         )
         # One emit call. Every layer is a projection of *this* object — see the
@@ -175,7 +179,9 @@ class Orchestrator:
 
         return Result(orders=final, record=record)
 
-    def _with_directives(self, world_view: WorldView) -> WorldView:
+    def _with_directives(
+        self, world_view: WorldView, entity_ids: Sequence[str] = ()
+    ) -> tuple[WorldView, list[str]]:
         """Inject the standing plan, measured, plus what each option would cost it.
 
         Both halves or neither. A directive without its current value asks the model to guess
@@ -186,19 +192,27 @@ class Orchestrator:
         Wrapped so a broken plan file cannot cost a turn — same rule as retrieval (invariant 9).
         """
         if self.plan is None:
-            return world_view
+            return world_view, []
         try:
             in_force = self.plan.in_force(world_view.turn)
             if not in_force:
-                return world_view
-            return world_view.model_copy(
-                update={
-                    "directives": evaluate(in_force, world_view),
-                    "tradeoffs": tradeoffs(in_force, world_view) or None,
-                }
+                return world_view, []
+            # Retrieved, not broadcast. A game accumulates hundreds of directives and a decision
+            # is shown the handful that bear on it — see ``relevant``.
+            selection = relevant(in_force, world_view, entity_ids)
+            if not selection.hits:
+                return world_view, selection.dropped
+            return (
+                world_view.model_copy(
+                    update={
+                        "directives": evaluate(selection.hits, world_view),
+                        "tradeoffs": tradeoffs(selection.selected, world_view) or None,
+                    }
+                ),
+                selection.dropped,
             )
         except Exception:  # noqa: BLE001 — a plan we cannot read is a less-informed decision
-            return world_view
+            return world_view, []
 
     def _issue(
         self, issued: list[Directive], world_view: WorldView, degraded: str | None
@@ -227,6 +241,7 @@ class Orchestrator:
         issued: list[str],
         rejected: list[str],
         configured: bool,
+        dropped: list[str],
     ) -> PlanBlock:
         """The measurement half. See :class:`PlanBlock` for why each field is here."""
         statuses = world_view.directives or []
@@ -247,6 +262,7 @@ class Orchestrator:
                 for t in (world_view.tradeoffs or [])
                 if t.would_violate
             ],
+            not_shown=dropped,
             plan_absent=not configured,
         )
 

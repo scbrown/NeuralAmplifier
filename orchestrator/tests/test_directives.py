@@ -25,9 +25,11 @@ from neural_amplifier.directives import (
     DirectiveStore,
     accept,
     evaluate,
+    relevant,
     tradeoffs,
     validate,
 )
+from neural_amplifier.metrics import VOCABULARY
 
 
 def view(
@@ -311,3 +313,207 @@ def test_orders_can_carry_a_directive_and_report_what_it_followed() -> None:
     )
     assert orders.directives[0].priority == 7
     assert orders.followed == ["fund-secret-project"]
+
+
+# --- relevance: which directives a decision is even shown --------------------
+
+
+def _many(count: int, **overrides: object) -> list[Directive]:
+    """A plan large enough that showing all of it would be the wrong answer."""
+    return [
+        saving(id=f"d{i}", metric="base_count", target=float(i), **overrides) for i in range(count)
+    ]
+
+
+def test_a_decision_is_shown_the_directive_whose_resource_it_is_about_to_spend() -> None:
+    """The case the whole mechanism exists for.
+
+    A game accumulates hundreds of directives, so this one has to *win* against noise rather than
+    merely be present — an action's effects naming the directive's metric is the strongest signal
+    there is.
+    """
+    world = view(metrics={"energy_reserves": 82, "base_count": 4}, actions=_hurry_actions())
+    selection = relevant([*_many(20), saving()], world, limit=3)
+
+    assert selection.selected[0].id == "fund-secret-project"
+    assert len(selection.selected) == 3
+
+
+def test_a_decision_is_shown_the_directive_naming_the_entity_it_concerns() -> None:
+    """The link the user asked for: pull the plan from the project it is about."""
+    linked = saving(id="build-transit", entities=["fac:the-planetary-transit-system"])
+    world = view(metrics={"base_count": 4}, actions=[Action(id="a0", action="x")])
+
+    selection = relevant(
+        [*_many(20), linked], world, entity_ids=["fac:the-planetary-transit-system"], limit=2
+    )
+
+    assert "build-transit" in [d.id for d in selection.selected]
+
+
+def test_an_unrelated_entity_does_not_pull_the_directive() -> None:
+    linked = saving(id="build-transit", entities=["fac:the-planetary-transit-system"])
+    world = view(metrics={"base_count": 4})
+
+    selection = relevant(
+        [*_many(20), linked], world, entity_ids=["fac:the-weather-paradigm"], limit=2
+    )
+
+    assert "build-transit" not in [d.id for d in selection.selected]
+
+
+def test_what_is_cut_is_reported_rather_than_silently_dropped() -> None:
+    """A silent cap is what makes a plan look served when it was never read. With hundreds of
+    directives, "not mentioned" and "never offered" are different problems."""
+    selection = relevant(_many(12), view(metrics={"base_count": 4}), limit=5)
+
+    assert len(selection.selected) == 5
+    assert len(selection.dropped) == 7
+    assert set(selection.dropped).isdisjoint({d.id for d in selection.selected})
+
+
+def test_survival_priority_is_shown_even_when_unrelated() -> None:
+    """A plan nobody is told about cannot be followed, and at priority 9-10 that is the game."""
+    critical = saving(
+        id="dont-lose-hq", metric="drone_total", comparator="at_most", target=2.0, priority=10
+    )
+    selection = relevant([*_many(20), critical], view(metrics={"base_count": 4}), limit=3)
+
+    assert "dont-lose-hq" in [d.id for d in selection.selected]
+
+
+def test_priority_only_breaks_ties_and_does_not_override_relevance() -> None:
+    """A priority-8 directive about something this decision cannot affect should lose to a
+    priority-3 one about the resource being spent — otherwise the plan drowns the decision."""
+    loud = saving(id="loud", metric="base_count", priority=8)
+    apt = saving(id="apt", metric="energy_reserves", priority=3)
+    world = view(metrics={"energy_reserves": 82, "base_count": 4}, actions=_hurry_actions())
+
+    selection = relevant([loud, apt], world, limit=1)
+
+    assert [d.id for d in selection.selected] == ["apt"]
+
+
+def test_expired_directives_are_never_selected() -> None:
+    selection = relevant([saving(horizon_turn=30)], view(turn=35, metrics={"energy_reserves": 82}))
+    assert selection.selected == []
+
+
+def test_the_store_finds_directives_by_the_entity_they_name() -> None:
+    """The reverse index: given the project a base is considering, find the plans about it."""
+    store = DirectiveStore()
+    store.add(
+        [
+            saving(id="transit", entities=["fac:the-planetary-transit-system"]),
+            saving(id="weather", entities=["fac:the-weather-paradigm"]),
+        ]
+    )
+
+    found = store.for_entities(["fac:the-weather-paradigm"])
+    assert [d.id for d in found] == ["weather"]
+    assert store.for_entities([]) == []
+
+
+def test_every_directive_has_at_least_one_graph_pointer() -> None:
+    """The standing rule that a node without a datalinks pointer is a defect. It holds here by
+    construction — ``metric`` is mandatory and names the resource — so ``entities`` is the
+    optional half that ties a directive to the specific thing it is for."""
+    bare = saving()
+    assert bare.entities == []
+    assert bare.metric in VOCABULARY
+
+
+# --- multi-hop: from the resource spent to the strategy it serves ------------
+
+
+def test_spending_a_resource_reaches_the_strategy_behind_it() -> None:
+    """The chain the mechanism is for, end to end.
+
+    Hurrying spends energy credits; that pulls the directive saving them; that directive names a
+    secret project; and the project is named by a higher-order plan. None of the last three are
+    connected to this base's decision by anything a single-hop lookup could see, yet they are
+    exactly what makes 81 credits expensive.
+    """
+    saving_for = saving(
+        id="fund-weather-paradigm",
+        metric="energy_reserves",
+        entities=["fac:the-weather-paradigm"],
+    )
+    strategy = saving(
+        id="terraform-victory",
+        metric="base_count",
+        comparator="increase",
+        target=None,
+        baseline=4.0,
+        priority=8,
+        entities=["fac:the-weather-paradigm"],
+    )
+    noise = _many(30)
+
+    world = view(metrics={"energy_reserves": 82, "base_count": 4}, actions=_hurry_actions())
+    selection = relevant([*noise, saving_for, strategy], world, limit=4)
+
+    reached = {h.directive.id: h for h in selection.hits}
+    assert "fund-weather-paradigm" in reached
+    assert "terraform-victory" in reached
+
+    # And the path is legible, because the path is the argument.
+    assert reached["fund-weather-paradigm"].hop == 0
+    assert "energy_reserves" in reached["fund-weather-paradigm"].via
+    assert reached["terraform-victory"].hop == 1
+    assert reached["terraform-victory"].via == "fund-weather-paradigm → fac:the-weather-paradigm"
+
+
+def test_the_walk_does_not_expand_through_shared_metrics() -> None:
+    """Half a plan hangs off ``base_count``. Following metrics transitively would turn a targeted
+    walk into a broadcast with extra steps."""
+    hub = saving(id="hub", metric="energy_reserves", entities=["fac:the-weather-paradigm"])
+    # Shares a metric with the hop-1 directive but names no shared entity.
+    stranger = saving(id="stranger", metric="base_count", entities=["fac:the-command-nexus"])
+    linked = saving(id="linked", metric="base_count", entities=["fac:the-weather-paradigm"])
+
+    world = view(metrics={"energy_reserves": 82}, actions=_hurry_actions())
+    selection = relevant([hub, linked, stranger], world, limit=2)
+
+    ids = [h.directive.id for h in selection.hits]
+    assert ids == ["hub", "linked"]
+    assert "stranger" in selection.dropped
+
+
+def test_the_shortest_path_to_a_directive_is_the_one_reported() -> None:
+    """A directive reachable both directly and round the houses should read as directly
+    relevant — the shortest route is both the strongest and the clearest."""
+    both = saving(id="both", metric="energy_reserves", entities=["fac:the-weather-paradigm"])
+    other = saving(id="other", metric="energy_reserves", entities=["fac:the-weather-paradigm"])
+
+    world = view(metrics={"energy_reserves": 82}, actions=_hurry_actions())
+    selection = relevant([both, other], world)
+
+    assert {h.hop for h in selection.hits} == {0}
+
+
+def test_the_hop_path_travels_onto_the_status_the_model_sees() -> None:
+    """Provenance that stops at the selector is provenance the decision never gets."""
+    saving_for = saving(id="fund", metric="energy_reserves", entities=["fac:the-weather-paradigm"])
+    strategy = saving(id="strat", metric="base_count", entities=["fac:the-weather-paradigm"])
+    world = view(metrics={"energy_reserves": 82, "base_count": 4}, actions=_hurry_actions())
+
+    statuses = evaluate(relevant([saving_for, strategy], world).hits, world)
+
+    by_id = {s.directive.id: s for s in statuses}
+    assert by_id["fund"].hop == 0
+    assert by_id["strat"].via == "fund → fac:the-weather-paradigm"
+
+
+def test_hops_can_be_bounded() -> None:
+    """Beyond a couple of steps the connection is too weak to be worth prompt space."""
+    a = saving(id="a", metric="energy_reserves", entities=["e1"])
+    b = saving(id="b", metric="base_count", entities=["e1", "e2"])
+    c = saving(id="c", metric="pop_total", entities=["e2"])
+    world = view(metrics={"energy_reserves": 82}, actions=_hurry_actions())
+
+    one = relevant([a, b, c], world, hops=1, limit=3)
+    two = relevant([a, b, c], world, hops=2, limit=3)
+
+    assert {h.directive.id: h.hop for h in one.hits if h.hop <= 1}.keys() >= {"a", "b"}
+    assert [h.hop for h in two.hits if h.directive.id == "c"] == [2]
