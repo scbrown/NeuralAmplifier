@@ -32,6 +32,44 @@ every one — the point is to make an omission deliberate rather than accidental
 | 7 | **Fairness** | Which handicaps are active right now? | Adapter (computed) |
 | 8 | **Exclusions** | What must Claude *not* see? | Adapter (fog gate) |
 
+Who supplies what, and where each part lands:
+
+```mermaid
+flowchart LR
+    subgraph engine["the engine · authoritative"]
+        E1["1 Subject<br/>2 Action space<br/>3 Local context<br/>4 Strategic context<br/>5 Temporal context<br/>7 Fairness"]
+        E2["8 Exclusions<br/><i>what must NOT be sent</i>"]
+    end
+
+    ADP["adapter<br/>serialises · enumerates · fog-gates"]
+    WV["world_view"]
+    ORCH["orchestrator"]
+    Q["6 Grounding<br/>Quipu datalinks"]
+    G["guard advisories<br/>Hank"]
+    BRAIN["the brain"]
+    OUT["Orders<br/>action_id + cited"]
+
+    E1 --> ADP
+    E2 -->|"omit, and record the omission"| ADP
+    ADP --> WV
+    WV --> ORCH
+    Q -->|"facts, id-first"| ORCH
+    G --> ORCH
+    ORCH --> BRAIN
+    BRAIN --> OUT
+    OUT -.->|"cited vs offered = utilisation"| ORCH
+
+    classDef auth fill:#1a237e,stroke:#5c6bc0,color:#fff
+    classDef know fill:#4a148c,stroke:#ba68c8,color:#fff
+    classDef excl fill:#b71c1c,stroke:#ef9a9a,color:#fff
+    class E1,ADP auth
+    class Q,G know
+    class E2 excl
+```
+
+Categories 1–5 and 7 come from the engine through the adapter. Category 6 is the
+*orchestrator's* — an adapter never sets `grounding`. Category 8 is the one that subtracts.
+
 ### 1.1 The two that get skipped, and why they matter most
 
 **Category 2 is not "the list of legal moves."** A list of names is nearly useless: `Formers` vs

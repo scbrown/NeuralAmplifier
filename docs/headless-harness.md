@@ -230,6 +230,29 @@ engine perform it, then swap the state:
                           display up.
 ```
 
+```mermaid
+sequenceDiagram
+    autonumber
+    participant H as harness
+    participant D as thinker.dll
+    participant E as terranx.exe
+
+    H->>E: launch with -na-autoload SAVEPATH
+    E-->>D: window messages start
+    Note over D: wait 12s for startup to FINISH.<br/>Firing earlier let the engine's own<br/>startup draw over the session we<br/>had just entered — a flawless log<br/>and a main menu.
+    D->>E: PostMessage click QUICK START
+    Note over D,E: opens NO file picker.<br/>Modal dialogs freeze every thread<br/>we have, so "never open one" is a<br/>hard constraint, not a preference.
+    E-->>D: PLANETFALL intro appears
+    D->>E: PostMessage VK_RETURN
+    Note over D: a keystroke, not a click —<br/>no coordinates to break
+    E-->>D: GameHalted clears · session live
+    D->>E: mod_load_daemon(path, 0)
+    D->>E: call 0x5FD120
+    D->>D: GameHalted = 0
+    Note over D,E: works here precisely because we are<br/>already in a game with the display up
+    D-->>H: na-observations.jsonl · turn 35, ok
+```
+
 Step 3 is the engine's own code, copied from the replay path at `0x5ADCD0`:
 
 ```c
@@ -257,6 +280,36 @@ section exists so the next attempt starts from evidence instead of repeating the
 four dead ends.
 
 **There are three distinct UI layers, and they behave completely differently.**
+
+```mermaid
+flowchart TB
+    subgraph proc["inside terranx.exe"]
+        PUMP["normal window loop<br/>ModWinProc runs"]
+        MODAL["modal dialog<br/>own nested pump"]
+        START["startup screen<br/>START GAME · QUICK START · LOAD GAME"]
+        MAPUI["in-game map UI"]
+        MENUBAR["in-game menu bar<br/>Menu class 0x5FB100"]
+    end
+
+    DLL["our DLL<br/>command channel + worker thread"]
+    EXT["external tooling<br/>xdotool · XTEST · window messages"]
+
+    PUMP --> START
+    PUMP --> MENUBAR
+    DLL -->|"PostMessage · WORKS"| START
+    DLL -->|"PostMessage · WORKS"| MENUBAR
+    DLL -.->|"ignored — reads DirectInput"| MAPUI
+    DLL -.->|"our threads FREEZE, incl. workers"| MODAL
+    EXT -.->|"never arrives"| proc
+
+    classDef ok fill:#1b5e20,stroke:#66bb6a,color:#fff
+    classDef no fill:#b71c1c,stroke:#ef9a9a,color:#fff
+    class START,MENUBAR,DLL,PUMP ok
+    class MODAL,MAPUI,EXT no
+```
+
+Green is reachable, red is not. The startup screen was never the problem; conflating it with
+modal dialogs is what cost the time.
 
 | Layer | Pumped by | Can we drive it? |
 |---|---|---|

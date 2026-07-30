@@ -83,6 +83,43 @@ bulk re-sync. The posture mirrors Quipu's `code-entities.ttl` and Hank's `code-e
 **permissive on domain shape, strict on the provenance/tier predicates** — the tag is the reader's
 only signal of trust.
 
+### The unit design space, as modelled
+
+The predefined `#UNITS` list is 26 rows. What the rules permit is a *composition*, which is why
+the parts are first-class nodes rather than string literals on a design:
+
+```mermaid
+flowchart LR
+    subgraph parts["component classes · all carry smac:sourcedFrom"]
+        CH["Chassis · 9<br/>speed, triad, cargo"]
+        WP["Weapon · 26<br/>rating, cost"]
+        AR["Armor · 14<br/>rating, cost"]
+        RC["Reactor · 4<br/>power"]
+        AB["Ability · 29<br/>effectText, costModifier"]
+    end
+
+    DESIGN["a unit design"]
+    PRE["Technology · 88"]
+
+    CH -->|"hasChassis"| DESIGN
+    WP -->|"hasWeapon"| DESIGN
+    AR -->|"hasArmor"| DESIGN
+    RC -->|"reactor"| DESIGN
+    AB -->|"up to two"| DESIGN
+
+    parts -.->|"every part: requiresTech"| PRE
+
+    DESIGN --> SPACE["9 x 26 x 14 x 4 x 436<br/><b>4,775,400</b> upper bound<br/>~393k with one ability<br/>vs 26 predefined rows"]
+
+    classDef part fill:#1a237e,stroke:#5c6bc0,color:#fff
+    classDef out fill:#4a148c,stroke:#ba68c8,color:#fff
+    class CH,WP,AR,RC,AB part
+    class SPACE out
+```
+
+`smac:hasChassis chas:infantry` is a hop to speed, triad and prerequisite tech. The literal
+`"Infantry"` it replaced was a dead end.
+
 ## The learned-memory model
 
 Learned knowledge is written via `quipu_episode` (structured nodes/edges + provenance +
@@ -217,6 +254,58 @@ contradicts once its confidence crosses threshold). **Budget discipline:** the s
 is cached and paid once; per-turn calls are
 bounded to action-space scope; under budget, drop tactics before rules (rules are correctness,
 tactics are optimization); bound deny-repair retries.
+
+The flow, with what actually runs today marked:
+
+```mermaid
+flowchart TB
+    WV["world_view + deltas<br/>POST /decide"]
+
+    subgraph ingest["2 · Hank ingest"]
+        HOT["hot per-faction state graph<br/>COW overlay, in-memory"]
+    end
+
+    subgraph retrieval["3 · Quipu retrieval"]
+        AS["action-space grounding<br/>one batched query over<br/>exactly this turn's actions"]
+        BRIEF["static briefing<br/>cached once per game"]
+        CTX["quipu_context<br/>needs an embedding model"]
+        TAC["hybrid tactic search"]
+    end
+
+    BRAIN["4 · LLM proposes orders<br/>constrained to action_space<br/>reports Orders.cited"]
+    WHATIF["5 · Hank what-if<br/>speculate, optional revise"]
+    GUARD["6 · Hank guard<br/>CitationGuard: warn only"]
+    VALID["7 · engine validation<br/>in the adapter"]
+    REC["decision record<br/>+ knowledge block"]
+
+    WV --> HOT
+    WV --> AS
+    WV --> BRIEF
+    WV --> CTX
+    WV --> TAC
+    AS --> BRAIN
+    BRIEF --> BRAIN
+    CTX --> BRAIN
+    TAC --> BRAIN
+    HOT --> WHATIF
+    BRAIN --> WHATIF
+    WHATIF --> GUARD
+    BRAIN --> GUARD
+    GUARD --> VALID
+    VALID --> REC
+    AS -. "fact_ids offered" .-> REC
+    GUARD -. "verdict + advisories" .-> REC
+
+    classDef live fill:#1b5e20,stroke:#66bb6a,color:#fff
+    classDef partial fill:#5d4037,stroke:#ffb74d,color:#fff
+    classDef absent fill:#37474f,stroke:#78909c,color:#cfd8dc,stroke-dasharray: 4 3
+    class WV,AS,BRAIN,VALID,REC live
+    class GUARD partial
+    class HOT,BRIEF,CTX,TAC,WHATIF absent
+```
+
+Green runs. Amber runs partially — the guard exists with exactly one policy. Dashed is not built:
+everything in that state either needs Hank's hot state graph or an embedding model.
 
 ### What is wired today
 
