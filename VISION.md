@@ -102,6 +102,66 @@ support both.
               deterministic tier lives here, per engine
 ```
 
+### 5.1 Systems and datastores
+
+Four systems, and every persistent thing each one owns. Solid boxes exist and run today;
+dashed is designed but unbuilt.
+
+```mermaid
+flowchart LR
+    ALPHA[("alphax.txt<br/>the rulebook")]
+    TTL[("alphax.ttl<br/>3579 facts, tier-tagged")]
+    QDB[("​.quipu/na.db<br/>bitemporal · SHACL tiers")]
+
+    ALPHA -->|"just ingest"| TTL -->|"quipu knot"| QDB
+    QDB --- QS["quipu-server :3030"]
+
+    subgraph GAME["game host · Wine + Xvfb"]
+        direction TB
+        TX["terranx.exe<br/>Alien Crossfire v2.0"]
+        DLL["<b>thinker.dll</b> · our fork<br/>hooks decisions · serialises<br/>world views · applies choices"]
+        TX <--> DLL
+    end
+
+    subgraph NA["<b>Neural Amplifier</b> orchestrator"]
+        direction TB
+        API["POST /decide"]
+        CORE["contract · validate · fog<br/>fairness · knowledge · decisions"]
+        API --> CORE
+    end
+
+    DLL <==>|"world view / orders<br/><b>the CONTRACT</b>"| API
+    QS <-->|"facts, id-first<br/>+ sourcedFrom"| CORE
+    CORE <-->|"orders + cited"| BRAIN["Claude<br/>the brain"]
+    CORE --> GUARD["CitationGuard<br/>stand-in for Hank"]
+    CORE -.->|"proposed orders"| HANK["<b>Hank</b> · POST /guard<br/>+ in-memory board graph<br/>COW overlay, per faction"]
+
+    DLL --> OBS[("na-observations.jsonl")]
+    DLL --> SAV[("saves/auto/*.sav")]
+    CMD[("na-command<br/>na-input")] --> DLL
+    MAN[("fixtures/smac/*.manifest")] -.->|"just game verify"| GAME
+    CORE --> DLOG[("decisions.jsonl<br/>record of truth")]
+    CORE --> WVS[("worldviews/<br/>replay bytes")]
+
+    classDef live fill:#1b5e20,stroke:#66bb6a,color:#fff
+    classDef store fill:#0d47a1,stroke:#64b5f6,color:#fff
+    classDef todo fill:#37474f,stroke:#78909c,color:#cfd8dc,stroke-dasharray: 4 3
+    class TX,DLL,API,CORE,BRAIN,GUARD,QS live
+    class OBS,CMD,SAV,MAN,ALPHA,TTL,DLOG,WVS,QDB store
+    class HANK todo
+```
+
+Three things the diagram is meant to make obvious:
+
+- **The contract is the only link between the game and the brain.** `thinker.dll` never learns
+  what a model is; the orchestrator never learns which engine it is driving.
+- **`alphax.txt` is the source of the knowledge plane, not just game data.** It becomes the
+  Quipu graph, which is why a mod's copy presented as canonical is a correctness failure and not
+  a tidiness one.
+- **Hank is entirely unbuilt.** Its guard role is currently a local stand-in that checks citation
+  integrity; nothing yet reasons over board state, because the hot graph it would reason over
+  does not exist.
+
 - **Orchestrator (Python + Claude Agent SDK, MIT).** Owns everything LLM-shaped: prompt
   assembly, tool-use loops, retries, streaming, secrets, memory, move validation, and safe
   degradation. Speaks only the contract.

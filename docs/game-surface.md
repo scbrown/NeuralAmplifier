@@ -69,6 +69,46 @@ Per-unit orders fire separately as the engine iterates units (`mod_enemy_turn`
 
 ---
 
+## 2.5 Instrumentation status — measured 2026-07-29
+
+**3 of 77 surfaces emit a decision record.** The registry is frozen at 77
+(`orchestrator/surfaces.py`), partitioned by contract scope: `base` 25, `unit` 32, `turn` 20.
+
+| Surface | Scope | Seam | Action space | Probe |
+|---|---|---|---|---|
+| `base.production` | base | `mod_base_build` | engine-authoritative, costed in minerals, roles + effects | `observe <base_id>` |
+| `faction.tech` | turn | `mod_tech_selection` | `tech_avail`, with the AI's own valuation weights | `observe-tech <faction_id>` |
+| `faction.se` | turn | `mod_social_ai` | legal (field, model) pairs with effect deltas | `observe-se <faction_id>` |
+
+All three are **observation only** — Thinker's choice still executes. `apply <base_id>
+<action_id>` closes the loop for `base.production`, validated against the engine's own
+availability tests, so an illegal order is rejected rather than applied.
+
+**Every new surface ships a side-effect-free probe.** In-game input cannot be driven at all
+([headless-harness.md](headless-harness.md) §3.0.2), so a surface that fires every five to ten
+turns is otherwise unverifiable without playing until it happens. A probe calls the serialiser
+and never the decision function.
+
+### What the 74 remaining actually divide into
+
+The gap is not uniform, and the interesting split is not by scope:
+
+- **21 surfaces the native AI never decides at all** (`NO_AI_PATH`) — `base.abandon`,
+  `council.vote`, `base.retool`, `diplo.base_swap` and the rest. These have no deterministic
+  tier to fall back to, which cuts both ways: an LLM adds capability the engine genuinely
+  lacks, and there is no native answer to degrade to when the brain is unavailable. Anything
+  moved here needs its fallback designed, not inherited.
+- **32 `unit`-scope surfaces**, most of which should stay deterministic on volume grounds —
+  see the `unit.move` entry in [decision-inputs.md](decision-inputs.md) §5 for why, and why a
+  revisit should decide *operations* rather than tile moves.
+- **The rest** are base and faction decisions with an existing native path, so they can be
+  instrumented incrementally with a safe fallback already in place.
+
+One known limitation, recorded because it is invisible otherwise: **`faction.se` never fires for
+a human-slot faction.** `mod_social_ai` returns immediately for humans, so in the recommended
+Mode B+ configuration (human slot, `manage_player_bases`) it covers AI factions only. Routing a
+human slot's SE decision needs a different hook, because that choice is made through the UI.
+
 ## 3. Coverage matrix
 
 Legend — **AI**: ✅ engine/Thinker path exists · ⚠️ exists but asymmetric · ❌ human-dialog only.
