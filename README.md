@@ -125,6 +125,70 @@ brain never knows which game it's driving — it speaks one [contract](docs/cont
 Full design — the contract Claude speaks, the two-engine strategy, and the roadmap — lives in
 **[VISION.md](VISION.md)**.
 
+## 📊 Coverage & Plan
+
+**4 of 77 decision surfaces are instrumented.** The registry is frozen at 77
+(`orchestrator/surfaces.py`) and partitioned by contract scope: `base` 25, `unit` 32, `turn` 20.
+
+| Surface | Scope | Status |
+|---|---|---|
+| `base.production` | base | Observed · action space costed in minerals, with unit roles and facility effects. `apply` closes the loop |
+| `faction.tech` | turn | Observed · researchable techs with the engine's own AI valuation weights |
+| `faction.se` | turn | Observed · legal (field, model) pairs with effect deltas, grounded from `#SOCIO` |
+| `base.hurry` | base | Observed · credit cost and turns saved; unaffordable option omitted |
+
+Every surface ships a **side-effect-free probe** (`observe`, `observe-tech`, `observe-se`,
+`observe-hurry`) because in-game input cannot be driven at all, so a decision that fires every five
+to ten turns is otherwise unverifiable without playing until it happens.
+
+All four are **observation only** — the engine's own choice still executes. That is deliberate: it
+makes each surface falsifiable on its own before anything depends on it.
+
+### The plan, in dependency order
+
+```mermaid
+flowchart LR
+    A["<b>1 · instrument</b><br/>emit a record per decision<br/>engine-authoritative action space<br/>+ a probe"]
+    B["<b>2 · ground</b><br/>Quipu facts, id-first<br/>measure utilisation"]
+    C["<b>3 · close the loop</b><br/>apply the brain's choice<br/>native answer as fallback"]
+    D["<b>4 · prove it</b><br/>A/B against the<br/>deterministic tier"]
+
+    A --> B --> C --> D
+
+    subgraph nofb["surfaces with NO native AI path · 21 of 77"]
+        E["<b>0 · build the deterministic tier first</b><br/>in Thinker, as a normal mod feature"]
+    end
+    E --> A
+
+    classDef done fill:#1b5e20,stroke:#66bb6a,color:#fff
+    classDef part fill:#5d4037,stroke:#ffb74d,color:#fff
+    classDef todo fill:#37474f,stroke:#78909c,color:#cfd8dc,stroke-dasharray: 4 3
+    class A done
+    class B,C part
+    class D,E todo
+```
+
+**Step 0 is the one that is easy to skip and expensive to skip.** 21 of the 77 surfaces
+(`surfaces.NO_AI_PATH`) are decisions the native AI *never makes* — `base.abandon`,
+`council.vote`, `base.retool`, `diplo.base_swap`. Putting an LLM straight onto those breaks
+[invariant 9](AGENTS.md): *degrade safely.* There is no native choice to fall back to when the
+model is slow, over budget, or wrong, so a failure there stalls or corrupts a turn rather than
+quietly reverting to a competent default.
+
+So those surfaces get the deterministic tier **first** — built in the Thinker fork as an ordinary
+mod feature, the way Thinker already improves production and movement AI — and only then the LLM
+tier on top of it. That also means the work is independently useful: a better deterministic tier
+improves the game whether or not a brain is attached, and it gives the LLM something to be measured
+*against* rather than merely compared to.
+
+The remaining 32 `unit`-scope surfaces mostly stay deterministic on volume grounds — see
+[docs/decision-inputs.md](docs/decision-inputs.md) §5 for why, and why revisiting them should mean
+deciding *operations* rather than tile moves.
+
+Detail, including the seam and action-space quality per surface:
+**[docs/game-surface.md](docs/game-surface.md) §2.5**. What each surface needs in its world view:
+**[docs/decision-inputs.md](docs/decision-inputs.md)**.
+
 ## 🧠 Knowledge & Guardrails
 
 Training memory knows Alpha Centauri *broadly* — but not well enough to distinguish canonical
