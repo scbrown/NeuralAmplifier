@@ -40,11 +40,17 @@ tmp/lastmap.*
 
 # Agent runtime / session state
 .runtime/
-# .claude/settings.json IS read by cloud sessions (repo hooks carry over,
-# user-level ~/.claude does not), so it is tracked. Everything else under
-# .claude/ is local state.
+# .claude/settings.json and .claude/skills/ ARE read by cloud sessions (repo hooks
+# and project skills carry over, user-level ~/.claude does not), so both are
+# tracked. Everything else under .claude/ is local state.
+#
+# Skills belong in the repo for the same reason settings.json does, and for one
+# more: a skill is how a harness learns to play this game. Leaving it untracked
+# means a fresh checkout has the MCP surface and no instructions for using it —
+# which is exactly the half that cannot be inferred from the code.
 .claude/*
 !.claude/settings.json
+!.claude/skills/
 .logs/
 state.json
 CLAUDE.md
