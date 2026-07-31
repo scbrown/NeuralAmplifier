@@ -59,7 +59,7 @@ def _build_retriever() -> object | None:
 
 
 def build_guard(retriever: object | None) -> object | None:
-    """The citation-integrity guard, on whenever grounding is.
+    """The policy guards: state preconditions always, citation integrity whenever grounding is.
 
     Public because ``Orchestrator`` takes the guard as an argument and does not default it, so
     every caller that builds an orchestrator itself decides independently whether to instrument
@@ -76,13 +76,20 @@ def build_guard(retriever: object | None) -> object | None:
     Set NA_HANK_GUARD=0 to disable. When Hank's own POST /guard lands it replaces this, and
     the verdict shape is already what that surface returns.
     """
-    if retriever is None:
-        return None
     if os.environ.get("NA_HANK_GUARD", "1").lower() in {"0", "false", "no"}:
         return None
-    from .hank import CitationGuard
+    from .hank import CitationGuard, GuardChain, StateGuard
 
-    return CitationGuard()
+    # StateGuard runs with or without retrieval. Citation integrity is meaningless without
+    # facts to cite, but "can this order actually be paid for out of current state" is a
+    # question every decision has, grounded or not — and it is the one the agent-brain pivot
+    # made urgent, because an agent holds beliefs across a whole game where a model call held
+    # none. Gating it on the retriever would have left it off in exactly the ungrounded runs
+    # where the model has least to check itself against.
+    guards: list[object] = [StateGuard()]
+    if retriever is not None:
+        guards.append(CitationGuard())
+    return GuardChain(*guards)
 
 
 def _otel_requested() -> bool:
@@ -139,7 +146,21 @@ def create_app(
 
     @app.post("/decide", response_model=Orders)
     def decide(world_view: WorldView) -> Orders:
-        return orchestrator.decide(world_view).orders
+        result = orchestrator.decide(world_view)
+        # Report back to whoever answered this, if anyone did. The agent asked for one thing;
+        # validation and the policy guard sit between that and what ran, and an agent told its
+        # stripped choice was "applied" has no reason to repair it.
+        publish = getattr(orchestrator.brain, "publish_outcome", None)
+        if publish is not None:
+            publish(
+                {
+                    "applied": [c.action_id for c in result.orders.choices],
+                    "degraded": result.record.degraded,
+                    "degrade_reason": result.record.degrade_reason,
+                    "advisories": list(result.record.knowledge.advisories),
+                }
+            )
+        return result.orders
 
     # ---------------------------------------------------------------- agent side
     #
@@ -201,10 +222,32 @@ def create_app(
                 )
             except NotClaimable as exc:
                 raise HTTPException(409, str(exc)) from exc
+
+            # Wait for the loop to say what it actually did. Short, because it runs immediately
+            # after the answer is handed over — and bounded, because a submit call that hangs
+            # leaves an agent unable even to retry.
+            outcome = queue.await_outcome(answered, timeout=10.0)
+            if outcome is None:
+                return {
+                    "decision_id": answered.id,
+                    "submitted": action_id,
+                    "status": "submitted; the outcome did not arrive in time to report",
+                }
+            applied = outcome.get("applied") or []
+            if action_id in applied:
+                status = "applied to the game"
+            elif applied:
+                status = f"NOT applied — the guard replaced it with {', '.join(applied)}"
+            else:
+                status = "NOT applied — nothing survived validation and the guard"
             return {
                 "decision_id": answered.id,
-                "accepted": action_id,
-                "status": "applied to the game",
+                "submitted": action_id,
+                "applied": applied,
+                "status": status,
+                "degraded": outcome.get("degraded"),
+                "degrade_reason": outcome.get("degrade_reason"),
+                "advisories": outcome.get("advisories") or [],
             }
 
         @app.post("/agent/waiting")

@@ -182,7 +182,21 @@ FACTION_TECH = {
     "applied": "native",
 }
 
-ALL_RECORDS = [BASE_PRODUCTION, BASE_HURRY, FACTION_TECH]
+#: The adapter caches one decision per base-turn and replays it for the engine's later calls.
+#: When the board moved enough that the cached item is no longer buildable, the replay applies
+#: the deterministic tier's answer instead — and says so. Before this record existed the log
+#: asserted the LLM's choice had been applied while the base quietly built something else.
+BASE_PRODUCTION_SUPERSEDED = BASE_PRODUCTION | {
+    "call_seq": 2,
+    "tier": "deterministic",
+    "applied": "native",
+    "applied_item": -4,
+    "applied_item_name": "Recycling Tanks",
+    "superseded_item": 0,
+    "fallback_reason": "cached choice became illegal before replay",
+}
+
+ALL_RECORDS = [BASE_PRODUCTION, BASE_HURRY, FACTION_TECH, BASE_PRODUCTION_SUPERSEDED]
 
 
 @pytest.mark.parametrize("record", ALL_RECORDS, ids=[r["surface_id"] for r in ALL_RECORDS])
@@ -296,3 +310,20 @@ def test_applied_item_is_recorded_alongside_the_native_choice() -> None:
     assert BASE_PRODUCTION["tier"] == "llm"
     assert BASE_PRODUCTION["native_choice_name"] == "Recycling Tanks"
     assert BASE_PRODUCTION["applied_item_name"] == "Colony Pod"
+
+
+def test_a_superseded_replay_says_what_actually_ran() -> None:
+    """A decision that was overtaken by the board must not read as one that was applied.
+
+    The adapter re-asks the engine's own availability tests before replaying a cached choice.
+    If the answer changed, the deterministic tier's item runs — and both halves have to survive
+    into the record, or the log claims the brain drove a build it did not.
+    """
+    record = BASE_PRODUCTION_SUPERSEDED
+    assert record["tier"] == "deterministic"
+    assert record["applied_item"] == record["native_choice"]
+    assert record["superseded_item"] != record["applied_item"]
+    assert "illegal" in record["fallback_reason"]
+    # And it is distinguishable from the original decision, which is the whole point.
+    assert record["call_seq"] > BASE_PRODUCTION["call_seq"]
+    assert BASE_PRODUCTION["tier"] == "llm"

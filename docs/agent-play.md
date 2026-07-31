@@ -164,7 +164,58 @@ Optional nudge — only if the agent already has a pane:
 NA_TMUX_TARGET=smac:brain   # a pane the AGENT created, not one we create
 ```
 
-## 7. What this does not change
+## 7. Is the game still in the state the decision assumed?
+
+Blocking made one staleness problem go away and created two others.
+
+It went away *within* a decision: the engine is single-threaded and sitting in
+`mod_base_build`, so while the agent thinks, nothing moves. The snapshot cannot drift.
+
+The two that appeared:
+
+1. **The adapter replays a cached decision.** `mod_base_build` fires roughly twice per base per
+   turn and each call applies its own answer, so the adapter asks once (`call_seq == 1`) and
+   replays. By the replay the engine has processed other bases, spent minerals, possibly
+   finished a project. The item may no longer be buildable.
+2. **The agent has a memory now.** A Claude Code session persists across a whole game, so it can
+   carry a belief about a base from twenty turns ago and reason from that instead of the world
+   view in front of it. A stateless model call could not do this — the failure mode is new,
+   and it arrived with the inversion.
+
+Two checks, at the two places the two problems live.
+
+**In the adapter, before a replay.** `na_item_is_legal` re-runs the engine's own availability
+tests. If the cached choice no longer passes, the deterministic tier's item runs — and a record
+is written saying so, carrying `superseded_item` and a `fallback_reason`. A replay that applies
+what was decided writes nothing (one decision, one record); a replay that *diverges* must,
+because without it the log asserted "llm chose X, applied X" while the base quietly built
+something else and nothing anywhere could tell you.
+
+**In the orchestrator, at the guard seam.** `StateGuard` (`hank.py`) checks a chosen order
+against the state it is about to be applied to:
+
+- **Unaffordable is denied.** An action declaring `energy_reserves: -81` against a reported 82
+  is fine; against 40 it is stripped. Still legal by the engine's list, no longer payable.
+- **A violated directive is a warning, never a denial.** Priorities exist so a decision can
+  *outrank* a plan; denying would make directives absolute, which the design explicitly rejects.
+- **An unreported metric is uncheckable, never violated.** Inventing a baseline and denying a
+  legal move on the strength of it turns a gap in the adapter into a wrong answer in the game.
+
+### What this is not
+
+It is not Hank. [policy-harness.md](policy-harness.md) describes roles (c), (d) and (e) — a hot
+board graph, Quipu-governed gameplay policies evaluated against it, and speculative what-if — and
+**none of it is built**. It is gated on Hank Phase 4 (Phase 3, multi-tenancy, has not started)
+and on non-code fact ingestion that does not exist: every Hank node today anchors to a
+`file:line` span, and a board node needs to anchor to a coordinate.
+
+So `StateGuard` reasons only over numbers the world view already declares. That is less than
+Hank will do and it is not nothing — every check is arithmetic on figures the adapter published,
+so a denial is a fact rather than a guess. It sits behind the `Guard` protocol at the seam Hank
+will occupy, composed by `GuardChain`, so the verdict shape and the record do not change when
+the real thing lands.
+
+## 8. What this does not change
 
 - **The contract.** Same world view, same orders (`contract.md`).
 - **Every invariant except 9.** The engine stays authoritative, the orchestrator still speaks

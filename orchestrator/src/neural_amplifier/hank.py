@@ -10,10 +10,14 @@ here:
   stands behind it, and a guard failure that silently blocked every move would stall a game to
   enforce a policy nobody could read.
 
-What lands here first is citation integrity, because it is the one policy that needs no hot
-game-state graph (role (d), not built) — only the facts that were offered and the graph they
-came from. It exists because grounding is otherwise unfalsifiable: a decision that cites
-nothing and a decision that cites a fact nobody supplied both look like reasoning.
+Two policies live here, and both are chosen for the same reason: they need no hot game-state
+graph (role (d), which is not built). :class:`CitationGuard` needs only the facts that were
+offered; :class:`StateGuard` needs only numbers the world view already declares.
+
+Citation integrity exists because grounding is otherwise unfalsifiable: a decision that cites
+nothing and a decision that cites a fact nobody supplied both look like reasoning. State
+checking exists because the agent-brain pivot gave the brain a memory and the adapter a replay,
+and both can act on a board that has moved.
 
 This is a local stand-in for Hank's ``POST /guard`` surface, not Hank itself. When that lands,
 the verdict shape and warn/deny semantics are already what it returns, so swapping the
@@ -133,3 +137,116 @@ def quipu_resolver(retriever: object, known: Iterable[str] | None = None) -> Res
     """
     ids = set(known or ())
     return lambda fact_id: fact_id in ids
+
+
+class StateGuard:
+    """Checks a chosen order against the state it is about to be applied to.
+
+    Role (c)'s other half, and the one the agent-brain pivot made urgent. While a model answered
+    in a couple of seconds with the game blocked, the board could not move between the snapshot
+    and the apply. Two things changed that:
+
+    * an agent takes as long as it likes, and a Claude Code session persists across a whole
+      game — so it can carry a *belief* about a base from twenty turns ago and reason from
+      memory rather than from the world view in front of it, which a stateless model call
+      could not do;
+    * the adapter caches one decision per base-turn and replays it for the engine's later
+      calls, and the board has genuinely moved on by then.
+
+    What it can check today is bounded, and the bound is worth stating: with no hot board graph
+    (role (d), not built) this reasons only over numbers the world view already declares. That
+    is less than Hank will do and it is not nothing — every check here is arithmetic on figures
+    the adapter published, so a failure is a fact rather than a guess.
+
+    Precedence is unchanged. ``action_space`` is the legality gate and runs first; this only
+    subtracts from what is already legal, and it never adds.
+    """
+
+    name = "state"
+
+    def rule(self, orders: Orders, world_view: WorldView) -> Ruling:
+        stripped: list[str] = []
+        advisories: list[str] = []
+        metrics = world_view.metrics or {}
+        by_id = {a.id: a for a in world_view.action_space}
+
+        for choice in orders.choices:
+            action = by_id.get(choice.action_id)
+            if action is None:
+                # validate() runs first and removes these, so reaching here means the two
+                # disagree. Not this guard's job to fix, and not its job to hide either.
+                continue
+            for metric, delta in (action.effects or {}).items():
+                current = metrics.get(metric)
+                if current is None or delta >= 0:
+                    # An unreported metric must read as *uncheckable*, never as satisfied.
+                    # Silence here is the honest outcome: the alternative is inventing a
+                    # baseline and denying a legal move on the strength of it.
+                    continue
+                projected = current + delta
+                if projected < 0:
+                    stripped.append(choice.action_id)
+                    advisories.append(
+                        f"{choice.action_id} spends {abs(delta):g} {metric} but only "
+                        f"{current:g} is available — the state moved since this was offered"
+                    )
+
+        # Directives are weighed, never obeyed. A standing plan losing to an urgent move is the
+        # mechanism working: priorities exist so a decision can outrank a plan rather than
+        # either ignoring it or treating it as law. So a violated directive is an advisory that
+        # lands on the record, and never a denial.
+        chosen = {c.action_id for c in orders.choices}
+        for tradeoff in world_view.tradeoffs or []:
+            if tradeoff.action_id in chosen and tradeoff.would_violate:
+                advisories.append(
+                    f"{tradeoff.action_id} breaks directive {tradeoff.directive_id} "
+                    f"(priority {tradeoff.directive_priority}): {tradeoff.metric} "
+                    f"{tradeoff.delta:+g} → {tradeoff.projected:g}"
+                )
+
+        if stripped:
+            return Ruling(
+                verdict="deny",
+                stripped=tuple(dict.fromkeys(stripped)),
+                advisories=tuple(advisories),
+                reason="order is unaffordable against current state",
+            )
+        return Ruling(verdict="allow", advisories=tuple(advisories))
+
+
+class GuardChain:
+    """Runs several guards and merges their rulings.
+
+    Deny wins. A chain in which one guard allows and another denies has denied — otherwise the
+    order of registration would silently decide policy, which is the kind of configuration bug
+    that is invisible until it matters.
+
+    Degradation propagates rather than being swallowed: if any guard was down, the ruling says
+    so, because a record that reports a clean pass from a guard that never ran is worse than
+    one that reports nothing.
+    """
+
+    name = "chain"
+
+    def __init__(self, *guards: object) -> None:
+        self.guards = [g for g in guards if g is not None]
+
+    def rule(self, orders: Orders, world_view: WorldView) -> Ruling:
+        stripped: list[str] = []
+        advisories: list[str] = []
+        reasons: list[str] = []
+        degraded = False
+        for guard in self.guards:
+            ruling = guard.rule(orders, world_view)  # type: ignore[attr-defined]
+            stripped.extend(ruling.stripped)
+            advisories.extend(ruling.advisories)
+            degraded = degraded or ruling.degraded
+            if ruling.reason:
+                reasons.append(ruling.reason)
+        return Ruling(
+            verdict="deny" if stripped else "allow",
+            stripped=tuple(dict.fromkeys(stripped)),
+            advisories=tuple(advisories),
+            degraded=degraded,
+            reason="; ".join(reasons) or None,
+        )

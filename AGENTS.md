@@ -91,6 +91,7 @@ changing the module — most of these look like ordinary plumbing and are not.
 | `fog.py` | Diplomacy-feed gating | The brain never sees a pact between factions it hasn't met |
 | `fairness.py` | The computed handicap ledger | `favours` is *derived*, never copied from a table — three entries flip side by difficulty |
 | `knowledge.py` | The Quipu/Hank seam | Knowledge degrades, never stalls; a dead guard **allows** |
+| `hank.py` | Policy guards at the seam Hank will occupy | Guards only subtract from what is already legal — never widen it; unreported is *uncheckable*, never violated |
 | `decisions.py` | The record + JSONL log | The record of truth, written before any exporter |
 | `telemetry.py` | Sink fan-out + OTel | The record is assembled **once**; layers are projections of one object |
 | `coverage.py` | Run health | `degrade_rate` and `fair_play` are measured, not asserted |

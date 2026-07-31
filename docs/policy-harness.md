@@ -1,5 +1,12 @@
 # Gameplay Policy Harness — Hot State, Guard & What-If
 
+> **Landed ahead of Hank:** a local `StateGuard` (`orchestrator/hank.py`) now runs the part of
+> role (c) that needs no board graph — it checks a chosen order's *declared* effects against the
+> metrics the world view reports, denying what current state cannot pay for and warning on a
+> violated directive. It sits behind the same `Guard` protocol, composed by `GuardChain`, so the
+> verdict shape and the decision record do not change when Hank's `POST /guard` replaces it. See
+> [agent-play.md](agent-play.md) §7 for why the agent-brain pivot made it urgent.
+>
 > **Status: design / architecture (pre-alpha), and net-new engineering.** These three roles
 > generalize Hank from a code-structure engine into a general in-memory fact graph + policy /
 > what-if harness over the live board. **Nothing here is built**, and it is gated twice: by Hank

@@ -92,7 +92,14 @@ def test_an_agent_answers_a_blocked_decision(agent_app) -> None:
         },
     )
     assert submitted.status_code == 200
-    assert submitted.json()["accepted"] == "facility:4"
+    # The submit result reports what *ran*, not what was asked for. Validation and the guard
+    # sit between the two, and an agent told its stripped choice was applied has no reason to
+    # repair it.
+    answered = submitted.json()
+    assert answered["submitted"] == "facility:4"
+    assert answered["applied"] == ["facility:4"]
+    assert answered["status"] == "applied to the game"
+    assert answered["degraded"] is False
 
     thread.join(timeout=5)
     assert not thread.is_alive(), "POST /decide never returned"
@@ -257,3 +264,50 @@ def test_the_decision_record_is_written_for_an_agent_answer(agent_app, tmp_path)
     # otherwise completes and looks green. An answered agent decision is not a fallback.
     assert record["degraded"] is False
     assert record["adherence_violations"] == 0
+
+
+def test_a_guard_denial_is_reported_back_to_the_agent() -> None:
+    """The agent has to learn that its choice did not run, and what did instead.
+
+    `hurry:now` declares it spends 81 energy_reserves and only 40 are reported, so it is legal
+    by the engine's action space and unpayable against current state. The StateGuard strips it.
+    Reporting "applied to the game" here would be the one lie this interface must never tell:
+    a model that believes it succeeded does not repair.
+    """
+    brain = AgentBrain(doorbell=Doorbell(target="", enabled=False), timeout=10)
+    client = TestClient(create_app(brain=brain))
+    results: dict = {}
+    unaffordable = {
+        "schema_version": "0.1",
+        "engine": "thinker",
+        "scope": "base",
+        "surface_id": "base.hurry",
+        "turn": 42,
+        "faction": "Gaians",
+        "metrics": {"energy_reserves": 40},
+        "action_space": [
+            {"id": "hurry:none", "action": "Do not hurry"},
+            {"id": "hurry:now", "action": "Hurry production", "effects": {"energy_reserves": -81}},
+        ],
+    }
+
+    def call() -> None:
+        results["body"] = client.post("/decide", json=unaffordable).json()
+
+    thread = threading.Thread(target=call, daemon=True)
+    thread.start()
+    claimed = _await_claim(client)
+
+    answered = client.post(
+        "/agent/submit",
+        json={"decision_id": claimed["decision_id"], "action_id": "hurry:now"},
+    ).json()
+    assert answered["submitted"] == "hurry:now"
+    assert "hurry:now" not in (answered["applied"] or [])
+    assert answered["status"].startswith("NOT applied")
+    assert answered["degraded"] is True
+
+    thread.join(timeout=5)
+    # And the game got the safe fallback rather than an order it could not pay for.
+    assert results["body"]["choices"][0]["action_id"] == "hurry:none"
+    assert results["body"]["degraded"] is True

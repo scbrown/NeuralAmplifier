@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import logging
 import os
+import threading
 
 from .brain import BrainError
 from .contract import Orders, WorldView
@@ -73,6 +74,11 @@ class AgentBrain:
         # value here — it is the documented way to say "wait forever" — and a default of None
         # would make the env var unreachable for anyone constructing this directly.
         self.timeout = _timeout_from_env() if timeout == -1.0 else timeout
+        # The pending decision this thread is currently blocked on. Thread-local because one
+        # FastAPI worker handles one decision at a time, and it is how the service hands the
+        # loop's *outcome* back to the agent that submitted it — the agent needs to learn that
+        # the guard stripped its choice, and only the caller of decide() ever sees that.
+        self._current = threading.local()
 
     def decide(self, world_view: WorldView) -> Orders:
         try:
@@ -89,10 +95,24 @@ class AgentBrain:
             # distinction is visible, so it is worth a line in the log rather than silence.
             log.info("no doorbell for %s; waiting for an agent to poll", pending.id)
 
+        self._current.pending = pending
         try:
             return self.queue.await_answer(pending, self.timeout)
         except Unanswered as exc:
             raise BrainError(str(exc)) from exc
+
+    def publish_outcome(self, outcome: dict[str, object]) -> None:
+        """Tell the agent what the decision loop actually did with its orders.
+
+        Called by the service once ``Orchestrator.decide`` has returned, so the agent's
+        ``submit_orders`` result reports what ran rather than what was asked for. Silent when
+        this thread was not driving an agent decision — a scripted or Claude run reaches the
+        same code path and has nobody to tell.
+        """
+        pending = getattr(self._current, "pending", None)
+        if pending is not None:
+            self.queue.publish(pending, outcome)
+            self._current.pending = None
 
 
 __all__ = ["AgentBrain", "DecisionQueue", "Doorbell", "NotClaimable"]

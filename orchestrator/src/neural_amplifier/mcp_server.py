@@ -22,6 +22,7 @@ without dropping a game.
 
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 from typing import Any
@@ -61,10 +62,11 @@ class OrchestratorClient:
             # than as a stack trace. A tool error the model cannot read is a tool error it
             # cannot recover from.
             detail = exc.read().decode(errors="replace")
-            try:
+            # FastAPI wraps its messages in {"detail": ...}; anything else (a proxy's HTML
+            # error page, say) is passed through as-is rather than discarded, because the
+            # model reading it is better served by an ugly message than by none.
+            with contextlib.suppress(ValueError, AttributeError):
                 detail = json.loads(detail).get("detail", detail)
-            except (ValueError, AttributeError):
-                pass
             raise AgentError(f"{exc.code}: {detail}") from exc
         except (error.URLError, TimeoutError, OSError) as exc:
             raise AgentError(f"orchestrator unreachable at {self.url}: {exc}") from exc
@@ -100,9 +102,7 @@ def build_server(client: OrchestratorClient) -> Any:
     except ModuleNotFoundError as exc:
         if (exc.name or "").split(".")[0] != "mcp":
             raise
-        raise SystemExit(
-            "the MCP server needs the 'mcp' extra: uv sync --extra mcp"
-        ) from exc
+        raise SystemExit("the MCP server needs the 'mcp' extra: uv sync --extra mcp") from exc
 
     server = MCPServer("neural-amplifier")
 

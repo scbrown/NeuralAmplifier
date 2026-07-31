@@ -61,7 +61,15 @@ class Pending:
     #: answered" rather than the indistinguishable "the brain returned nothing".
     reason: str | None = None
     claimed_by: str | None = None
+    #: What the decision loop actually did with the submitted orders, set once the loop has
+    #: run. Distinct from ``orders``, which is what the agent *asked* for: validation and the
+    #: policy guard sit between the two, and an order that was stripped must not be reported
+    #: back as applied. Telling an agent its choice landed when it did not is the one lie this
+    #: interface must never tell — it is the difference between a model that repairs and a
+    #: model that believes it already succeeded.
+    outcome: dict[str, object] | None = None
     _done: threading.Event = field(default_factory=threading.Event, repr=False)
+    _settled: threading.Event = field(default_factory=threading.Event, repr=False)
 
     def age_seconds(self) -> float:
         return time.monotonic() - self.created
@@ -187,7 +195,8 @@ class DecisionQueue:
             if pending is None:
                 why = self._settled.get(decision_id)
                 raise NotClaimable(
-                    f"{decision_id} {why}" if why
+                    f"{decision_id} {why}"
+                    if why
                     else f"no decision {decision_id!r} — it may have already closed"
                 )
             if pending.status == "answered":
@@ -200,6 +209,20 @@ class DecisionQueue:
         return pending
 
     # ------------------------------------------------------------------ reading
+
+    def publish(self, pending: Pending, outcome: dict[str, object]) -> None:
+        """Record what the decision loop did, and release anyone waiting to hear."""
+        pending.outcome = outcome
+        pending._settled.set()
+
+    def await_outcome(self, pending: Pending, timeout: float) -> dict[str, object] | None:
+        """Wait briefly for the decision loop to report back. ``None`` if it has not.
+
+        Bounded and short: the loop runs immediately after the answer is handed over, so this
+        is microseconds in practice. The timeout is there so a submit call can never become the
+        thing that hangs — an agent left waiting on its own tool result cannot even retry.
+        """
+        return pending.outcome if pending._settled.wait(timeout) else None
 
     def peek(self, decision_id: str) -> Pending | None:
         with self._lock:
