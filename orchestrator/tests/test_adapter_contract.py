@@ -185,9 +185,7 @@ FACTION_TECH = {
 ALL_RECORDS = [BASE_PRODUCTION, BASE_HURRY, FACTION_TECH]
 
 
-@pytest.mark.parametrize(
-    "record", ALL_RECORDS, ids=[r["surface_id"] for r in ALL_RECORDS]
-)
+@pytest.mark.parametrize("record", ALL_RECORDS, ids=[r["surface_id"] for r in ALL_RECORDS])
 def test_record_parses_as_a_world_view(record: dict) -> None:
     """Every surface emits something the orchestrator can accept with no translation.
 
@@ -200,9 +198,7 @@ def test_record_parses_as_a_world_view(record: dict) -> None:
     assert world_view.action_space, "an empty action space is not a decision"
 
 
-@pytest.mark.parametrize(
-    "record", ALL_RECORDS, ids=[r["surface_id"] for r in ALL_RECORDS]
-)
+@pytest.mark.parametrize("record", ALL_RECORDS, ids=[r["surface_id"] for r in ALL_RECORDS])
 def test_actions_carry_a_label_and_an_id(record: dict) -> None:
     """`action`, not `name`.
 
@@ -218,9 +214,7 @@ def test_actions_carry_a_label_and_an_id(record: dict) -> None:
         assert action.action != action.id, f"{action.id} is labelled with its own id"
 
 
-@pytest.mark.parametrize(
-    "record", ALL_RECORDS, ids=[r["surface_id"] for r in ALL_RECORDS]
-)
+@pytest.mark.parametrize("record", ALL_RECORDS, ids=[r["surface_id"] for r in ALL_RECORDS])
 def test_metric_names_are_in_the_vocabulary(record: dict) -> None:
     """A metric outside the vocabulary is one no directive can be written against.
 
@@ -238,9 +232,7 @@ def test_metric_names_are_in_the_vocabulary(record: dict) -> None:
             )
 
 
-@pytest.mark.parametrize(
-    "record", ALL_RECORDS, ids=[r["surface_id"] for r in ALL_RECORDS]
-)
+@pytest.mark.parametrize("record", ALL_RECORDS, ids=[r["surface_id"] for r in ALL_RECORDS])
 def test_declared_effects_use_the_vocabulary(record: dict) -> None:
     """`effects` is the only input to a directive trade-off, so a misnamed key is invisible."""
     world_view = WorldView.model_validate(record)
