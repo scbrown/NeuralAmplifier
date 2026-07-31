@@ -266,13 +266,16 @@ def test_the_decision_record_is_written_for_an_agent_answer(agent_app, tmp_path)
     assert record["adherence_violations"] == 0
 
 
-def test_a_guard_denial_is_reported_back_to_the_agent() -> None:
-    """The agent has to learn that its choice did not run, and what did instead.
+def test_a_denied_order_becomes_a_repair_the_agent_can_answer() -> None:
+    """The full deny-repair loop through the agent surface (na-7zl).
 
     `hurry:now` declares it spends 81 energy_reserves and only 40 are reported, so it is legal
-    by the engine's action space and unpayable against current state. The StateGuard strips it.
-    Reporting "applied to the game" here would be the one lie this interface must never tell:
-    a model that believes it succeeded does not repair.
+    by the engine's action space and unpayable against current state. Before the repair loop
+    that cost the whole decision. Now the agent is told what happened, handed the same decision
+    again with the reason attached, and gets to choose something that works.
+
+    The `degraded is False` at the end is the point of the whole exercise: a turn that used to
+    fall back to the deterministic tier is now played by the brain.
     """
     brain = AgentBrain(doorbell=Doorbell(target="", enabled=False), timeout=10)
     client = TestClient(create_app(brain=brain))
@@ -296,21 +299,80 @@ def test_a_guard_denial_is_reported_back_to_the_agent() -> None:
 
     thread = threading.Thread(target=call, daemon=True)
     thread.start()
-    claimed = _await_claim(client)
+    first = _await_claim(client)
 
     answered = client.post(
         "/agent/submit",
-        json={"decision_id": claimed["decision_id"], "action_id": "hurry:now"},
+        json={"decision_id": first["decision_id"], "action_id": "hurry:now"},
     ).json()
     assert answered["submitted"] == "hurry:now"
-    assert "hurry:now" not in (answered["applied"] or [])
-    assert answered["status"].startswith("NOT applied")
-    assert answered["degraded"] is True
+    assert answered["applied"] == []
+    assert "repair decision follows" in answered["status"]
+    # It must say *why* here, not only on the repair — an agent that has to go and fetch the
+    # reason separately is one that may not.
+    assert any("only 40" in a for a in answered["advisories"])
+
+    # The repair arrives as an ordinary decision, carrying the reason in `advisories`.
+    second = _await_claim(client)
+    assert second["decision_id"] != first["decision_id"]
+    advisories = second["world_view"].get("advisories") or []
+    assert any("only 40" in a for a in advisories), "the repair must carry what went wrong"
+
+    fixed = client.post(
+        "/agent/submit",
+        json={
+            "decision_id": second["decision_id"],
+            "action_id": "hurry:none",
+            "reason": "cannot afford it after all",
+        },
+    ).json()
+    assert fixed["applied"] == ["hurry:none"]
+    assert fixed["status"] == "applied to the game"
 
     thread.join(timeout=5)
-    # And the game got the safe fallback rather than an order it could not pay for.
     assert results["body"]["choices"][0]["action_id"] == "hurry:none"
+    assert results["body"]["degraded"] is False, "a repaired decision is not a degraded one"
+
+
+def test_an_unrepairable_denial_still_degrades_and_says_so() -> None:
+    """The bound holds through the agent path too: one repair, then the fallback.
+
+    An agent that keeps insisting on the same unpayable order must not be able to hold the turn
+    open indefinitely.
+    """
+    brain = AgentBrain(doorbell=Doorbell(target="", enabled=False), timeout=10)
+    client = TestClient(create_app(brain=brain))
+    results: dict = {}
+    unaffordable = {
+        "schema_version": "0.1",
+        "engine": "thinker",
+        "scope": "base",
+        "surface_id": "base.hurry",
+        "turn": 42,
+        "faction": "Gaians",
+        "metrics": {"energy_reserves": 40},
+        "action_space": [
+            {"id": "hurry:none", "action": "Do not hurry"},
+            {"id": "hurry:now", "action": "Hurry production", "effects": {"energy_reserves": -81}},
+        ],
+    }
+
+    def call() -> None:
+        results["body"] = client.post("/decide", json=unaffordable).json()
+
+    thread = threading.Thread(target=call, daemon=True)
+    thread.start()
+
+    for _ in range(2):
+        claimed = _await_claim(client)
+        client.post(
+            "/agent/submit",
+            json={"decision_id": claimed["decision_id"], "action_id": "hurry:now"},
+        )
+
+    thread.join(timeout=5)
     assert results["body"]["degraded"] is True
+    assert results["body"]["choices"][0]["action_id"] == "hurry:none", "the fallback still runs"
 
 
 def test_an_agent_can_issue_a_plan_that_steers_a_later_decision(tmp_path) -> None:

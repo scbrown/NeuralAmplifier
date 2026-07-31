@@ -238,3 +238,115 @@ def test_the_chain_composes_the_two_real_guards() -> None:
     )
     assert ruling.verdict == "deny"
     assert any("only 5" in a for a in ruling.advisories)
+
+
+# ------------------------------------------------------------------- repair loop
+
+
+def test_a_denied_decision_is_re_asked_with_the_reason(tmp_path) -> None:
+    """na-7zl: strip-then-degrade gives up a turn the brain could have salvaged.
+
+    This mattered little while the only guard was CitationGuard, which never denies. StateGuard
+    does — so a legal-but-unaffordable order now throws away a whole decision that one sentence
+    of feedback would fix.
+    """
+    from neural_amplifier.brain import ScriptedBrain
+    from neural_amplifier.orchestrator import Orchestrator
+
+    world_view = view([HURRY, WAIT], metrics={"energy_reserves": 40})
+    # First the unaffordable choice, then a correction — what a brain given the reason would do.
+    brain = ScriptedBrain(
+        responses=[
+            Orders(choices=[Choice(action_id="hurry:now")]),
+            Orders(choices=[Choice(action_id="hurry:none")]),
+        ]
+    )
+    result = Orchestrator(brain=brain, guard=StateGuard(), repair_attempts=1).decide(world_view)
+
+    assert result.orders.choices[0].action_id == "hurry:none"
+    assert result.record.degraded is False, "a repaired decision is not a degraded one"
+    assert len(brain.calls) == 2, "the brain must be asked again"
+
+    # And the second ask carried the reason, or the brain had nothing to repair from.
+    second = brain.calls[1]
+    assert second.advisories
+    assert any("only 40" in a for a in second.advisories)
+
+
+def test_the_repair_is_one_decision_not_two(tmp_path) -> None:
+    """Exactly one record per decision, however many attempts it took.
+
+    Two records would double count the surface, and coverage would read high while the game
+    saw one build.
+    """
+    from neural_amplifier.brain import ScriptedBrain
+    from neural_amplifier.decisions import DecisionLog
+    from neural_amplifier.orchestrator import Orchestrator
+
+    log_path = tmp_path / "decisions.jsonl"
+    brain = ScriptedBrain(
+        responses=[
+            Orders(choices=[Choice(action_id="hurry:now")]),
+            Orders(choices=[Choice(action_id="hurry:none")]),
+        ]
+    )
+    Orchestrator(
+        brain=brain, guard=StateGuard(), log=DecisionLog(log_path), repair_attempts=1
+    ).decide(view([HURRY, WAIT], metrics={"energy_reserves": 40}))
+
+    lines = [line for line in log_path.read_text().splitlines() if line.strip()]
+    assert len(lines) == 1
+
+
+def test_repair_is_bounded_and_then_degrades(tmp_path) -> None:
+    """An unbounded repair loop is a game that never takes a turn."""
+    from neural_amplifier.brain import ScriptedBrain
+    from neural_amplifier.orchestrator import Orchestrator
+
+    stubborn = ScriptedBrain(chooser=lambda _: Orders(choices=[Choice(action_id="hurry:now")]))
+    result = Orchestrator(brain=stubborn, guard=StateGuard(), repair_attempts=1).decide(
+        view([HURRY, WAIT], metrics={"energy_reserves": 40})
+    )
+
+    assert len(stubborn.calls) == 2, "one ask plus one repair, and no more"
+    assert result.record.degraded is True
+    assert "repair attempt" in (result.record.degrade_reason or "")
+    # The safe fallback still ran — a failed repair must not cost the turn as well.
+    assert result.orders.choices
+
+
+def test_repairs_can_be_switched_off() -> None:
+    from neural_amplifier.brain import ScriptedBrain
+    from neural_amplifier.orchestrator import Orchestrator
+
+    brain = ScriptedBrain(chooser=lambda _: Orders(choices=[Choice(action_id="hurry:now")]))
+    Orchestrator(brain=brain, guard=StateGuard(), repair_attempts=0).decide(
+        view([HURRY, WAIT], metrics={"energy_reserves": 40})
+    )
+    assert len(brain.calls) == 1
+
+
+def test_an_allowed_decision_is_never_re_asked() -> None:
+    """The loop must cost nothing on the overwhelming majority of decisions."""
+    from neural_amplifier.brain import ScriptedBrain
+    from neural_amplifier.orchestrator import Orchestrator
+
+    brain = ScriptedBrain(chooser=lambda _: Orders(choices=[Choice(action_id="hurry:none")]))
+    Orchestrator(brain=brain, guard=StateGuard(), repair_attempts=2).decide(
+        view([HURRY, WAIT], metrics={"energy_reserves": 40})
+    )
+    assert len(brain.calls) == 1
+
+
+def test_a_brain_error_is_not_repaired() -> None:
+    """Repair is for a brain that answered badly. One that failed will fail again, and asking
+    twice just doubles the delay before the fallback the game is waiting for."""
+    from neural_amplifier.brain import BrainError, ScriptedBrain
+    from neural_amplifier.orchestrator import Orchestrator
+
+    broken = ScriptedBrain(raises=BrainError("no answer within 30s"))
+    result = Orchestrator(brain=broken, guard=StateGuard(), repair_attempts=2).decide(
+        view([HURRY, WAIT], metrics={"energy_reserves": 40})
+    )
+    assert len(broken.calls) == 1
+    assert result.record.degraded is True

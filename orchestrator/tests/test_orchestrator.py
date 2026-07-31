@@ -48,12 +48,38 @@ def test_unexpected_exception_still_degrades_rather_than_stalling(
 def test_all_illegal_choices_degrade_and_are_counted(thinker_base: WorldView) -> None:
     """A reply that survives nothing is indistinguishable from a stall, so it
     counts as degradation — and the violation is recorded."""
+    # Repairs off, so this isolates the degrade path and the violation count belongs to a
+    # single attempt. The repair loop has its own tests below and in test_state_guard.py.
     brain = ScriptedBrain([Orders(choices=[Choice(action_id="not_a_real_action")])])
-    result = Orchestrator(brain).decide(thinker_base)
+    result = Orchestrator(brain, repair_attempts=0).decide(thinker_base)
 
     assert result.orders.degraded is True
     assert result.record.adherence_violations == 1
     assert [c.action_id for c in result.orders.choices] == ["a4"]
+
+
+def test_an_illegal_choice_gets_one_chance_to_be_corrected(thinker_base: WorldView) -> None:
+    """Invariant 1 is a gate, not a punishment.
+
+    A brain that names an action the engine never offered has made a correctable mistake, and
+    throwing the decision away costs a turn to teach nothing. It is told what happened and asked
+    once more; the fallback is still there behind that.
+    """
+    brain = ScriptedBrain(
+        responses=[
+            Orders(choices=[Choice(action_id="not_a_real_action")]),
+            Orders(choices=[Choice(action_id="a1")]),
+        ]
+    )
+    result = Orchestrator(brain).decide(thinker_base)
+
+    assert len(brain.calls) == 2
+    assert [c.action_id for c in result.orders.choices] == ["a1"]
+    assert result.orders.degraded is False
+    # The violation still counts. A corrected mistake is still a mistake, and adherence is
+    # measured so that a run producing them is visible rather than quietly repaired.
+    assert result.record.adherence_violations == 1
+    assert brain.calls[1].advisories and "no legal choices" in brain.calls[1].advisories[0]
 
 
 def test_partly_illegal_orders_keep_the_legal_part(thinker_base: WorldView) -> None:

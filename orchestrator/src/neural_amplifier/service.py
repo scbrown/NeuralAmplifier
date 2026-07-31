@@ -156,6 +156,9 @@ def create_app(
         if publish is not None:
             publish(
                 {
+                    # Deliberately no "status": the submit handler computes that from what was
+                    # applied. Only the repair path sets one, because only it knows something
+                    # the applied list cannot convey.
                     "applied": [c.action_id for c in result.orders.choices],
                     "degraded": result.record.degraded,
                     "degrade_reason": result.record.degrade_reason,
@@ -283,12 +286,17 @@ def create_app(
                     "status": "submitted; the outcome did not arrive in time to report",
                 }
             applied = outcome.get("applied") or []
-            if action_id in applied:
-                status = "applied to the game"
-            elif applied:
-                status = f"NOT applied — the guard replaced it with {', '.join(applied)}"
-            else:
-                status = "NOT applied — nothing survived validation and the guard"
+            # A status set by the publisher wins. It knows things this handler cannot infer
+            # from `applied` alone — chiefly that a repair is on its way, which looks identical
+            # to a terminal failure if you only read an empty list.
+            status = str(outcome.get("status") or "")
+            if not status:
+                if action_id in applied:
+                    status = "applied to the game"
+                elif applied:
+                    status = f"NOT applied — the guard replaced it with {', '.join(applied)}"
+                else:
+                    status = "NOT applied — nothing survived validation and the guard"
             return {
                 "decision_id": answered.id,
                 "submitted": action_id,

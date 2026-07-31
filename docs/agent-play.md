@@ -215,7 +215,45 @@ so a denial is a fact rather than a guess. It sits behind the `Guard` protocol a
 will occupy, composed by `GuardChain`, so the verdict shape and the record do not change when
 the real thing lands.
 
-## 8. What this does not change
+## 8. When your order is refused: the repair loop
+
+A denial used to cost the whole decision. The orders were stripped, nothing survived, and the
+turn fell back to the deterministic tier — correct, but it gives up a turn one sentence of
+feedback would have saved.
+
+That cost nothing while the only guard was `CitationGuard`, which never denies. `StateGuard`
+does, so it became real the moment §7 landed.
+
+Now a decision whose every choice was thrown out is **re-asked once**, with the reason attached
+in `world_view.advisories` — a contract field that existed for exactly this and had never been
+set by anything.
+
+```text
+agent  submit_orders(hurry:now)
+   ->  NOT applied — a repair decision follows; collect it and choose again
+       advisories: hurry:now spends 81 energy_reserves but only 40 is available
+agent  next_decision            -> the same surface, carrying that advisory
+agent  submit_orders(hurry:none) -> applied to the game
+game   degraded: false
+```
+
+Four properties worth keeping:
+
+- **Bounded.** `NA_REPAIR_ATTEMPTS`, clamped to 0–2. `knowledge-architecture.md` allows two;
+  the default is **one**, deliberately below that ceiling, because with an agent brain the game
+  is *blocked* for each attempt — a repair is not a cheap retry, it is another round trip while
+  a turn sits still. One catches the overwhelmingly common case, a single correctable mistake.
+- **One decision, one record.** However many attempts it took. Two records would double-count
+  the surface and make coverage read high while the game saw one build.
+- **Violations still count.** `adherence_violations` accumulates across attempts. It is
+  documented as structurally impossible, so any non-zero value is a broken invariant — a repair
+  that quietly absorbed the first attempt's illegal ids would disable the one measurement
+  designed to catch that. A corrected mistake is still a mistake; it just did not cost the turn.
+- **A brain *error* is never repaired.** Repair is for a brain that answered badly. One that
+  failed will fail again, and asking twice only doubles the delay before the fallback the game
+  is waiting for.
+
+## 9. What this does not change
 
 - **The contract.** Same world view, same orders (`contract.md`).
 - **Every invariant except 9.** The engine stays authoritative, the orchestrator still speaks

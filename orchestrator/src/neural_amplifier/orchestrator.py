@@ -9,6 +9,7 @@ call site — a fallback that isn't recorded is the failure mode
 
 from __future__ import annotations
 
+import os
 import time
 import uuid
 from collections.abc import Sequence
@@ -42,6 +43,36 @@ class Result:
     record: DecisionRecord
 
 
+def _repair_attempts_from_env() -> int:
+    """``NA_REPAIR_ATTEMPTS``, clamped to the 0..2 the design allows.
+
+    Clamped rather than trusted: an unbounded repair loop is a game that never takes a turn,
+    and the one thing a bound like this must not do is be configurable into uselessness.
+    """
+    raw = os.environ.get("NA_REPAIR_ATTEMPTS", "").strip()
+    if not raw:
+        return 1
+    try:
+        return max(0, min(2, int(raw)))
+    except ValueError:
+        return 1
+
+
+def _why_nothing_survived(checked: object, ruling: object) -> list[str]:
+    """One sentence explaining an empty result, for the brain and for the record.
+
+    Shared deliberately: the text handed back for repair and the text written to
+    ``degrade_reason`` must not drift, or a run's log will explain a failure differently from
+    the way the brain was told about it.
+    """
+    if getattr(checked, "kept", None):
+        return [f"guard denied every choice ({len(ruling.stripped)} stripped)"]  # type: ignore[attr-defined]
+    return [
+        f"no legal choices (unknown={len(checked.unknown)},"  # type: ignore[attr-defined]
+        f" duplicates={len(checked.duplicates)})"  # type: ignore[attr-defined]
+    ]
+
+
 class Orchestrator:
     """Drives one brain, writes one decision log."""
 
@@ -55,8 +86,19 @@ class Orchestrator:
         retriever: Retriever | None = None,
         guard: Guard | None = None,
         plan: DirectiveStore | None = None,
+        repair_attempts: int | None = None,
     ) -> None:
         self.brain = brain
+        # How many times a decision whose every choice was thrown out may be re-asked with the
+        # reason attached. ``knowledge-architecture.md`` allows up to two.
+        #
+        # Default one, deliberately below that ceiling: with an agent brain the game is BLOCKED
+        # for each attempt, so a repair is not a cheap retry — it is another round trip while a
+        # turn sits still. One catches the overwhelmingly common case, which is a single
+        # correctable mistake. Raise it with NA_REPAIR_ATTEMPTS where a run can afford to.
+        self.repair_attempts = (
+            repair_attempts if repair_attempts is not None else _repair_attempts_from_env()
+        )
         self.log = log
         self.game_id = game_id or f"game-{uuid.uuid4().hex[:8]}"
         # Record of truth first: if a downstream exporter fails, the JSONL line
@@ -118,36 +160,65 @@ class Orchestrator:
         if self.store is not None:
             self.store.put(world_view)
 
-        try:
-            orders = self.brain.decide(world_view)
-        except BrainError as exc:
-            degrade_reason = str(exc) or "brain error"
-            orders = Orders()
-        except Exception as exc:
-            # A brain that raises something unexpected must still not stall the
-            # game (invariant #9). Degrade, and record why.
-            degrade_reason = f"{type(exc).__name__}: {exc}"
-            orders = Orders()
+        # Ask, check, and — where something is repairable — ask once more with the reason.
+        #
+        # ``knowledge-architecture.md`` specifies denied violations returned to the model for
+        # bounded repair. Until now the behaviour was strip-then-degrade: correct, but it gives
+        # up a turn the brain could have salvaged. That cost nothing while the only guard was
+        # CitationGuard, which never denies. StateGuard does, so a legal-but-unaffordable order
+        # now throws away a whole decision that one sentence of feedback would have fixed.
+        #
+        # Exactly one decision record comes out of this loop regardless of how many attempts it
+        # took. A repair is part of one decision, not a second one — recording two would double
+        # count the surface and make coverage read high while the game saw one build.
+        repairs = 0
+        asked = world_view
+        # Accumulated across attempts, not taken from the last one. adherence_violations is
+        # documented as structurally impossible, so any non-zero value is a broken invariant —
+        # and a repair that silently absorbed the first attempt's illegal ids would make the one
+        # measurement designed to catch that stop working. A corrected mistake is still a
+        # mistake; it is just one that did not cost the turn.
+        violations = 0
+        while True:
+            try:
+                orders = self.brain.decide(asked)
+            except BrainError as exc:
+                degrade_reason = str(exc) or "brain error"
+                orders = Orders()
+            except Exception as exc:
+                # A brain that raises something unexpected must still not stall the
+                # game (invariant #9). Degrade, and record why.
+                degrade_reason = f"{type(exc).__name__}: {exc}"
+                orders = Orders()
 
-        checked = validate(orders, world_view)
+            checked = validate(orders, asked)
+            violations += len(checked.unknown)
 
-        # Precedence is order: engine legality first, so the guard never sees an
-        # action the engine did not offer and cannot re-add one.
-        legal = checked.orders(notes=orders.notes)
-        ruling = rule(self.guard, legal, world_view)
-        allowed = apply(legal, ruling)
+            # Precedence is order: engine legality first, so the guard never sees an
+            # action the engine did not offer and cannot re-add one.
+            legal = checked.orders(notes=orders.notes)
+            ruling = rule(self.guard, legal, asked)
+            allowed = apply(legal, ruling)
+
+            if allowed.choices or degrade_reason is not None or repairs >= self.repair_attempts:
+                break
+
+            # Repairable: the brain answered, and every answer was thrown out. Tell it why and
+            # let it choose again. Only ever from `world_view` — the advisories accumulate onto
+            # the original rather than onto the last repair view, so a second attempt sees one
+            # coherent list instead of a growing stack of near-duplicates.
+            why = list(ruling.advisories) or _why_nothing_survived(checked, ruling)
+            asked = world_view.model_copy(
+                update={"advisories": [*(world_view.advisories or []), *why]}
+            )
+            repairs += 1
 
         if degrade_reason is None and not allowed.choices:
             # Nothing survived — an empty turn is indistinguishable from a
             # stall, so treat it as degradation whichever gate emptied it.
-            degrade_reason = (
-                f"guard denied every choice ({len(ruling.stripped)} stripped)"
-                if checked.kept
-                else (
-                    f"no legal choices (unknown={len(checked.unknown)},"
-                    f" duplicates={len(checked.duplicates)})"
-                )
-            )
+            degrade_reason = _why_nothing_survived(checked, ruling)[0]
+            if repairs:
+                degrade_reason = f"{degrade_reason}; {repairs} repair attempt(s) also failed"
 
         final = self._fallback(world_view) if degrade_reason is not None else allowed
 
@@ -161,7 +232,7 @@ class Orchestrator:
             orders=final,
             degrade_reason=degrade_reason,
             latency_ms=int((time.monotonic() - started) * 1000),
-            unknown=len(checked.unknown),
+            unknown=violations,
             fog=fog,
             knowledge=summarise(grounding, ruling, self.guard is not None, cited=orders.cited),
             plan=self._plan_block(

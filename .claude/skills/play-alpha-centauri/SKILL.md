@@ -158,9 +158,12 @@ policy guard sit between your order and the game.
   order the current state cannot pay for: the option was offered when reserves were 82 and by
   the time you answered they were 40.
 
-A denial is information, not an insult. Read the advisory, and if the surface is still open
-choose differently. Never re-submit the same id after a denial — the state that refused it has
-not changed.
+A denial is information, not an insult — and it is usually recoverable. If the status says a
+**repair decision follows**, call `next_decision` again: you get the same surface back with the
+reason in its `advisories`, and one more chance to choose. Take it seriously, because there is
+only one: insist on the same refused id and the turn falls back to the deterministic tier.
+
+Never re-submit the id that was just refused. The state that refused it has not changed.
 
 Watch for the belief that caused it. You keep a session across the whole game, so you can
 remember a base as it was twenty turns ago. The world view in front of you is the truth; your

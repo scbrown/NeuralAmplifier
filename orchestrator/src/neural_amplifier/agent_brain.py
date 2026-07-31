@@ -81,6 +81,26 @@ class AgentBrain:
         self._current = threading.local()
 
     def decide(self, world_view: WorldView) -> Orders:
+        # Being called again on this thread means the decision loop is repairing: the last
+        # answer was thrown out by validation or the guard and it is asking once more with the
+        # reason attached. Tell whoever submitted that answer, before they are left waiting on
+        # an outcome that will never come — their submit call is blocked on it right now, and a
+        # silent timeout reads as "the orchestrator broke" rather than "choose again".
+        superseded = getattr(self._current, "pending", None)
+        if superseded is not None:
+            self.queue.publish(
+                superseded,
+                {
+                    "applied": [],
+                    "status": (
+                        "NOT applied — a repair decision follows; collect it and choose again"
+                    ),
+                    "advisories": list(world_view.advisories or []),
+                    "degraded": False,
+                },
+            )
+            self._current.pending = None
+
         try:
             pending = self.queue.post(world_view)
         except QueueFull as exc:

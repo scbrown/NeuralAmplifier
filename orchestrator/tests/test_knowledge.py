@@ -155,17 +155,37 @@ def test_denying_everything_degrades_rather_than_sending_an_empty_turn(
     """An empty order set is indistinguishable from a stall, so it has to fall
     back — and say the guard was the cause, not the brain."""
     hank = Hank(Ruling(verdict="deny", stripped=("a1",)))
+    # Repairs off, so this isolates the degrade path. With them on the brain would be re-asked
+    # first, which is the subject of its own tests — see test_state_guard.py.
     brain = ScriptedBrain([Orders(choices=[Choice(action_id="a1")])])
-    result = Orchestrator(brain, guard=hank).decide(thinker_base)
+    result = Orchestrator(brain, guard=hank, repair_attempts=0).decide(thinker_base)
 
     assert result.orders.degraded is True
     assert "guard denied every choice" in (result.record.degrade_reason or "")
 
 
+def test_a_denial_the_brain_cannot_repair_still_degrades(thinker_base: WorldView) -> None:
+    """The default path, end to end: denied, re-asked, denied again, fall back.
+
+    The repair loop must not be able to turn a genuinely stuck decision into a hang, and the
+    reason on the record has to say a repair was tried — otherwise a run that spent two brain
+    calls looks identical to one that spent a single call and gave up.
+    """
+    hank = Hank(Ruling(verdict="deny", stripped=("a1",)))
+    stubborn = ScriptedBrain(chooser=lambda _: Orders(choices=[Choice(action_id="a1")]))
+    result = Orchestrator(stubborn, guard=hank, repair_attempts=1).decide(thinker_base)
+
+    assert len(stubborn.calls) == 2
+    assert result.orders.degraded is True
+    assert "repair attempt" in (result.record.degrade_reason or "")
+
+
 def test_a_degraded_brain_still_reports_why_it_degraded(thinker_base: WorldView) -> None:
     """The guard must not steal the blame when the brain is what failed."""
     hank = Hank(Ruling(verdict="deny", stripped=("a1",)))
-    result = Orchestrator(ScriptedBrain([Orders()]), guard=hank).decide(thinker_base)
+    result = Orchestrator(
+        ScriptedBrain(chooser=lambda _: Orders()), guard=hank, repair_attempts=0
+    ).decide(thinker_base)
 
     assert "no legal choices" in (result.record.degrade_reason or "")
 
