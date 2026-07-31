@@ -78,12 +78,22 @@ curated strategy (see **Knowledge & Guardrails** below), so it plays *well*, not
 A platform-agnostic **brain** plus thin **adapters** that attach it to a running game. The
 brain never knows which game it's driving — it speaks one [contract](docs/contract.md).
 
-**🐍 Orchestrator (Python + Claude Agent SDK) — the brain**
+**🐍 Orchestrator (Python) — the decision loop**
 
-- Owns everything LLM-shaped: prompt assembly, tool-use loops, retries, streaming, secrets,
-  memory, move validation, and safe degradation.
+- Owns everything that makes a decision *legal and legible*: fog gating, grounding retrieval,
+  directive trade-offs, action-space validation, the policy guard, the decision record.
 - Takes a **world view** in, returns **structured orders** (with reasoning) out — over HTTP.
   The same code drives either engine.
+
+**🎮 The brain is pluggable — and can be an agent in your terminal**
+
+- `NA_BRAIN=agent` makes the orchestrator *serve* decisions instead of calling a model. Claude
+  Code (or anything speaking MCP) attaches, collects the world view, and answers.
+- Control inverts, invariants do not: an agent is not a privileged client, and its orders go
+  through the same validation, guard and record a model's would. It cannot name a move the
+  engine did not offer.
+- Any harness plugs in the same way — it attaches and asks. Neural Amplifier launches nothing.
+  See **[docs/agent-play.md](docs/agent-play.md)**.
 
 **🔌 Two engine adapters — the hands**
 
@@ -304,6 +314,7 @@ just thinker build       # Thinker adapter (needs the Thinker toolchain)
 just docs check          # Markdown lint
 
 just thinker wire        # Adapter's HTTP client under Wine vs. a real orchestrator — no game
+just play                # Serve decisions for an attached agent (NA_BRAIN=agent)
 just coverage            # Run health: surfaces fired, fallback rate, adherence
 just replay --store …    # Re-run a recorded log against the current code — no game
 just ingest              # Your alphax.txt → the smac: RDF graph + static briefing

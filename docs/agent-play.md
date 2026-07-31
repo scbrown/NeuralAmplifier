@@ -1,0 +1,180 @@
+# Agent play — the brain as an attached harness
+
+How an agent in a terminal — Claude Code, or anything else that speaks MCP — becomes the LLM
+tier, and why that turned out to be a smaller change than it sounds.
+
+Companion to [contract.md](contract.md), which this does not alter: an agent sees the same
+world view and returns the same orders. What changes is *who calls whom*.
+
+---
+
+## 1. Inversion of control
+
+Before, the orchestrator called a model:
+
+```text
+adapter --HTTP--> orchestrator --Agent SDK--> Claude
+```
+
+Now it serves a decision surface and something else comes and takes the work:
+
+```text
+adapter --HTTP--> orchestrator --MCP--> Claude Code (or any client)
+```
+
+The orchestrator stops *driving* and starts *offering*. That is the whole pivot, and it is one
+class: `AgentBrain` parks the decision on a queue and blocks until somebody answers it.
+
+**Why it is small.** `Orchestrator.decide` reaches a model on exactly one line. Everything else
+it does — fog gating, grounding retrieval, directive trade-offs, action-space validation, the
+policy guard, the decision record, telemetry — happens *around* that line. Twelve of the
+thirteen orchestrator modules are invariant enforcement, not LLM plumbing. So swapping the
+model for an agent does not need a second pipeline; it needs a different `Brain`.
+
+The consequence worth stating plainly: **an agent is not a privileged client.** What it
+receives is the fully grounded world view, because grounding happens before the brain is
+called. What it sends goes through `validate()` and the guard, because that is what the
+decision loop does with any brain's answer. An agent cannot name an action the engine did not
+offer, and the thing that stops it is not in the agent.
+
+## 2. How a decision travels
+
+```mermaid
+sequenceDiagram
+    participant G as game (Thinker DLL)
+    participant O as orchestrator
+    participant A as agent (MCP client)
+
+    G->>O: POST /decide {world view}
+    Note over O: fog · grounding · directives · trade-offs
+    O->>O: AgentBrain.decide → queue.post
+    O--)A: doorbell (optional nudge)
+    A->>O: next_decision
+    O-->>A: grounded world view + decision_id
+    Note over A: reason
+    A->>O: submit_orders(decision_id, action_id, reason)
+    Note over O: validate · guard · decision record
+    O-->>G: 200 {orders}
+    Note over G: apply, or the deterministic tier on any failure
+```
+
+The game is blocked at the arrow that goes down the left-hand side, and that is intentional —
+see §4.
+
+## 3. Finding work: asking beats being told
+
+There are two ways an agent learns a decision is open, and they are **not** equal.
+
+| | How | Guarantee |
+|---|---|---|
+| **Poll** — the mechanism | `next_decision(wait_seconds=60)` blocks server-side until one arrives | Always works. No configuration, nothing to misconfigure |
+| **Doorbell** — a convenience | orchestrator runs `tmux send-keys` at a pane named by `NA_TMUX_TARGET` | Best-effort. May be absent, may be silently lost |
+
+**A harness must always be able to call in for open decisions.** That is the contract. The
+doorbell only saves an agent from waiting; nothing may depend on it, because `send-keys` has no
+error reporting to give — it types into a pane and cannot tell you whether anything read what
+it typed. A notification channel that other things depend on stops being a notification channel
+and becomes a single point of failure with no diagnostics.
+
+Two further properties of the doorbell, both deliberate:
+
+- **It carries no game data.** Base names are editable in-game and faction nouns come from a
+  text file, so every name in a world view is player-supplied. A base called `"; rm -rf ~` is a
+  legal SMAC base name. The nudge is a fixed sentence plus a decision id the orchestrator
+  generated — the world view is collected over MCP, where it is data rather than keystrokes.
+- **Nothing is ever launched.** Neural Amplifier does not start tmux, a pane, or an agent. It
+  rings a pane that already exists, if it was told about one. Setting up the session is the
+  agent's own job — see the `play-alpha-centauri` skill — and that is exactly what keeps a
+  harness swappable. A new harness needs no integration work here, because there is no
+  integration point to write: it attaches, and it asks.
+
+## 4. Blocking, and what it costs
+
+The game waits at a decision point until the agent answers. That is a deliberate relaxation of
+[invariant 9](../AGENTS.md) ("the game never stalls waiting on the brain"), taken because a
+turn-based game pausing at a decision point is what it already does for a human player — and
+this mode exists precisely for when a human or an agent *is* playing.
+
+Two escape hatches keep it from being a trap:
+
+- **`NA_AGENT_TIMEOUT`** (orchestrator, seconds). Unset means wait forever. Set it for an
+  unattended run and a silent agent degrades to the deterministic tier with a recorded reason
+  instead of hanging the game.
+- **`llm_timeout_ms`** (thinker.ini). Same idea one layer down; `0` means wait forever, which
+  is the default.
+
+**On the adapter side the wait is sliced, and it deliberately does not pump.** The obvious way
+to keep a window alive while blocking is `PeekMessage(PM_REMOVE)` + `DispatchMessage`, and that
+is wrong here: the DLL is inside `mod_base_build`, inside the engine's own base-processing
+loop. Dispatching re-enters the window procedure, which runs `mod_blink_timer`, which runs the
+autoload and command-channel ticks, which touch game state. Re-entering the engine from inside
+a decision hook corrupts turns in ways that are near-impossible to reproduce.
+
+So the wait calls `PeekMessage(PM_NOREMOVE)` and dispatches nothing. That is enough for the
+only property needed — the thread has *touched* its queue, so Windows stops considering it
+hung. The window does not repaint while a decision is outstanding. A stale window for a few
+seconds is the right price for not mutating the board re-entrantly.
+
+## 5. The tool surface
+
+Three tools, because a decision has three moments.
+
+| Tool | For |
+|---|---|
+| `next_decision(wait_seconds)` | Collect the decision waiting for you, with its full world view |
+| `submit_orders(decision_id, action_id, reason)` | Answer it, choosing from the action space |
+| `decisions_waiting()` | What is outstanding — for re-orienting after a reconnect or compaction |
+
+Anything more would invite the model to go looking for game state instead of reading the world
+view it was handed, and there is no other source to look in.
+
+**Rejections are addressed to the model.** An id outside the action space comes back as a 422
+carrying the legal set, so the agent can correct itself in the tool result it is already
+reading. The orchestrator would strip an illegal choice anyway — but silently, and a model
+cannot fix a mistake nobody reported. Answering twice is a 409; answering an abandoned decision
+says so, rather than the indistinguishable "no such decision".
+
+## 6. Running it
+
+The orchestrator, with the agent brain:
+
+```bash
+NA_BRAIN=agent NA_DECISION_LOG=decisions.jsonl \
+  uv run --directory orchestrator neural-amplifier serve
+```
+
+`GET /health` reports `"brain":"agent"`. The `/agent/*` endpoints exist **only** in this mode —
+mounting them always would advertise a queue nothing fills, and an agent attached to a scripted
+run would wait forever with no way to tell why.
+
+The MCP server, attached to that service:
+
+```bash
+claude mcp add neural-amplifier -- \
+  uv run --directory orchestrator neural-amplifier mcp --url http://127.0.0.1:8000
+```
+
+It talks to a *running* orchestrator over HTTP rather than importing it: one source of truth for
+the queue, several agents able to attach at once, and an MCP process that can be restarted
+without dropping a game.
+
+Optional nudge — only if the agent already has a pane:
+
+```bash
+NA_TMUX_TARGET=smac:brain   # a pane the AGENT created, not one we create
+```
+
+## 7. What this does not change
+
+- **The contract.** Same world view, same orders (`contract.md`).
+- **Every invariant except 9.** The engine stays authoritative, the orchestrator still speaks
+  only the contract, the adapter stays thin, surfaces still emit an id, handicaps are still
+  declared.
+- **The decision record.** An agent-answered decision is written to the same log with the same
+  fields, so degrade rate, adherence and fair-play keep measuring the way the game is actually
+  played. If that were not true, every measurement the project has would quietly stop covering
+  the real thing.
+- **Measurement.** `scripts/decision_stability.py` still drives the orchestrator directly with
+  a scripted or Claude brain, so N-run stability stays independent per sample. Agent play and
+  measurement are separate lanes on purpose — an interactive session accumulates context, which
+  is exactly what a stability sample must not do.

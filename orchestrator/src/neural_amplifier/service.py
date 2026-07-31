@@ -12,25 +12,35 @@ import os
 from collections.abc import Sequence
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 
+from .agent_brain import AgentBrain
 from .brain import Brain, ClaudeBrain, ScriptedBrain
-from .contract import Orders, WorldView
+from .contract import Choice, Orders, WorldView
 from .coverage import report
 from .decisions import DecisionLog
 from .orchestrator import Orchestrator
+from .pending import NotClaimable
 from .replay import WorldViewStore
 from .telemetry import OtelSink, Sink
 
 
 def build_brain() -> Brain:
-    """Scripted by default; the real brain is opt-in.
+    """Scripted by default; every other brain is opt-in.
 
     Tests and CI must never make a paid API call by accident, so the real brain
     requires ``NA_BRAIN=claude`` explicitly.
+
+    ``NA_BRAIN=agent`` hands decisions to an attached MCP client — Claude Code in a tmux pane,
+    or anything else that speaks the tool surface. It makes no API call of its own, but it does
+    *block* until something answers, so it is opt-in for a different reason: a service started
+    with it by accident would look hung rather than idle.
     """
-    if os.environ.get("NA_BRAIN", "scripted").lower() == "claude":
+    kind = os.environ.get("NA_BRAIN", "scripted").lower()
+    if kind == "claude":
         return ClaudeBrain()
+    if kind == "agent":
+        return AgentBrain()
     return ScriptedBrain()
 
 
@@ -130,6 +140,87 @@ def create_app(
     @app.post("/decide", response_model=Orders)
     def decide(world_view: WorldView) -> Orders:
         return orchestrator.decide(world_view).orders
+
+    # ---------------------------------------------------------------- agent side
+    #
+    # Present only when the brain is an AgentBrain. Mounting them unconditionally would
+    # advertise a queue nothing is filling, and an agent that connects to a scripted run
+    # would sit at `next_decision` forever with no way to tell why.
+    if isinstance(orchestrator.brain, AgentBrain):
+        queue = orchestrator.brain.queue
+
+        @app.post("/agent/next")
+        def agent_next(body: dict[str, object] | None = None) -> dict[str, object]:
+            """Claim the oldest decision waiting for an answer.
+
+            Returns the world view the brain would have seen — grounded, with directives and
+            trade-offs already injected — because that assembly happens before the brain is
+            called and this *is* the brain.
+            """
+            wait = float((body or {}).get("wait", 0) or 0)
+            pending = queue.claim(wait=min(wait, 110.0))
+            if pending is None:
+                return {"decision_id": None, "waiting": 0}
+            return {
+                "decision_id": pending.id,
+                "surface_id": pending.world_view.surface_id,
+                "world_view": pending.world_view.model_dump(exclude_none=True),
+            }
+
+        @app.post("/agent/submit")
+        def agent_submit(body: dict[str, object]) -> dict[str, object]:
+            """Answer a claimed decision.
+
+            The orders are handed to the waiting ``AgentBrain.decide``, which returns them into
+            the ordinary decision loop — so validation, the policy guard and the decision record
+            all run exactly as they do for a model. Nothing here is a shortcut around them.
+            """
+            decision_id = str(body.get("decision_id") or "")
+            action_id = str(body.get("action_id") or "")
+            reason = body.get("reason")
+            if not decision_id or not action_id:
+                raise HTTPException(422, "decision_id and action_id are both required")
+
+            pending = queue.peek(decision_id)
+            if pending is not None:
+                # Checked here as well as downstream so the *agent* is told, in the tool result
+                # it is already reading, that it named something the engine never offered. The
+                # orchestrator would strip it either way, but silently — and a model cannot
+                # correct a mistake nobody reported to it.
+                legal = pending.world_view.action_ids()
+                if action_id not in legal:
+                    raise HTTPException(
+                        422,
+                        f"{action_id!r} is not in the action space for {decision_id}. "
+                        f"Legal ids: {sorted(legal)}",
+                    )
+            try:
+                answered = queue.answer(
+                    decision_id,
+                    Orders(choices=[Choice(action_id=action_id, reason=str(reason or "") or None)]),
+                )
+            except NotClaimable as exc:
+                raise HTTPException(409, str(exc)) from exc
+            return {
+                "decision_id": answered.id,
+                "accepted": action_id,
+                "status": "applied to the game",
+            }
+
+        @app.post("/agent/waiting")
+        def agent_waiting() -> dict[str, object]:
+            return {
+                "waiting": [
+                    {
+                        "decision_id": p.id,
+                        "surface_id": p.world_view.surface_id,
+                        "turn": p.world_view.turn,
+                        "status": p.status,
+                        "age_seconds": round(p.age_seconds(), 1),
+                    }
+                    for p in queue.waiting()
+                ]
+            }
 
     @app.get("/coverage")
     def coverage() -> dict[str, object]:

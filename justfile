@@ -101,15 +101,14 @@ thinker cmd="build":
         *)      echo "Unknown: {{cmd}}. Try: build test wire" ;;
     esac
 
-# === Integration ===
+# Deliberately starts NO tmux, pane or agent — the harness attaches itself, which is what
+# keeps it swappable (docs/agent-play.md; the play-alpha-centauri skill is the other half).
+# Serve decisions for an attached agent (Claude Code or any MCP client)
+play port="8000":
+    NA_BRAIN=agent NA_DECISION_LOG=decisions.jsonl \
+        uv run --directory orchestrator neural-amplifier serve --port {{port}}
 
-# Run the full observe→decide→act loop end to end for the chosen engine.
-# engine = thinker | glsmac ; drives one faction with Claude via the orchestrator.
-play engine="thinker" faction="GAIANS":
-    #!/usr/bin/env bash
-    set -euo pipefail
-    echo "Starting orchestrator + {{engine}} adapter, faction {{faction}}..."
-    bash scripts/play.sh "{{engine}}" "{{faction}}"
+# === Integration ===
 
 # === Coverage ===
 

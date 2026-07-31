@@ -17,6 +17,9 @@ claude = ["anthropic>=0.40"]
 # Layer 2 of docs/observability.md. Layer 1 (JSONL) has no dependencies and
 # is the record of truth; without this you lose only the live view.
 otel = ["opentelemetry-sdk>=1.27"]
+# The MCP surface an agent plays through (`neural-amplifier mcp`). Optional because a
+# scripted or Claude-brain run never starts it; the orchestrator itself needs nothing.
+mcp = ["mcp>=1.2"]
 
 [project.scripts]
 neural-amplifier = "neural_amplifier.cli:main"
@@ -32,6 +35,10 @@ dev = [
     # Round-trips the emitted datalinks Turtle. Emission itself has no deps;
     # this is the gate that catches invalid syntax that reads fine to a human.
     "rdflib>=7.0",
+    # In dev for the same reason as opentelemetry-sdk: the MCP server is how the game is
+    # actually played now, and an agent surface nobody tests is one that breaks silently
+    # at the moment a session starts.
+    "mcp>=1.2",
 ]
 
 [build-system]

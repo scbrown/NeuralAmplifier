@@ -19,6 +19,16 @@ def main(argv: list[str] | None = None) -> int:
     serve.add_argument("--host", default="127.0.0.1")
     serve.add_argument("--port", type=int, default=8000)
 
+    mcp = sub.add_parser(
+        "mcp",
+        help="run the MCP server an agent plays through (stdio)",
+    )
+    mcp.add_argument(
+        "--url",
+        default=None,
+        help="running orchestrator to attach to (default $NA_URL or http://127.0.0.1:8000)",
+    )
+
     cov = sub.add_parser("coverage", help="summarise a decision log")
     cov.add_argument("log", type=Path)
     cov.add_argument(
@@ -51,6 +61,11 @@ def main(argv: list[str] | None = None) -> int:
 
         uvicorn.run("neural_amplifier.service:app", host=args.host, port=args.port)
         return 0
+
+    if args.command == "mcp":
+        from .mcp_server import main as mcp_main
+
+        return mcp_main(args.url)
 
     if args.command == "ingest":
         from .datalinks import Provenance, briefing, looks_modded, parse_file, turtle
