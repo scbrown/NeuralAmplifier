@@ -13,12 +13,14 @@ from collections.abc import Sequence
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
+from pydantic import ValidationError
 
 from .agent_brain import AgentBrain
 from .brain import Brain, ClaudeBrain, ScriptedBrain
-from .contract import Choice, Orders, WorldView
+from .contract import Choice, Directive, Orders, WorldView
 from .coverage import report
 from .decisions import DecisionLog
+from .directives import accept
 from .orchestrator import Orchestrator
 from .pending import NotClaimable
 from .replay import WorldViewStore
@@ -188,6 +190,38 @@ def create_app(
                 "world_view": pending.world_view.model_dump(exclude_none=True),
             }
 
+        @app.post("/agent/directive")
+        def agent_directive(body: dict[str, object]) -> dict[str, object]:
+            """Attach a standing directive to a decision, before answering it.
+
+            Validated here rather than at submit time, and that is the whole point: a directive
+            naming a metric outside the vocabulary is refused while the agent is still holding
+            it and can rewrite it. The alternative — accepting it and discovering on every later
+            turn that it cannot be evaluated — reads in a record as compliance rather than as a
+            gap.
+            """
+            decision_id = str(body.get("decision_id") or "")
+            pending = queue.peek(decision_id)
+            if pending is None:
+                raise HTTPException(409, f"no open decision {decision_id!r} to attach a plan to")
+            try:
+                directive = Directive.model_validate(
+                    {k: v for k, v in body.items() if k != "decision_id"}
+                )
+            except ValidationError as exc:
+                raise HTTPException(422, f"not a well-formed directive: {exc}") from exc
+
+            accepted, rejected = accept([directive], pending.world_view)
+            if rejected:
+                raise HTTPException(422, rejected[0])
+            pending.proposed_directives.extend(accepted)
+            return {
+                "decision_id": decision_id,
+                "issued": accepted[0].id,
+                "baseline": accepted[0].baseline,
+                "status": "attached; it takes effect when you submit this decision",
+            }
+
         @app.post("/agent/submit")
         def agent_submit(body: dict[str, object]) -> dict[str, object]:
             """Answer a claimed decision.
@@ -215,10 +249,25 @@ def create_app(
                         f"{action_id!r} is not in the action space for {decision_id}. "
                         f"Legal ids: {sorted(legal)}",
                     )
+
+            def _ids(key: str) -> list[str]:
+                raw = body.get(key) or []
+                return [str(x) for x in raw] if isinstance(raw, list) else []
+
             try:
                 answered = queue.answer(
                     decision_id,
-                    Orders(choices=[Choice(action_id=action_id, reason=str(reason or "") or None)]),
+                    Orders(
+                        choices=[Choice(action_id=action_id, reason=str(reason or "") or None)],
+                        # The three measurement channels an agent must be able to reach. Without
+                        # them an agent-driven run silently reports zero grounding utilisation
+                        # and zero directive attention — indistinguishable in a record from a
+                        # model that read the facts and the plan and ignored both.
+                        cited=_ids("cited"),
+                        followed=_ids("followed"),
+                        overrode=_ids("overrode"),
+                        directives=list(pending.proposed_directives) if pending else [],
+                    ),
                 )
             except NotClaimable as exc:
                 raise HTTPException(409, str(exc)) from exc

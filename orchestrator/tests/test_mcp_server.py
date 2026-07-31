@@ -29,6 +29,8 @@ class FakeClient(OrchestratorClient):
         super().__init__("http://fake")
         self.decision = decision
         self.submitted: list[tuple[str, str, str | None]] = []
+        self.extras: list[dict[str, Any]] = []
+        self.directives: list[dict[str, Any]] = []
         self.raises: Exception | None = None
 
     def next_decision(self, wait: float) -> dict[str, Any]:
@@ -36,11 +38,24 @@ class FakeClient(OrchestratorClient):
             raise self.raises
         return self.decision or {"decision_id": None, "waiting": 0}
 
-    def submit(self, decision_id: str, action_id: str, reason: str | None) -> dict[str, Any]:
+    def submit(
+        self, decision_id: str, action_id: str, reason: str | None, **extra: Any
+    ) -> dict[str, Any]:
         if self.raises:
             raise self.raises
         self.submitted.append((decision_id, action_id, reason))
-        return {"decision_id": decision_id, "accepted": action_id, "status": "applied to the game"}
+        self.extras.append(extra)
+        return {"decision_id": decision_id, "applied": [action_id], "status": "applied to the game"}
+
+    def directive(self, payload: dict[str, Any]) -> dict[str, Any]:
+        if self.raises:
+            raise self.raises
+        self.directives.append(payload)
+        return {
+            "decision_id": payload["decision_id"],
+            "issued": payload["id"],
+            "status": "attached",
+        }
 
     def waiting(self) -> dict[str, Any]:
         return {"waiting": []}
@@ -81,13 +96,17 @@ def call(server: Any, name: str, **kwargs: Any) -> str:
     return text
 
 
-def test_the_surface_is_three_tools() -> None:
-    """Find out, read, answer. Anything more invites the model to go looking for game state
-    instead of reading the world view it was handed."""
+def test_the_surface_is_the_four_things_a_decision_needs() -> None:
+    """Find out, read, answer — plus setting a plan that outlives the turn.
+
+    Anything beyond these invites the model to go looking for game state instead of reading the
+    world view it was handed.
+    """
     assert set(tools(build_server(FakeClient()))) == {
         "next_decision",
         "submit_orders",
         "decisions_waiting",
+        "issue_directive",
     }
 
 
@@ -131,7 +150,7 @@ def test_submit_passes_the_choice_through() -> None:
         reason="expand",
     )
     assert client.submitted == [("base.production-1", "unit:0", "expand")]
-    assert json.loads(text)["accepted"] == "unit:0"
+    assert json.loads(text)["applied"] == ["unit:0"]
 
 
 def test_an_empty_reason_is_omitted_rather_than_recorded_as_blank() -> None:
@@ -160,3 +179,84 @@ def test_an_unreachable_orchestrator_says_so_in_words() -> None:
     client.raises = AgentError("orchestrator unreachable at http://fake: connection refused")
     with pytest.raises(Exception, match="unreachable"):
         call(build_server(client), "next_decision", wait_seconds=0)
+
+
+def test_the_measurement_channels_reach_the_orchestrator() -> None:
+    """`cited`, `followed` and `overrode` are how an agent-driven run stays measurable.
+
+    Without them a record shows zero grounding utilisation and zero directive attention, which
+    is indistinguishable from a model that read the facts and the plan and ignored both. The
+    pivot to an agent brain silently zeroed all three until these were wired.
+    """
+    client = FakeClient(DECISION)
+    call(
+        build_server(client),
+        "submit_orders",
+        decision_id="d-1",
+        action_id="unit:0",
+        cited=["fac:recycling-tanks"],
+        followed=["fund-weather-paradigm"],
+        overrode=["expand-fast"],
+    )
+    assert client.extras[0]["cited"] == ["fac:recycling-tanks"]
+    assert client.extras[0]["followed"] == ["fund-weather-paradigm"]
+    assert client.extras[0]["overrode"] == ["expand-fast"]
+
+
+def test_omitted_measurement_channels_send_empty_lists_not_none() -> None:
+    client = FakeClient(DECISION)
+    call(build_server(client), "submit_orders", decision_id="d-1", action_id="unit:0")
+    assert client.extras[0] == {"cited": [], "followed": [], "overrode": []}
+
+
+def test_issue_directive_passes_a_checkable_plan_through() -> None:
+    client = FakeClient(DECISION)
+    call(
+        build_server(client),
+        "issue_directive",
+        decision_id="d-1",
+        id="fund-weather-paradigm",
+        intent="save energy for the Weather Paradigm",
+        metric="energy_reserves",
+        comparator="at_least",
+        target=300,
+        priority=7,
+        entities=["fac:the-weather-paradigm"],
+    )
+    issued = client.directives[0]
+    assert issued["metric"] == "energy_reserves"
+    assert issued["target"] == 300
+    assert issued["priority"] == 7
+    assert issued["entities"] == ["fac:the-weather-paradigm"]
+
+
+def test_a_relative_directive_sends_no_target() -> None:
+    """The relative comparators measure against a baseline the orchestrator stamps. Sending a
+    target would be the model inventing a number it was not asked for."""
+    client = FakeClient(DECISION)
+    call(
+        build_server(client),
+        "issue_directive",
+        decision_id="d-1",
+        id="grow-labs",
+        intent="raise research output",
+        metric="labs_output",
+        comparator="increase",
+    )
+    assert "target" not in client.directives[0]
+
+
+def test_the_directive_tool_says_what_makes_a_plan_checkable() -> None:
+    """The constraint is the feature, and the model only learns it from the tool description."""
+    described = (tools(build_server(FakeClient()))["issue_directive"].description or "").lower()
+    assert "metrics" in described, "must say the metric has to be one the world view reports"
+    assert "at_least" in described, "must enumerate the comparators"
+    assert "before submit_orders" in described, "ordering is load-bearing"
+
+
+def test_submit_says_what_cited_is_for() -> None:
+    """`Orders.cited` notes that explaining this only in a system prompt left it empty on every
+    run. The tool description is where a model actually reads it."""
+    described = (tools(build_server(FakeClient()))["submit_orders"].description or "").lower()
+    assert "grounding" in described
+    assert "cited" in described

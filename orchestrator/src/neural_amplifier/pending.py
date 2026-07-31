@@ -68,6 +68,11 @@ class Pending:
     #: interface must never tell — it is the difference between a model that repairs and a
     #: model that believes it already succeeded.
     outcome: dict[str, object] | None = None
+    #: Directives the agent issued for this decision, attached before it submits. Held here
+    #: rather than passed with the order because they are validated at *issue* time, while the
+    #: model that wrote one is still in the loop and can fix it — discovering on every later
+    #: turn that a plan was never expressible is far more expensive than one refusal now.
+    proposed_directives: list[object] = field(default_factory=list)
     _done: threading.Event = field(default_factory=threading.Event, repr=False)
     _settled: threading.Event = field(default_factory=threading.Event, repr=False)
 

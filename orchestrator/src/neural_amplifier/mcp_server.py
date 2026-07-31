@@ -74,11 +74,16 @@ class OrchestratorClient:
     def next_decision(self, wait: float) -> dict[str, Any]:
         return self._call("/agent/next", {"wait": wait})
 
-    def submit(self, decision_id: str, action_id: str, reason: str | None) -> dict[str, Any]:
+    def submit(
+        self, decision_id: str, action_id: str, reason: str | None, **extra: Any
+    ) -> dict[str, Any]:
         return self._call(
             "/agent/submit",
-            {"decision_id": decision_id, "action_id": action_id, "reason": reason},
+            {"decision_id": decision_id, "action_id": action_id, "reason": reason, **extra},
         )
+
+    def directive(self, payload: dict[str, Any]) -> dict[str, Any]:
+        return self._call("/agent/directive", payload)
 
     def waiting(self) -> dict[str, Any]:
         return self._call("/agent/waiting")
@@ -126,7 +131,14 @@ def build_server(client: OrchestratorClient) -> Any:
         return json.dumps(payload, indent=2)
 
     @server.tool()
-    def submit_orders(decision_id: str, action_id: str, reason: str = "") -> str:
+    def submit_orders(
+        decision_id: str,
+        action_id: str,
+        reason: str = "",
+        cited: list[str] | None = None,
+        followed: list[str] | None = None,
+        overrode: list[str] | None = None,
+    ) -> str:
         """Answer a decision by choosing one action from its action space.
 
         `action_id` must be one of the `id` values in that decision's `action_space` — the
@@ -135,6 +147,18 @@ def build_server(client: OrchestratorClient) -> Any:
         `reason` is recorded with the decision and is worth writing properly: it is what makes a
         game reviewable afterwards, and it is the only part of your thinking that survives.
 
+        `cited` — ids from the world view's `grounding` block that actually informed this
+        choice, e.g. `["fac:recycling-tanks"]`. Cite what you used and nothing else. This is
+        the only evidence that the retrieved facts influenced the decision rather than merely
+        preceding it: leave it empty and a decision the facts drove is indistinguishable from
+        one that ignored them. Ids you were not offered are discarded, so guessing gains
+        nothing.
+
+        `followed` / `overrode` — ids from the world view's `directives` block that you obeyed
+        or deliberately went against. Overriding a standing plan is legitimate — priorities
+        exist so a decision can outrank one — but say so, because a plan quietly ignored and a
+        plan consciously outweighed look identical afterwards.
+
         Returns what was actually applied, which may differ from what you asked for if the
         policy guard stripped a choice. Read it rather than assuming.
         """
@@ -142,8 +166,67 @@ def build_server(client: OrchestratorClient) -> Any:
             raise AgentError("decision_id is required — call next_decision first")
         if not action_id:
             raise AgentError("action_id is required and must come from the action space")
-        result = client.submit(decision_id, action_id, reason or None)
+        result = client.submit(
+            decision_id,
+            action_id,
+            reason or None,
+            cited=cited or [],
+            followed=followed or [],
+            overrode=overrode or [],
+        )
         return json.dumps(result, indent=2)
+
+    @server.tool()
+    def issue_directive(
+        decision_id: str,
+        id: str,
+        intent: str,
+        metric: str,
+        comparator: str,
+        target: float | None = None,
+        priority: int = 5,
+        entities: list[str] | None = None,
+        horizon_turn: int | None = None,
+        rationale: str = "",
+    ) -> str:
+        """Set a standing plan that later decisions will be shown. Call this BEFORE submit_orders.
+
+        For long-horizon decisions — a tech path, a social model — whose reasoning should
+        outlive the turn that made it. Without a directive your conclusion dies with this
+        response and the next base-production decision knows nothing about it.
+
+        `metric` must name something the world view actually reports in its `metrics` block, and
+        `comparator` is one of `at_least`, `at_most`, `increase`, `decrease`, `hold`. That
+        constraint is the point: "keep energy reserves above 300" is a claim a later turn can
+        check, and "play aggressively" is not. A metric outside the vocabulary is refused here,
+        while you can still rewrite it.
+
+        `target` is required for `at_least`/`at_most`; the relative comparators measure against a
+        baseline stamped from this world view, so do not supply one.
+
+        `priority` 1–10, and the scale means the same thing across decisions that never see each
+        other: 9–10 survival, 7–8 a committed plan, 4–6 a preference worth real cost, 1–3 a
+        tie-breaker.
+
+        `entities` are datalinks ids the plan is about — `["fac:the-weather-paradigm"]` for a
+        plan to fund that project. They are lookup keys, not decoration: a later decision that
+        spends the resource you are saving finds this plan by walking out from them.
+        """
+        payload = {
+            "decision_id": decision_id,
+            "id": id,
+            "intent": intent,
+            "metric": metric,
+            "comparator": comparator,
+            "priority": priority,
+            "entities": entities or [],
+            "rationale": rationale or None,
+        }
+        if target is not None:
+            payload["target"] = target
+        if horizon_turn is not None:
+            payload["horizon_turn"] = horizon_turn
+        return json.dumps(client.directive(payload), indent=2)
 
     @server.tool()
     def decisions_waiting() -> str:

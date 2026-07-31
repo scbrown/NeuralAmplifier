@@ -311,3 +311,138 @@ def test_a_guard_denial_is_reported_back_to_the_agent() -> None:
     # And the game got the safe fallback rather than an order it could not pay for.
     assert results["body"]["choices"][0]["action_id"] == "hurry:none"
     assert results["body"]["degraded"] is True
+
+
+def test_an_agent_can_issue_a_plan_that_steers_a_later_decision(tmp_path) -> None:
+    """na-43h, on the agent path: a long-horizon decision leaves something behind.
+
+    `Orders.directives` has existed all along and no decision had ever issued one — every
+    directive measured so far was hand-written into a plan file. An agent is the natural issuer,
+    and until now the MCP surface gave it no way to.
+
+    The assertion that matters is the second half: the plan is not just stored, it reaches the
+    *next* decision as a `DirectiveStatus` with its current value attached.
+    """
+    from neural_amplifier.directives import DirectiveStore
+
+    brain = AgentBrain(doorbell=Doorbell(target="", enabled=False), timeout=10)
+    app = create_app(brain=brain)
+    app.state.orchestrator.plan = DirectiveStore(tmp_path / "plan.json")
+    client = TestClient(app)
+
+    tech = {
+        "schema_version": "0.1",
+        "engine": "thinker",
+        "scope": "turn",
+        "surface_id": "faction.tech",
+        "turn": 40,
+        "faction": "Gaians",
+        "metrics": {"energy_reserves": 120, "energy_income": 14},
+        "action_space": [{"id": "tech:5", "action": "Centauri Ecology"}],
+    }
+    results: dict = {}
+
+    def call_tech() -> None:
+        results["tech"] = client.post("/decide", json=tech).json()
+
+    thread = threading.Thread(target=call_tech, daemon=True)
+    thread.start()
+    claimed = _await_claim(client)
+
+    issued = client.post(
+        "/agent/directive",
+        json={
+            "decision_id": claimed["decision_id"],
+            "id": "fund-weather-paradigm",
+            "intent": "save energy for the Weather Paradigm",
+            "metric": "energy_reserves",
+            "comparator": "at_least",
+            "target": 300,
+            "priority": 7,
+            "entities": ["fac:the-weather-paradigm"],
+        },
+    )
+    assert issued.status_code == 200, issued.text
+    assert issued.json()["issued"] == "fund-weather-paradigm"
+
+    client.post(
+        "/agent/submit",
+        json={"decision_id": claimed["decision_id"], "action_id": "tech:5", "reason": "eco path"},
+    )
+    thread.join(timeout=5)
+
+    # The next decision, on a different surface, must be shown the plan.
+    hurry = {
+        "schema_version": "0.1",
+        "engine": "thinker",
+        "scope": "base",
+        "surface_id": "base.hurry",
+        "turn": 41,
+        "faction": "Gaians",
+        "metrics": {"energy_reserves": 120, "energy_income": 14},
+        "action_space": [{"id": "hurry:none", "action": "Do not hurry"}],
+    }
+
+    def call_hurry() -> None:
+        results["hurry"] = client.post("/decide", json=hurry).json()
+
+    thread2 = threading.Thread(target=call_hurry, daemon=True)
+    thread2.start()
+    second = _await_claim(client)
+
+    shown = second["world_view"].get("directives") or []
+    assert shown, "a plan that does not reach the next decision has changed nothing"
+    status = shown[0]
+    assert status["directive"]["id"] == "fund-weather-paradigm"
+    assert status["directive"]["priority"] == 7
+    # With its current value attached — a directive without one is an instruction the model has
+    # to guess the relevance of.
+    assert status["current"] == 120
+    assert status["satisfied"] is False, "120 is short of the 300 it asks for"
+
+    client.post(
+        "/agent/submit",
+        json={
+            "decision_id": second["decision_id"],
+            "action_id": "hurry:none",
+            "followed": ["fund-weather-paradigm"],
+        },
+    )
+    thread2.join(timeout=5)
+
+
+def test_a_directive_naming_an_unknown_metric_is_refused_while_the_agent_can_fix_it(
+    agent_app,
+) -> None:
+    """Validation at issue time is the whole discipline.
+
+    Accepting this and discovering on every later turn that it cannot be evaluated would read
+    in a record as compliance rather than as a gap.
+    """
+    app, _ = agent_app
+    client = TestClient(app)
+    results: dict = {}
+    thread = _post_decision(client, results)
+    claimed = _await_claim(client)
+
+    refused = client.post(
+        "/agent/directive",
+        json={
+            "decision_id": claimed["decision_id"],
+            "id": "be-aggressive",
+            "intent": "play aggressively",
+            "metric": "aggression",
+            "comparator": "at_least",
+            "target": 5,
+        },
+    )
+    assert refused.status_code == 422
+    assert "aggression" in refused.json()["detail"]
+
+    # The decision is untouched: a bad plan must not cost the choice it arrived with.
+    good = client.post(
+        "/agent/submit", json={"decision_id": claimed["decision_id"], "action_id": "unit:0"}
+    )
+    assert good.status_code == 200
+    thread.join(timeout=5)
+    assert results["body"]["choices"][0]["action_id"] == "unit:0"

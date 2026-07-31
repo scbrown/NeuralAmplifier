@@ -71,9 +71,10 @@ def test_spending_exactly_what_is_available_is_allowed() -> None:
     """Reserves to zero is a legitimate move, and an off-by-one here would forbid every
     all-in purchase the game permits."""
     world_view = view([HURRY, WAIT], metrics={"energy_reserves": 81})
-    assert StateGuard().rule(
-        Orders(choices=[Choice(action_id="hurry:now")]), world_view
-    ).verdict == "allow"
+    assert (
+        StateGuard().rule(Orders(choices=[Choice(action_id="hurry:now")]), world_view).verdict
+        == "allow"
+    )
 
 
 def test_an_unreported_metric_is_uncheckable_not_violated() -> None:
@@ -83,15 +84,19 @@ def test_an_unreported_metric_is_uncheckable_not_violated() -> None:
     which turns a gap in the adapter into a wrong answer in the game.
     """
     world_view = view([HURRY, WAIT], metrics={"labs_output": 6})
-    assert StateGuard().rule(
-        Orders(choices=[Choice(action_id="hurry:now")]), world_view
-    ).verdict == "allow"
+    assert (
+        StateGuard().rule(Orders(choices=[Choice(action_id="hurry:now")]), world_view).verdict
+        == "allow"
+    )
 
 
 def test_no_metrics_at_all_allows() -> None:
-    assert StateGuard().rule(
-        Orders(choices=[Choice(action_id="hurry:now")]), view([HURRY, WAIT])
-    ).verdict == "allow"
+    assert (
+        StateGuard()
+        .rule(Orders(choices=[Choice(action_id="hurry:now")]), view([HURRY, WAIT]))
+        .verdict
+        == "allow"
+    )
 
 
 def test_an_action_with_no_declared_effects_is_not_second_guessed() -> None:
@@ -99,9 +104,10 @@ def test_an_action_with_no_declared_effects_is_not_second_guessed() -> None:
     cost from elsewhere in the payload is exactly the engine knowledge the orchestrator must
     not hold (invariant 2)."""
     world_view = view([WAIT], metrics={"energy_reserves": 0})
-    assert StateGuard().rule(
-        Orders(choices=[Choice(action_id="hurry:none")]), world_view
-    ).verdict == "allow"
+    assert (
+        StateGuard().rule(Orders(choices=[Choice(action_id="hurry:none")]), world_view).verdict
+        == "allow"
+    )
 
 
 def test_gains_are_never_denied() -> None:
@@ -109,9 +115,10 @@ def test_gains_are_never_denied() -> None:
     would deny orders that improve the position."""
     gain = Action(id="sell:x", action="Sell", effects={"energy_reserves": +50})
     world_view = view([gain], metrics={"energy_reserves": 0})
-    assert StateGuard().rule(
-        Orders(choices=[Choice(action_id="sell:x")]), world_view
-    ).verdict == "allow"
+    assert (
+        StateGuard().rule(Orders(choices=[Choice(action_id="sell:x")]), world_view).verdict
+        == "allow"
+    )
 
 
 def test_a_violated_directive_warns_but_never_denies() -> None:
@@ -157,9 +164,10 @@ def test_an_action_outside_the_space_is_left_to_validate() -> None:
     """validate() strips these before the guard sees them. Reaching here means the two
     disagree, which is not this guard's bug to fix — nor its bug to hide."""
     world_view = view([WAIT], metrics={"energy_reserves": 0})
-    assert StateGuard().rule(
-        Orders(choices=[Choice(action_id="unit:999")]), world_view
-    ).verdict == "allow"
+    assert (
+        StateGuard().rule(Orders(choices=[Choice(action_id="unit:999")]), world_view).verdict
+        == "allow"
+    )
 
 
 # ------------------------------------------------------------------------ chain
