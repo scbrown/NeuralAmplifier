@@ -186,25 +186,74 @@ surface consequences in [game-surface.md](game-surface.md); dialog handling in
   (presets in `CMakePresets.json`). Targets: `thinker.dll` + `thinker.exe` launcher
   (`CMakeLists.txt:61-81`). Runs on Windows or under **Wine**.
 - **Config:** `thinker.ini` `[thinker]`, parsed by `option_handler` (`main.cpp:12`) into
-  `struct Config` (`main.h:205`). **Add a toggle** (`llm_factions` bitmask, `llm_endpoint`):
-  new `Config` field + one `else if (MATCH(...))` clause + read `conf.<field>` in the gate
-  (`thinker_enabled`) and the hooks to route selected factions to the LLM.
+  `struct Config` (`main.h:205`). Three settings drive the bridge:
+
+  | Setting | Default | What it does |
+  |---|---|---|
+  | `llm_factions` | `0` | Bitmask of faction ids routed to the orchestrator. `0` is stock Thinker — no bridge in the loop at all. `llm_factions=2` routes faction 1. |
+  | `llm_endpoint` | `http://127.0.0.1:8000` | Orchestrator base URL. `http` only; an `https` value is **refused**, not downgraded. |
+  | `llm_timeout_ms` | `2500` | Ceiling on one decision's whole exchange. Past it the engine's own answer applies. |
+
+## 6.1 The transport
+
+`src/na_http.cpp` — raw Winsock, ~300 lines, no engine headers.
+
+**Synchronous on the engine thread, with one deadline.** Not a worker thread: the engine is
+not thread-safe (`na-abc` measured a worker deadlocking on Thinker's global `FileLock` the
+moment a modal dialog opened), and `mod_base_build`'s signature — one int in, one int out —
+has nowhere to park a decision and resume it later. A turn-based game can afford a bounded
+pause; it cannot afford an unbounded one. `llm_timeout_ms` bounds **connect + send + read
+together**, not each stage, so the number in the config file means what a player reading it
+would think it means.
+
+**HTTP/1.0 on purpose.** uvicorn may answer an HTTP/1.1 request with chunked
+transfer-encoding, and de-chunking is a parser the DLL has no business carrying. An HTTP/1.0
+request may not be answered with chunked encoding, so the reply is always a plain body
+followed by a close — which turns "read the response" into "read until EOF".
+
+**One field is read out of the reply** (`choices[].action_id`), by string scan rather than a
+JSON parser. Anything the scan misreads produces an id that fails the legality check and
+falls back, so the failure mode of the shortcut is the safe path.
+
+Testable with **no game and no API key**: `na_http.cpp` links no engine headers, so
+`just thinker wire` builds it into a standalone exe, runs it under Wine against a stub server
+*and* a real `neural-amplifier serve`, and checks all of the above including that the client
+gives up on its own deadline rather than the server's.
 
 ## 7. Open questions / next steps
 
-1. **A0 spike:** build `thinker.dll` under MinGW; confirm it patches `terranx.exe` under Wine
-   and that `mod_base_build` fires (log base_id + chosen item).
-2. **A1:** add the `llm_factions`/`llm_endpoint` config, wrap `mod_base_build` to POST the
-   world view and apply Claude's build id for one faction. First end-to-end LLM decision.
-3. Confirm the exact `action_space` sources: the buildable-items list for a base, legal-orders
-   list for a unit, available-techs list — and whether to read them from Thinker helpers or the
-   engine.
-4. Decide the transport (WinHTTP worker thread vs. local helper process) and the
-   non-blocking/timeout policy against the message pump.
+1. ~~**A0 spike:** confirm `thinker.dll` patches `terranx.exe` under Wine and `mod_base_build`
+   fires.~~ Done — `na-4pu`.
+2. ~~**A1:** wrap `mod_base_build` to POST the world view and apply Claude's build id.~~ Built
+   and unit-tested; **not yet run against a real game** — that needs `$SMAC_DIR` and is the
+   next thing to do (`na-61c`).
+3. ~~Decide the transport and the non-blocking/timeout policy against the message pump.~~
+   Decided and implemented — §6.1.
+4. Confirm the remaining `action_space` sources: legal-orders list for a unit, and whether to
+   read them from Thinker helpers or the engine.
 5. Wine + virtual-display harness for unattended/CI runs (the hardest part of this route) —
    designed in **[headless-harness.md](headless-harness.md)**, which also covers the game
    fixture (`terranx.exe` v2.0 sourcing) and the menu-free startup seams (`load_daemon`,
-   `cmd_parse`, `mod_auto_save`).
+   `cmd_parse`, `mod_auto_save`). This is what turns "A1 is built" into "A1 is proven"
+   (`na-ie9`).
+
+## 8. One decision per base-turn
+
+`mod_base_build` fires **more than once per base per turn** — `mod_base_reset` is hooked at
+eleven engine call sites (`patch.cpp:859-869`) and each one applies its own answer, so the
+last caller wins. Measured in real play: 21 of 24 base-turns fired twice, and 11 of those
+pairs *disagreed*.
+
+Left alone that would mean several paid model calls to settle one build, with the answer that
+happened to be last silently winning. So the adapter numbers the calls (`call_seq`, indexed by
+base and invalidated on turn change), asks the orchestrator only on `call_seq == 1`, and
+replays that answer for the rest of the turn — re-checking legality each time, because a base
+can lose the ability to build something mid-turn when a rival completes the secret project it
+picked.
+
+That is also what makes *exactly one decision record per decision* true rather than
+aspirational, without having to argue which of eleven engine paths is philosophically
+authoritative.
 
 ## Reference
 

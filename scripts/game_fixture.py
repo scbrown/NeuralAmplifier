@@ -202,8 +202,7 @@ def cmd_verify(args: argparse.Namespace) -> int:
     if not root.is_dir():
         print(f"FAIL  $SMAC_DIR does not exist or is not a directory: {root}", file=sys.stderr)
         print(
-            "      Point SMAC_DIR at your extracted install "
-            "(docs/headless-harness.md §2.3).",
+            "      Point SMAC_DIR at your extracted install (docs/headless-harness.md §2.3).",
             file=sys.stderr,
         )
         return 2

@@ -132,7 +132,7 @@ Full design — the contract Claude speaks, the two-engine strategy, and the roa
 
 | Surface | Scope | Status |
 |---|---|---|
-| `base.production` | base | Observed · action space costed in minerals, with unit roles and facility effects. `apply` closes the loop |
+| `base.production` | base | **Wired** · posts the world view and applies the returned build, falling back to the engine's own answer |
 | `faction.tech` | turn | Observed · researchable techs with the engine's own AI valuation weights |
 | `faction.se` | turn | Observed · legal (field, model) pairs with effect deltas, grounded from `#SOCIO` |
 | `base.hurry` | base | Observed · credit cost and turns saved; unaffordable option omitted |
@@ -141,8 +141,20 @@ Every surface ships a **side-effect-free probe** (`observe`, `observe-tech`, `ob
 `observe-hurry`) because in-game input cannot be driven at all, so a decision that fires every five
 to ten turns is otherwise unverifiable without playing until it happens.
 
-All four are **observation only** — the engine's own choice still executes. That is deliberate: it
-makes each surface falsifiable on its own before anything depends on it.
+All four **emit the contract directly** — no translation layer between the adapter and the brain.
+
+`base.production` is the first surface where the brain's answer actually executes. Three gates make
+that safe rather than hopeful: the returned id must parse as one the adapter minted, the item must
+pass the *engine's own* availability tests for that base, and the whole exchange is bounded by
+`llm_timeout_ms` (default 2500 ms). Every failure — unreachable orchestrator, timeout, malformed
+reply, illegal id — applies the deterministic tier's choice and records why. The other three
+surfaces remain observation-only on purpose: each stays falsifiable on its own before anything
+depends on it.
+
+> **Built, not yet proven.** The wire is tested end-to-end under Wine against a real orchestrator
+> (`just thinker wire`), but no decision has executed inside a running game — that needs a game
+> fixture and the unattended harness. Honest status: the loop closes in the code and has not yet
+> closed on a board.
 
 ### The plan, in dependency order
 
@@ -241,9 +253,12 @@ and the rollout are in the [design doc](docs/knowledge-architecture.md).
 > record and JSONL log, the OTel exporter, replay, the derived fairness ledger, the
 > Quipu/Hank seam, and the SMAC datalinks ingester. All of it runs with **no game present**.
 >
-> What is *not* built: the engine adapters. Nothing plays a turn of Alpha Centauri yet.
+> What is *not* proven: nothing has played a turn of Alpha Centauri yet.
 > **Track A (Thinker) is the current focus** — the complete, balanced game, controllable
-> today — and its faction gate is in the fork; intercepting a real decision is next.
+> today. The fork observes four decision surfaces and now *decides* one of them: `base.production`
+> posts the world view and applies what comes back. The wire is tested against a real
+> orchestrator with no game present; running it on a real board needs the game fixture and the
+> unattended harness, which is the next step.
 
 ```bash
 git clone https://github.com/scbrown/NeuralAmplifier && cd NeuralAmplifier
@@ -288,6 +303,7 @@ just glsmac test         # GLSMAC adapter (headless --gse-tests)
 just thinker build       # Thinker adapter (needs the Thinker toolchain)
 just docs check          # Markdown lint
 
+just thinker wire        # Adapter's HTTP client under Wine vs. a real orchestrator — no game
 just coverage            # Run health: surfaces fired, fallback rate, adherence
 just replay --store …    # Re-run a recorded log against the current code — no game
 just ingest              # Your alphax.txt → the smac: RDF graph + static briefing

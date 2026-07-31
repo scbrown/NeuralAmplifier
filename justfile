@@ -84,17 +84,21 @@ glsmac cmd="test":
 # === Thinker adapter (Track A · DLL bridge to terranx.exe) ===
 
 # The near-term deep-game adapter: just thinker <cmd>  (needs the Thinker toolchain)
-# Commands: build test
+# Commands: build test wire
+#   wire = the adapter's HTTP client, run under Wine against a real orchestrator.
+#          Needs NO game, so it is the one adapter lane that can run in CI.
 thinker cmd="build":
     #!/usr/bin/env bash
     set -euo pipefail
-    if [ ! -d adapters/thinker/src ]; then
-        echo "thinker adapter: not yet scaffolded (see VISION.md §Roadmap, Track A)."; exit 0
+    if [ ! -d "{{thinker}}/src" ]; then
+        echo "thinker: no checkout at {{thinker}} (set THINKER_DIR)."; exit 0
     fi
     case "{{cmd}}" in
-        build)  bash adapters/thinker/scripts/build.sh ;;
+        build)  (cd "{{thinker}}" && cmake --preset release >/dev/null \
+                    && cmake --build build/release -j"$(nproc)") ;;
         test)   bash adapters/thinker/scripts/test.sh ;;   # runs SMAC under Wine
-        *)      echo "Unknown: {{cmd}}. Try: build test" ;;
+        wire)   NA_DIR="$(pwd)" bash "{{thinker}}/tests/run-na-tests.sh" --with-orchestrator ;;
+        *)      echo "Unknown: {{cmd}}. Try: build test wire" ;;
     esac
 
 # === Integration ===

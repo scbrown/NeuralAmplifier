@@ -14,7 +14,8 @@ Three things it gives that nothing else does:
   consistent, that field earned its place. If it changes nothing, it is costing tokens.
 * **A model comparison on identical input**, with no game running.
 
-Needs no game: a captured observation from `na-observations.jsonl` is enough.
+Needs no game: a captured world view from `na-observations.jsonl` is enough. The
+adapter emits the contract directly, so a record is parsed, not translated.
 
     scripts/decision_stability.py OBSERVATIONS.jsonl --surface base.production -n 5
 
@@ -36,7 +37,7 @@ from typing import Any
 REPO = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO / "orchestrator" / "src"))
 
-from neural_amplifier.contract import Action, WorldView  # noqa: E402
+from neural_amplifier.contract import WorldView  # noqa: E402
 from neural_amplifier.orchestrator import Orchestrator  # noqa: E402
 
 
@@ -65,119 +66,25 @@ def load_observation(path: Path, surface: str) -> dict[str, Any]:
 
 
 def to_world_view(record: dict[str, Any]) -> WorldView:
-    """Map an adapter observation onto the contract.
+    """Parse an adapter observation as a contract world view.
 
-    A deliberate bridge, not a second wire format to bless: the adapter currently emits its own
-    observation shape, and A1 has it emit the contract directly. Keeping the mapping here rather
-    than in the orchestrator package avoids teaching the orchestrator a shape it should never
-    learn — it speaks the contract and nothing else (`AGENTS.md` invariant 2).
+    There used to be a bridge here — some sixty lines mapping the adapter's own record shape
+    onto the contract, renaming ``name`` to ``action``, digging metrics out of ``base_state``
+    and ``faction_state``, and deriving each action's ``effects`` from its ``cost``/``cost_unit``
+    pair. It existed because the adapter emitted a shape of its own and the orchestrator must
+    never learn an engine's field layout (``AGENTS.md`` invariant 2), so the knowledge had to
+    live somewhere that was neither.
 
-    Everything the contract does not model is passed through in the engine-dependent sections,
-    which is what they exist for.
+    The adapter now emits the contract directly, so the mapping is gone rather than moved. That
+    is the better place for it by invariant 2's own logic: the adapter is the one component that
+    is *allowed* to know both, and a bridge that only this script used meant the world view
+    measured here was never quite the one a real game would send.
+
+    A record from before that change will fail here, which is correct — it is a different wire
+    format, and quietly coercing it would make a stability number incomparable with the run
+    beside it.
     """
-    actions = [
-        Action(
-            id=str(a["id"]),
-            action=str(a.get("name", a["id"])),
-            effects=_effects(a),
-            **_extras(a),
-        )
-        for a in record.get("action_space", [])
-    ]
-    scope = "base" if "base_id" in record else "turn"
-    # The entity the decision is about, where the adapter names one. ``base.hurry`` asks whether
-    # to rush ``item``, and without this the surface retrieves nothing at all — none of its
-    # action labels ("Hurry production") exist in any datalinks.
-    #
-    # Knowing that this adapter calls it ``item`` is exactly the adapter-shaped knowledge this
-    # bridge exists to hold, and exactly what the orchestrator must not contain.
-    subjects = [str(record["item"])] if record.get("item") else None
-    passthrough = {
-        k: v
-        for k, v in record.items()
-        if k
-        not in {
-            "surface_id",
-            "engine",
-            "turn",
-            "faction",
-            "faction_id",
-            "action_space",
-            "action_space_size",
-            "tier",
-            "applied",
-        }
-    }
-    return WorldView(
-        engine=record.get("engine", "thinker"),
-        scope=scope,  # type: ignore[arg-type]
-        turn=int(record.get("turn", 0)),
-        faction=str(record.get("faction") or f"faction-{record.get('faction_id')}"),
-        surface_id=record.get("surface_id"),
-        action_space=actions,
-        subjects=subjects,
-        metrics=_metrics(record),
-        economy=passthrough or None,
-    )
-
-
-#: Adapter ``base_state`` keys mapped onto the metric vocabulary. Renames rather than passthrough
-#: because the vocabulary is engine-neutral and the adapter's key names are not: the adapter calls
-#: it ``turns_if_waiting``, which is this base's ``turns_to_completion``.
-_METRIC_KEYS = {
-    "energy_reserves": "energy_reserves",
-    "energy_income": "energy_income",
-    "mineral_surplus": "mineral_surplus",
-    "minerals_remaining": "minerals_remaining",
-    "turns_if_waiting": "turns_to_completion",
-    "pop_size": "pop_size",
-    "base_count": "base_count",
-    "labs_output": "labs_output",
-}
-
-
-def _metrics(record: dict[str, Any]) -> dict[str, float] | None:
-    """Named measurements a directive can be written against.
-
-    Pulled from wherever this adapter happens to put them, which is exactly the engine-shaped
-    knowledge that belongs in this bridge and not in the orchestrator. Absent keys are simply
-    absent: a metric we cannot report must read as unmeasurable downstream, never as zero.
-    """
-    out: dict[str, float] = {}
-    for source in (record, record.get("base_state") or {}, record.get("faction_state") or {}):
-        if not isinstance(source, dict):
-            continue
-        for key, name in _METRIC_KEYS.items():
-            value = source.get(key)
-            if isinstance(value, int | float) and not isinstance(value, bool):
-                out[name] = float(value)
-    return out or None
-
-
-def _effects(action: dict[str, Any]) -> dict[str, float] | None:
-    """An action's immediate, known effect on named metrics.
-
-    Derived from the adapter's ``cost``/``cost_unit`` pair, which is the only effect it currently
-    declares. Without this the orchestrator cannot compute what an option costs a standing
-    directive, and a priority number has nothing to be weighed against.
-    """
-    cost = action.get("cost")
-    unit = action.get("cost_unit")
-    if not isinstance(cost, int | float) or not cost:
-        return None
-    metric = {"credits": "energy_reserves", "minerals": "minerals_remaining"}.get(str(unit))
-    if metric is None:
-        return None
-    return {metric: -float(cost)}
-
-
-def _extras(action: dict[str, Any]) -> dict[str, Any]:
-    """Cost, role, effect and the turn estimates, carried through onto the Action.
-
-    ``Action`` is ``extra="allow"``, and these fields are the whole reason a decision is decidable
-    — dropping them here would measure stability on a world view nobody actually uses.
-    """
-    return {k: v for k, v in action.items() if k not in {"id", "name"}}
+    return WorldView.model_validate(record)
 
 
 def build_brain(kind: str) -> Any:

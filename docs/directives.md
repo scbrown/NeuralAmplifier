@@ -73,7 +73,7 @@ A priority number alone is unusable. Telling a base "there is a priority-7 plan 
 asks it to guess the cost of ignoring one. So the orchestrator computes the trade-off from
 `Action.effects` and the directive's metric — arithmetic on declared numbers, not an opinion:
 
-```
+```text
 hurry:now → fund-weather-paradigm [p7]: energy_reserves -81 → 1, setback 5.8 turns
 ```
 
@@ -94,7 +94,7 @@ The walk starts from what the decision actually does:
 - **Hop 1+ — what those directives are for.** Each directive reached contributes its own
   `entities`, which pull the directives about *them*.
 
-```
+```text
 hurry:now changes energy_reserves by -81
   └─ hop 0  [p7] fund-weather-paradigm
        └─ fac:the-weather-paradigm

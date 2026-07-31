@@ -1,0 +1,21 @@
+# Ruff settings for Python OUTSIDE the orchestrator package — everything under
+# `scripts/`.
+#
+# It exists because the pre-commit hook runs ruff from the repository root, and ruff
+# resolves configuration by walking up from each file. Files under `orchestrator/`
+# find `orchestrator/pyproject.toml`; files under `scripts/` found nothing and fell
+# back to the built-in default of 88 columns. So the hook reformatted the scripts to
+# 88 on every run while they were committed at 100 — `just check` failed on a clean
+# checkout, which is the worst state for a quality gate to be in. A gate that is
+# always red is a gate everybody learns to push past.
+#
+# Keep `line-length` equal to `orchestrator/pyproject.toml`. Two numbers here means
+# the same repository disagrees with itself about what a long line is.
+line-length = 100
+target-version = "py311"
+
+[lint]
+# Deliberately lighter than the orchestrator's rule set. These are operator scripts —
+# a fixture verifier and a measurement harness — not the service, and holding them to
+# the package's full lint surface would be borrowing strictness that buys nothing.
+select = ["E", "F", "I", "UP", "B"]
