@@ -99,6 +99,13 @@ def build_brain(kind: str) -> Any:
         from neural_amplifier.brain import ClaudeBrain
 
         return ClaudeBrain()
+    if kind in {"claude-code", "claude-code-no-directives"}:
+        # The lane that matches how the game is now played. `claude -p` is the same model the
+        # attached agent runs, but in a fresh process per call — so N runs are N independent
+        # samples, which an interactive session can never be. Needs no API key.
+        from neural_amplifier.claude_code_brain import ClaudeCodeBrain
+
+        return ClaudeCodeBrain(issue_directives=kind == "claude-code")
     raise SystemExit(f"unknown brain: {kind}")
 
 
@@ -110,7 +117,17 @@ def main() -> int:
     # same surface splits 6/4 over ten runs. Five samples cannot tell stable from lucky, and the
     # whole point of this harness is to stop guessing about that.
     ap.add_argument("-n", "--runs", type=int, default=10)
-    ap.add_argument("--brain", default="scripted", choices=["scripted", "claude"])
+    ap.add_argument(
+        "--brain",
+        default="scripted",
+        choices=["scripted", "claude", "claude-code", "claude-code-no-directives"],
+        help=(
+            "claude = the Anthropic SDK. claude-code = the same model via `claude -p`, one "
+            "fresh process per run, no API key. The -no-directives variant ablates the "
+            "directive-issuing section of the system prompt and nothing else, which is what "
+            "makes 'does planning cost decision quality' a measurable question."
+        ),
+    )
     ap.add_argument("--quipu", help="quipu-server base URL, to include grounding")
     ap.add_argument(
         "--plan",
@@ -155,8 +172,10 @@ def main() -> int:
     overrode: collections.Counter[str] = collections.Counter()
     unmeasurable: collections.Counter[str] = collections.Counter()
     attentions: list[float] = []
+    issued = 0
     for _ in range(args.runs):
         result = orchestrator.decide(world_view)
+        issued += len(getattr(result.record.plan, "issued", []) or [])
         picked = [c.action_id for c in result.orders.choices]
         choices.append(",".join(picked) if picked else "<none>")
         used = result.record.knowledge.utilisation
@@ -213,6 +232,21 @@ def main() -> int:
         print(f"utilisation    mean {statistics.mean(utilisations):.2f}")
     else:
         print("utilisation    n/a  (no grounding — pass --quipu to measure it)")
+
+    # Directives issued across the run. Reported even when zero — especially when zero, since
+    # "the model was invited to set direction and declined" is a finding and an unreported zero
+    # is indistinguishable from a field nobody looked at.
+    print(f"directives     {issued} issued across {args.runs} runs")
+
+    # A paid lane that does not report what it spent invites a measurement nobody repeats.
+    spent = getattr(orchestrator.brain, "cost_usd", 0.0)
+    malformed = getattr(orchestrator.brain, "malformed", 0)
+    if spent:
+        print(f"cost           ${spent:.2f} total, ${spent / args.runs:.3f} per run")
+    if malformed:
+        print(
+            f"malformed      {malformed} reply/replies did not parse — stability is over the rest"
+        )
 
     if attentions:
         print(f"plan attention mean {statistics.mean(attentions):.2f}")

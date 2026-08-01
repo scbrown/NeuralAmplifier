@@ -271,7 +271,19 @@ Four properties worth keeping:
   fields, so degrade rate, adherence and fair-play keep measuring the way the game is actually
   played. If that were not true, every measurement the project has would quietly stop covering
   the real thing.
-- **Measurement.** `scripts/decision_stability.py` still drives the orchestrator directly with
-  a scripted or Claude brain, so N-run stability stays independent per sample. Agent play and
-  measurement are separate lanes on purpose — an interactive session accumulates context, which
-  is exactly what a stability sample must not do.
+- **Measurement.** `scripts/decision_stability.py` still drives the orchestrator directly, so
+  N-run stability stays independent per sample. Agent play and measurement are separate lanes on
+  purpose: an interactive session accumulates context, which is exactly what a stability sample
+  must not do.
+
+  `--brain claude-code` closes the gap between them. It runs the *same model the attached agent
+  runs*, through `claude -p`, one fresh process per call — so the samples stay independent and
+  it needs no API key, because it uses whatever credentials Claude Code already has. The
+  `--brain claude` lane (Anthropic SDK, `NA_BRAIN=claude`) is still there and still the one with
+  guaranteed-parseable structured output; `claude-code` asks for JSON and parses it, so it
+  counts and reports its own malformed replies rather than hiding them.
+
+  It also reports what it spent and how many directives were issued. A paid lane that does not
+  report its cost invites a measurement nobody repeats, and an unreported zero is
+  indistinguishable from a field nobody looked at — which is exactly how the first run of this
+  measurement went wrong (see `na-43h`).
