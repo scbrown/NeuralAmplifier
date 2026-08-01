@@ -37,6 +37,8 @@ def main(argv: list[str] | None = None) -> int:
         help="require identical decisions (scripted-brain runs only)",
     )
 
+    sub.add_parser("surfaces", help="how much of the game surface is instrumented")
+
     ing = sub.add_parser("ingest", help="parse alphax.txt into the smac: datalinks graph")
     ing.add_argument("alphax", type=Path, help="path to alphax.txt in your SMAC install")
     ing.add_argument("--out", type=Path, help="write Turtle here")
@@ -50,6 +52,25 @@ def main(argv: list[str] | None = None) -> int:
         import uvicorn
 
         uvicorn.run("neural_amplifier.service:app", host=args.host, port=args.port)
+        return 0
+
+    if args.command == "surfaces":
+        from .surfaces import coverage
+
+        c = coverage()
+        print(f"{c['instrumented']} of {c['total']} surfaces emit a decision record.\n")
+        print(f"  {c['remaining']:>3}  remaining, which divides into:")
+        print(
+            f"  {c['needs_tier_first']:>3}    no native AI path — the deterministic tier has to"
+            " be built first,"
+        )
+        print("        or there is nothing to degrade to (invariant 9)")
+        print(
+            f"  {c['volume_bound']:>3}    unit-scope with a native path — mostly stay"
+            " deterministic on volume grounds"
+        )
+        print(f"  {c['ready']:>3}    have a native path and a safe fallback — instrumentable now")
+        print("\nSee docs/game-surface.md §2.5 for the per-surface matrix.")
         return 0
 
     if args.command == "ingest":

@@ -81,7 +81,7 @@ Per-unit orders fire separately as the engine iterates units (`mod_enemy_turn`
 | `faction.se` | turn | `mod_social_ai` | legal (field, model) pairs with effect deltas | `observe-se <faction_id>` |
 | `base.hurry` | base | `mod_base_hurry` (wrapped) | hurry / don't, with credit cost and turns saved; unaffordable option omitted | `observe-hurry <base_id>` |
 
-All three are **observation only** — Thinker's choice still executes. `apply <base_id>
+All four are **observation only** — Thinker's choice still executes. `apply <base_id>
 <action_id>` closes the loop for `base.production`, validated against the engine's own
 availability tests, so an illegal order is rejected rather than applied.
 
@@ -99,6 +99,11 @@ Measured with the same model (Haiku) on two surfaces, same graph, same retrieval
 | `base.production` | 8 | 7 | 1 | **0.14** |
 | `base.hurry` | 2 | 1 | 1 | **1.00** |
 
+`base.production` was re-measured later over twenty decisions, once citations were asked to
+include facts that helped *rule an option out*: 1.75 of 8 cited, utilisation **0.22**. Higher,
+and the conclusion is unchanged — see the `na-373` eval (`just eval score na-373`), which also
+records why narrowing the offered set turned out not to be the fix.
+
 The wide surface paid for six facts nobody read. That is not a model failure — retrieval fetched
 one fact per offered action, and a decision only turns on a few of them. It is a retrieval-tuning
 signal, and it did not exist before citations were instrumented.
@@ -113,16 +118,23 @@ needs outcome measurement over a game, not a single decision.
 
 The gap is not uniform, and the interesting split is not by scope:
 
-- **21 surfaces the native AI never decides at all** (`NO_AI_PATH`) — `base.abandon`,
-  `council.vote`, `base.retool`, `diplo.base_swap` and the rest. These have no deterministic
-  tier to fall back to, which cuts both ways: an LLM adds capability the engine genuinely
-  lacks, and there is no native answer to degrade to when the brain is unavailable. Anything
-  moved here needs its fallback designed, not inherited.
-- **32 `unit`-scope surfaces**, most of which should stay deterministic on volume grounds —
-  see the `unit.move` entry in [decision-inputs.md](decision-inputs.md) §5 for why, and why a
-  revisit should decide *operations* rather than tile moves.
-- **The rest** are base and faction decisions with an existing native path, so they can be
-  instrumented incrementally with a safe fallback already in place.
+Run `just surfaces` for these numbers rather than trusting this paragraph — they come from the
+frozen registry (`surfaces.coverage()`), and the prose version of this list was wrong for a
+while in a way worth recording. It counted "21 with no AI path" and "32 unit-scope" as separate
+piles; seven surfaces are **both**, so the remainder looked like 20 when it is 27. A third more
+work was available than the document admitted. The buckets below partition, and a test now
+enforces that they do.
+
+- **21 the native AI never decides at all** (`NO_AI_PATH`) — `base.abandon`, `council.vote`,
+  `base.retool`, `diplo.base_swap` and the rest. No deterministic tier to fall back to, which
+  cuts both ways: an LLM adds capability the engine genuinely lacks, and there is no native
+  answer to degrade to when the brain is unavailable. Anything moved here needs its fallback
+  designed, not inherited — that is step 0 of the plan, and the one that is expensive to skip.
+- **25 `unit`-scope with a native path**, most of which should stay deterministic on volume
+  grounds — see the `unit.move` entry in [decision-inputs.md](decision-inputs.md) §5 for why, and
+  why a revisit should decide *operations* rather than tile moves.
+- **27 base and faction decisions with an existing native path**, so they can be instrumented
+  incrementally with a safe fallback already in place. This is the bucket to work through.
 
 One known limitation, recorded because it is invisible otherwise: **`faction.se` never fires for
 a human-slot faction.** `mod_social_ai` returns immediately for humans, so in the recommended

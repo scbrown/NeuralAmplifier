@@ -27,7 +27,9 @@ from harness import base_production, ground, load_answers, spread, tally  # noqa
 KEEP = 4
 
 #: Words too common to count as information.
-_NOISE = frozenset({"a", "an", "the", "and", "or", "of", "to", "per", "for", "with", "upkeep"})
+_NOISE = frozenset(
+    {"a", "an", "the", "and", "or", "of", "to", "per", "for", "with", "upkeep"}
+)
 _WORD = re.compile(r"[a-z0-9+%-]+")
 
 
@@ -90,7 +92,8 @@ def score(out: Path, links: Path, keep: int = KEEP) -> None:
         # Filtered against the offered set exactly as `summarise` does: an invented id must not
         # inflate the number this whole exercise exists to move.
         used = [
-            len({c for c in dict.fromkeys(r.get("cited", [])) if c in offered}) for r in rows
+            len({c for c in dict.fromkeys(r.get("cited", [])) if c in offered})
+            for r in rows
         ]
         util = sum(u / len(offered) for u in used) / len(rows) if offered else 0.0
         print(
@@ -102,7 +105,9 @@ def score(out: Path, links: Path, keep: int = KEEP) -> None:
     # this needs no rulebook and no model — only the run.
     baseline = (out / "all.task.txt").read_text()
     block = re.search(r'"grounding": \[(.*?)\n  \]', baseline, re.S)
-    lines = re.findall(r'"((?:[a-z]+:[a-z0-9-]+) [^"]*)"', block.group(1)) if block else []
+    lines = (
+        re.findall(r'"((?:[a-z]+:[a-z0-9-]+) [^"]*)"', block.group(1)) if block else []
+    )
     ranking = [ln.split(" ", 1)[0] for ln in rank_lines(lines)]
     position = {fid: i for i, fid in enumerate(ranking)}
     hits = [
@@ -114,8 +119,12 @@ def score(out: Path, links: Path, keep: int = KEEP) -> None:
     if not hits:
         return
     top = sum(1 for h in hits if h < keep)
-    print(f"\nwhere the baseline's citations sat in the ranking ({len(hits)} citations):")
+    print(
+        f"\nwhere the baseline's citations sat in the ranking ({len(hits)} citations):"
+    )
     print(f"  in the top {keep}: {top}/{len(hits)} = {top / len(hits):.2f}")
     print(f"  if the ranking were noise: {keep / len(ranking):.2f}")
     for fid in sorted({ranking[h] for h in hits}, key=lambda f: position[f]):
-        print(f"  rank {position[fid]}  {fid}  ×{sum(1 for h in hits if h == position[fid])}")
+        print(
+            f"  rank {position[fid]}  {fid}  ×{sum(1 for h in hits if h == position[fid])}"
+        )

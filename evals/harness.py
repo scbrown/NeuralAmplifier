@@ -63,7 +63,9 @@ def base_production(links_path: Path) -> tuple[WorldView, DatalinksRetriever]:
         turn=35,
         faction="University",
         subjects=["University Base"],
-        action_space=[Action(id=f"build:{i}", action=name) for i, name in enumerate(OPTIONS)],
+        action_space=[
+            Action(id=f"build:{i}", action=name) for i, name in enumerate(OPTIONS)
+        ],
         metrics={
             "energy_reserves": 82,
             "energy_income": 14,
@@ -80,7 +82,9 @@ def base_production(links_path: Path) -> tuple[WorldView, DatalinksRetriever]:
     return view, DatalinksRetriever(links, engine="thinker")
 
 
-def ground(view: WorldView, retriever: DatalinksRetriever, keep: int | None = None) -> WorldView:
+def ground(
+    view: WorldView, retriever: DatalinksRetriever, keep: int | None = None
+) -> WorldView:
     """Inject grounding as ``orchestrator.decide`` does — id-first ``"<id> <text>"`` lines."""
     g = retriever.retrieve(view)
     ids, facts = list(g.fact_ids), list(g.facts)
@@ -127,7 +131,11 @@ def write_prompts(out: Path, arms: dict[str, WorldView], note: str = "") -> None
             "options": len(view.action_space),
         }
         print(f"  {name}: {len(offered)} facts offered")
-    existing = json.loads((out / "manifest.json").read_text()) if (out / "manifest.json").exists() else {}
+    existing = (
+        json.loads((out / "manifest.json").read_text())
+        if (out / "manifest.json").exists()
+        else {}
+    )
     manifest["answered_by"] = existing.get("answered_by", "unrecorded")
     (out / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
 
@@ -159,4 +167,6 @@ def tally(rows: list[dict[str, Any]], key: str = "choice") -> dict[str, int]:
 
 
 def spread(counts: dict[str, int]) -> str:
-    return " ".join(f"{k}×{v}" for k, v in sorted(counts.items(), key=lambda kv: -kv[1]))
+    return " ".join(
+        f"{k}×{v}" for k, v in sorted(counts.items(), key=lambda kv: -kv[1])
+    )

@@ -108,3 +108,37 @@ def test_missing_surface_id_is_counted_not_ignored(thinker_base: WorldView, tmp_
     result = report(log.read())
     assert result.missing_surface_id == 1
     assert result.summary()["surfaces_fired"] == 0
+
+
+# --- surface registry coverage ---------------------------------------------
+
+
+def test_the_remaining_surfaces_partition_exactly() -> None:
+    """The three buckets must sum to what is left, or planning reads off a false number.
+
+    They did not. `docs/game-surface.md` described the gap as "21 with no AI path", "32
+    unit-scope", and "the rest" — which double-counts the seven surfaces that are both, and
+    understates the immediately-instrumentable pile as 20 when it is 27. A third more work is
+    available today than the document claimed.
+    """
+    from neural_amplifier.surfaces import coverage
+
+    c = coverage()
+    assert c["instrumented"] + c["remaining"] == c["total"]
+    assert c["needs_tier_first"] + c["volume_bound"] + c["ready"] == c["remaining"]
+
+
+def test_every_instrumented_surface_is_in_the_frozen_registry() -> None:
+    """A surface id that is not in the registry cannot be measured against it — and the
+    registry is frozen precisely so a rename invalidates recorded runs loudly."""
+    from neural_amplifier.surfaces import ALL, INSTRUMENTED
+
+    assert INSTRUMENTED <= ALL
+
+
+def test_nothing_instrumented_lacks_a_fallback() -> None:
+    """Invariant 9. A surface with no native AI path has nothing to degrade to, so it must not
+    be given to the brain before its deterministic tier exists — see game-surface.md §4."""
+    from neural_amplifier.surfaces import INSTRUMENTED, NO_AI_PATH
+
+    assert not (INSTRUMENTED & NO_AI_PATH)

@@ -146,6 +146,49 @@ NO_AI_PATH: Final[frozenset[str]] = frozenset(
 )
 
 
+#: Surfaces that emit a decision record today. Kept here rather than only in prose, because
+#: coverage stated only in a document is coverage nobody can check — and it had already drifted:
+#: ``docs/game-surface.md`` described the remaining work as three buckets that silently
+#: overlapped by seven, understating the immediately-instrumentable set by a third.
+#:
+#: A surface belongs here once an adapter emits its ``surface_id`` with an engine-authoritative
+#: action space and a side-effect-free probe. Observation-only counts: the point of the count is
+#: how much of the game we can *see*, and closing the loop is tracked per surface elsewhere.
+INSTRUMENTED: Final[frozenset[str]] = frozenset(
+    {
+        "base.production",
+        "faction.tech",
+        "faction.se",
+        "base.hurry",
+    }
+)
+
+
+def coverage() -> dict[str, int]:
+    """The counts `docs/game-surface.md` §2.5 and the README quote — computed, not typed.
+
+    The three buckets below **partition** what is left, which the prose version did not. A
+    ``unit``-scope surface can also have no native AI path (seven do), so counting "all unit
+    surfaces" and "all no-AI-path surfaces" as separate piles double-counts those seven and
+    makes the remainder look smaller than it is.
+
+    The distinction is the whole planning question. ``needs_tier_first`` has no native answer to
+    fall back on, so an LLM there breaks invariant 9 until the deterministic tier is built;
+    ``ready`` already has a safe fallback and can be instrumented incrementally today.
+    """
+    remaining = ALL - INSTRUMENTED
+    needs_tier_first = remaining & NO_AI_PATH
+    volume_bound = {s for s in remaining - NO_AI_PATH if scope_for(s) == "unit"}
+    return {
+        "total": len(ALL),
+        "instrumented": len(INSTRUMENTED),
+        "remaining": len(remaining),
+        "needs_tier_first": len(needs_tier_first),
+        "volume_bound": len(volume_bound),
+        "ready": len(remaining - needs_tier_first - volume_bound),
+    }
+
+
 def is_known(surface_id: str) -> bool:
     """Whether ``surface_id`` is in the frozen registry."""
     return surface_id in ALL

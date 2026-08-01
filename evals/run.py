@@ -64,7 +64,9 @@ def main() -> None:
             )
         print(f"{args.eval_id}: {question}")
         write_prompts(out, module.arms(args.links), note=question)
-        print(f"\nAnswer each <arm>.task.txt and collect replies into <arm>.answers.jsonl,")
+        print(
+            "\nAnswer each <arm>.task.txt and collect replies into <arm>.answers.jsonl,"
+        )
         print(f"one JSON object per line, then: just eval score {args.eval_id}")
         return
 

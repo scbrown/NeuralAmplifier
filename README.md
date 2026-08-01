@@ -181,9 +181,11 @@ tier on top of it. That also means the work is independently useful: a better de
 improves the game whether or not a brain is attached, and it gives the LLM something to be measured
 *against* rather than merely compared to.
 
-The remaining 32 `unit`-scope surfaces mostly stay deterministic on volume grounds — see
-[docs/decision-inputs.md](docs/decision-inputs.md) §5 for why, and why revisiting them should mean
-deciding *operations* rather than tile moves.
+Of the remaining 52, **25 are `unit`-scope** and mostly stay deterministic on volume grounds —
+see [docs/decision-inputs.md](docs/decision-inputs.md) §5 for why, and why revisiting them should
+mean deciding *operations* rather than tile moves. That leaves **27 base and faction surfaces
+that already have a native path and so already have a safe fallback**: the bucket to work
+through. `just surfaces` prints the split from the registry.
 
 Detail, including the seam and action-space quality per surface:
 **[docs/game-surface.md](docs/game-surface.md) §2.5**. What each surface needs in its world view:

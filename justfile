@@ -125,6 +125,12 @@ eval cmd="list" id="":
 
 # === Coverage ===
 
+# Answers "how much of the game can we see" from the frozen registry rather than from a
+# document — the doc version had already drifted (docs/game-surface.md §2.5).
+# Surface instrumentation: how much of the game surface emits a decision record
+surfaces:
+    @cd orchestrator && uv run neural-amplifier surfaces
+
 # Fails if the brain was largely absent or an illegal action slipped through.
 # Summarise a decision log: surfaces fired, fallback rate, adherence
 coverage log="decisions.jsonl" max_degrade_rate="0.05":
