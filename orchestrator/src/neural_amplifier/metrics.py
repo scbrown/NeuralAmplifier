@@ -20,6 +20,14 @@ the whole mechanism drift into decoration.
 
 Adding a name here is cheap and safe. It is a promise that some adapter reports it, so the
 honest order of work is: emit it from the adapter first, add the name second.
+
+That promise is now *enforced*, because it had already been broken once —
+``test_adapter_contract.py`` asserts that every faction-scope name here appears in the metrics
+block of every pinned adapter record, and every base-scope name in every base-scope record. A
+name nothing reports is worse than a missing one: a directive written against it is accepted at
+issue time and evaluates UNMEASURABLE forever, which in a record reads as compliance rather
+than as a gap. An agent can issue directives directly now, so an aspirational name is a trap
+with a user-facing path to it.
 """
 
 from __future__ import annotations

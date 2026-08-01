@@ -59,6 +59,7 @@ BASE_PRODUCTION = {
         "base_count": 2,
         "pop_total": 5,
         "military_units": 3,
+        "drone_total": 1,
         "mineral_surplus": 2,
         "minerals_remaining": 36,
         "pop_size": 3,
@@ -134,6 +135,7 @@ BASE_HURRY = {
         "base_count": 2,
         "pop_total": 5,
         "military_units": 3,
+        "drone_total": 1,
         "mineral_surplus": 2,
         "minerals_remaining": 26,
         "pop_size": 3,
@@ -172,6 +174,7 @@ FACTION_TECH = {
         "base_count": 2,
         "pop_total": 5,
         "military_units": 3,
+        "drone_total": 1,
     },
     "tech_accumulated": 12,
     "tech_rate": 40,
@@ -367,3 +370,43 @@ def test_history_survives_as_an_engine_dependent_passthrough() -> None:
     carried = world_view.model_dump()["recent_builds"]
     assert carried[0]["action"] == "Recycling Tanks"
     assert carried[0]["tier"] == "llm"
+
+
+def test_every_faction_metric_in_the_vocabulary_is_actually_reported() -> None:
+    """The direction nobody was checking, and the one that rots silently.
+
+    `test_metric_names_are_in_the_vocabulary` catches an adapter inventing a name. This catches
+    the opposite and worse case: a name sitting in the vocabulary that no adapter reports.
+    metrics.py states the rule — "a promise that some adapter reports it, so the honest order of
+    work is: emit it from the adapter first, add the name second" — and `drone_total` had been
+    breaking it since before anything emitted it.
+
+    Why worse: a directive written against an unreported name is *accepted* at issue time and
+    then evaluates UNMEASURABLE forever, which in a record reads as compliance rather than as a
+    gap. That was survivable while every directive was hand-written into a plan file. An agent
+    can now issue one through `issue_directive`, so an aspirational name is a trap with a
+    user-facing path to it.
+    """
+    faction_metrics = {name for name, m in VOCABULARY.items() if m.scope == "faction"}
+    for record in ALL_RECORDS:
+        reported = set(record.get("metrics") or {})
+        missing = faction_metrics - reported
+        assert not missing, (
+            f"{record['surface_id']} does not report {sorted(missing)} — either the adapter "
+            f"must emit it or metrics.py must drop the name"
+        )
+
+
+def test_every_base_metric_is_reported_on_base_scope_surfaces() -> None:
+    """Base-scope names are only *expected* where there is a base to report them for.
+
+    Kept separate from the faction check rather than folded in, because "absent on a turn-scope
+    surface" is correct and "absent on a base-scope surface" is the same rot as an aspirational
+    name.
+    """
+    base_metrics = {name for name, m in VOCABULARY.items() if m.scope == "base"}
+    for record in ALL_RECORDS:
+        if record["scope"] != "base":
+            continue
+        missing = base_metrics - set(record.get("metrics") or {})
+        assert not missing, f"{record['surface_id']} is base-scope but omits {sorted(missing)}"
