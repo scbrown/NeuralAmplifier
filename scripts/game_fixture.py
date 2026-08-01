@@ -114,7 +114,9 @@ def read_manifest(path: Path) -> dict[str, tuple[str, int]]:
             continue
         fields = line.split("\t")
         if len(fields) != 3:
-            sys.exit(f"{path}:{lineno}: expected 3 tab-separated fields, got {len(fields)}")
+            sys.exit(
+                f"{path}:{lineno}: expected 3 tab-separated fields, got {len(fields)}"
+            )
         digest, size, rel = fields
         entries[rel] = (digest, int(size))
     return entries
@@ -200,7 +202,10 @@ def cmd_scan(args: argparse.Namespace) -> int:
 def cmd_verify(args: argparse.Namespace) -> int:
     root = Path(args.dir).expanduser().resolve()
     if not root.is_dir():
-        print(f"FAIL  $SMAC_DIR does not exist or is not a directory: {root}", file=sys.stderr)
+        print(
+            f"FAIL  $SMAC_DIR does not exist or is not a directory: {root}",
+            file=sys.stderr,
+        )
         print(
             "      Point SMAC_DIR at your extracted install "
             "(docs/headless-harness.md §2.3).",
@@ -327,7 +332,9 @@ def main() -> int:
         action="store_true",
         help="scan anyway, recording pristine files only and listing the rest unresolved",
     )
-    s.add_argument("--limit", type=int, default=15, help="max paths to list per category")
+    s.add_argument(
+        "--limit", type=int, default=15, help="max paths to list per category"
+    )
     s.set_defaults(func=cmd_scan)
 
     v = sub.add_parser("verify", help="check an install against a manifest")
@@ -339,7 +346,9 @@ def main() -> int:
         action="store_true",
         help="also fail on files present but absent from the manifest",
     )
-    v.add_argument("--limit", type=int, default=15, help="max paths to list per category")
+    v.add_argument(
+        "--limit", type=int, default=15, help="max paths to list per category"
+    )
     v.set_defaults(func=cmd_verify)
 
     args = ap.parse_args()

@@ -144,7 +144,11 @@ def _metrics(record: dict[str, Any]) -> dict[str, float] | None:
     absent: a metric we cannot report must read as unmeasurable downstream, never as zero.
     """
     out: dict[str, float] = {}
-    for source in (record, record.get("base_state") or {}, record.get("faction_state") or {}):
+    for source in (
+        record,
+        record.get("base_state") or {},
+        record.get("faction_state") or {},
+    ):
         if not isinstance(source, dict):
             continue
         for key, name in _METRIC_KEYS.items():
@@ -165,7 +169,9 @@ def _effects(action: dict[str, Any]) -> dict[str, float] | None:
     unit = action.get("cost_unit")
     if not isinstance(cost, int | float) or not cost:
         return None
-    metric = {"credits": "energy_reserves", "minerals": "minerals_remaining"}.get(str(unit))
+    metric = {"credits": "energy_reserves", "minerals": "minerals_remaining"}.get(
+        str(unit)
+    )
     if metric is None:
         return None
     return {metric: -float(cost)}
@@ -282,7 +288,9 @@ def main() -> int:
     top, top_n = counts.most_common(1)[0]
 
     print(f"surface        {args.surface}")
-    print(f"base/faction   {record.get('base') or record.get('faction')} · turn {world_view.turn}")
+    print(
+        f"base/faction   {record.get('base') or record.get('faction')} · turn {world_view.turn}"
+    )
     print(f"options        {len(world_view.action_space)}")
     print(f"brain          {orchestrator.brain.name} · {args.runs} runs")
     print()
@@ -293,11 +301,15 @@ def main() -> int:
     # Modal share, not entropy: the question is "would this decision be the same next turn",
     # and the share of the most common answer says that directly.
     if degraded:
-        print(f"!! DEGRADED     {degraded} of {args.runs} runs — the brain did not decide these")
+        print(
+            f"!! DEGRADED     {degraded} of {args.runs} runs — the brain did not decide these"
+        )
         for reason in sorted(reasons):
             print(f"   reason       {reason}")
         if degraded == args.runs:
-            print("   stability below is meaningless: the fallback is a single fixed answer")
+            print(
+                "   stability below is meaningless: the fallback is a single fixed answer"
+            )
         print()
 
     print(f"stability      {top_n / args.runs:.2f}  (modal answer {top!r})")
