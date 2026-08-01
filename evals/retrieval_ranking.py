@@ -80,6 +80,27 @@ def arms(links: Path, keep: int = KEEP) -> dict[str, Any]:
     return {"all": ground(view, retriever), "ranked": _ranked(view, retriever, keep)}
 
 
+#: The `all` arm as it was measured: full facts, carrying cost and prerequisite. Kept verbatim
+#: so the compression arm has something to be compared against — regenerating it from the
+#: retriever would move both sides at once, which is how na-61c2's arms drifted.
+VERBOSE = (
+    "fac:recycling-tanks Recycling Tanks — cost 4; Bonus Resources; needs Biogenetics",
+    "fac:recreation-commons Recreation Commons — cost 4; upkeep 1/turn; Fewer Drones;"
+    " needs Social Psych",
+    "fac:energy-bank Energy Bank — cost 8; upkeep 1/turn; Economy Bonus;"
+    " needs Industrial Economics",
+    "fac:network-node Network Node — cost 8; upkeep 1/turn; Labs Bonus;"
+    " needs Information Networks",
+    "fac:perimeter-defense Perimeter Defense — cost 5; Defense +100%; needs Doctrine: Loyalty",
+    "fac:command-center Command Center — cost 4; upkeep 1/turn; +2 Morale:Land;"
+    " needs Doctrine: Mobility",
+    "fac:research-hospital Research Hospital — cost 12; upkeep 3/turn; Labs and Psych Bonus;"
+    " needs Gene Splicing",
+    "fac:children-s-creche Children's Creche — cost 5; upkeep 1/turn; Growth/Effic/Morale;"
+    " needs Ethical Calculus",
+)
+
+
 def score(out: Path, links: Path, keep: int = KEEP) -> None:
     print(f"{'arm':10} {'n':>3} {'offered':>8} {'cited':>6} {'util':>6}  choices")
     for name in ("all", "ranked"):

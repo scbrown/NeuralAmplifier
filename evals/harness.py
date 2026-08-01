@@ -53,10 +53,50 @@ OPTIONS = [
     "Children's Creche",
 ]
 
+#: The engine's mineral cost factor for this fixture's faction and difficulty.
+#:
+#: The adapter does not ship raw rulebook "rows": ``na_write_action_space`` multiplies by
+#: ``mod_cost_factor(faction, RSC_MINERAL, -1)``, which is 13/12/11/10/8/7 by difficulty level
+#: (``main.h:255``). 10 is the mid-table value. Pinned rather than derived because the eval has
+#: no engine to ask, and a fixture whose numbers move between runs cannot be a baseline.
+MINERAL_FACTOR = 10
+
+
+def _adapter_action(index: int, name: str, rows: int, surplus: int) -> Action:
+    """One action shaped the way the *adapter* shapes it, not the way the model declares it.
+
+    ``Action`` declares only ``id``/``action``/``effects``, but ``contract._Model`` sets
+    ``extra="allow"`` and the brain sends ``world_view.model_dump_json()`` — so every field the
+    adapter writes reaches the prompt whether or not this file names it. The fixture was built
+    from the declared fields alone and therefore emitted an action space with **no cost**, which
+    no real game produces.
+
+    That is not cosmetic. na-vbe measured compact grounding against this fixture and read a
+    choice shift (0.90 → 0.65 for the cheaper option, Fisher p=0.13) — but the arm it measured
+    had no cost anywhere in the prompt, because grounding was the only thing carrying one. In a
+    real game the action space carries an authoritative faction-adjusted cost *and* turns, so
+    compacting grounding removes a duplicate rather than the signal. The fixture, not the change,
+    was what made the two arms differ.
+
+    ``turns_if_switched`` is ``ceil(cost / surplus)`` ignoring banked minerals, matching
+    ``na_write_turns``' conservative reading: switching item category forfeits progress, so the
+    bank usually does not apply.
+    """
+    cost = rows * MINERAL_FACTOR
+    return Action(
+        id=f"build:{index}",
+        action=name,
+        cost=cost,
+        category="facility",
+        turns_if_switched=-(-cost // surplus) if surplus > 0 else None,
+    )
+
 
 def base_production(links_path: Path) -> tuple[WorldView, DatalinksRetriever]:
     """The world view both evals start from: University Base, turn 35, eight build options."""
     links = parse(links_path.read_text(errors="replace"))
+    by_name = {f.name: f for f in links.facilities.values()}
+    surplus = 3
     view = WorldView(
         engine="thinker",
         scope="base",
@@ -65,7 +105,8 @@ def base_production(links_path: Path) -> tuple[WorldView, DatalinksRetriever]:
         faction="University",
         subjects=["University Base"],
         action_space=[
-            Action(id=f"build:{i}", action=name) for i, name in enumerate(OPTIONS)
+            _adapter_action(i, name, by_name[name].cost, surplus)
+            for i, name in enumerate(OPTIONS)
         ],
         metrics={
             "energy_reserves": 82,

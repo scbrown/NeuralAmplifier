@@ -22,6 +22,7 @@ clone by whoever doubts it. `prompts` is the only command that needs `THINKER_DI
 | --- | --- | --- |
 | `na-373` | Can we offer fewer grounding facts by ranking them? | **No.** Truncation changed the decision, and the ranking rule predicts citation worse than chance. |
 | `na-61c2` | Does recent build history stop a base flip-flopping? | **Yes**, 0.30 → 1.00 continued — and still 0.10 when the case actually changed, so it is not an anchor. |
+| `na-vbe` | Can grounding drop what the action space already carries? | **Yes.** Grounding 43% smaller, choice held 20/20 vs 19/20 (Fisher p=1.0). The first run measured a fixture bug — see its `NOTES.md`. |
 
 Write-ups: [quipu-integration.md](../docs/quipu-integration.md) and
 [decision-inputs.md](../docs/decision-inputs.md) §2.
@@ -43,7 +44,7 @@ code produces now. Answers sitting beside a prompt that has since changed are no
 the current prompt, and without this nobody can tell that they aren't — `score` goes on printing
 the same confident table either way.
 
-It has already happened twice, in two different ways:
+It has already happened three times, in three different ways:
 
 - **The system prompt changed.** `na-373` was measured, then `_SYSTEM` gained a section about
   `history` for na-61c2. Ordinary drift, and the check names the added lines.
@@ -52,11 +53,21 @@ It has already happened twice, in two different ways:
   the retriever ranked, briefly, before na-373 refuted it. Reverting that silently turned the
   same call into "the first four in action-space order": a different set of facts, a different
   experiment, the same name, and the old answers still sitting beside it.
+- **The fixture was never the payload.** `na-vbe` compared grounding with and without cost on a
+  world view whose `action_space` had no cost in it, so the arm that was supposed to be dropping
+  a *duplicate* was dropping the only copy. `Action` declares three fields; `_Model` sets
+  `extra="allow"` and the brain sends `model_dump_json()`, so the adapter's `cost`, `turns` and
+  `role` reach the prompt without ever being named in the contract. A fixture built from the
+  declared fields is a smaller payload than the real one, and nothing anywhere fails.
 
 The second is the worse one and the lesson is in the fix: **an eval's arms are part of the
 eval.** `build_history` now names the four facts it was measured with instead of deriving them
 from whatever a retriever currently does, so the experiment stops changing whenever the
 retriever does.
+
+The third is not drift at all — `check` would have passed it, because the prompt matched the code
+that produced it. It is the same class of error one level down: **build a fixture from what the
+writer emits, not from what the reader declares.**
 
 `check` deliberately does not judge whether drift *matters*. It says what moved and leaves that
 to a person — some prompt changes cannot affect a given arm, and asserting which is a claim

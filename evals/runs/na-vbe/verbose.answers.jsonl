@@ -1,0 +1,20 @@
+{"choice": "build:3", "cited": ["fac:network-node"]}
+{"choice": "build:3", "cited": ["fac:network-node", "fac:research-hospital"]}
+{"choice": "build:3", "cited": ["fac:network-node"], "reason": "Network Node boosts labs output, aligning with University faction's research priority. At 3 minerals/turn surplus, the 80-cost facility achieves completion in ~27 turns with stable 14/turn energy income supporting upkeep."}
+{"choice": "build:3", "cited": ["fac:network-node"]}
+{"choice": "build:3", "cited": ["fac:network-node"]}
+{"choice": "build:3", "cited": ["fac:network-node"]}
+{"choice": "build:3", "cited": ["fac:network-node"]}
+{"choice": "build:3", "cited": ["fac:network-node"]}
+{"choice": "build:3", "cited": ["fac:network-node"]}
+{"choice": "build:3", "cited": ["fac:network-node"]}
+{"choice": "build:3", "cited": ["fac:network-node"]}
+{"choice": "build:3", "cited": ["fac:network-node", "fac:research-hospital"]}
+{"choice": "build:3", "cited": ["fac:network-node", "fac:research-hospital"]}
+{"choice": "build:3", "cited": ["fac:network-node"]}
+{"choice": "build:3", "cited": ["fac:network-node", "fac:research-hospital"]}
+{"choice": "build:3", "cited": ["fac:network-node"], "reason": "Network Node provides Labs Bonus, directly advancing the University faction's core scientific mission. Current labs output (21) benefits from this boost. Cost of 80 is well within energy reserves (82), and the 27-turn build time is manageable."}
+{"choice": "build:3", "cited": ["fac:network-node"]}
+{"choice": "build:3", "cited": ["fac:network-node", "fac:research-hospital"]}
+{"choice": "build:3", "cited": ["fac:network-node", "fac:research-hospital"]}
+{"choice": "build:3", "reason": "Network Node directly boosts labs_output, aligning with University faction's science focus. Current labs_output is 21; the 27-turn build is sustainable given 14/turn energy income and 82 reserves. This facility enhances the faction's core strength.", "cited": ["fac:network-node"], "followed": [], "overrode": []}

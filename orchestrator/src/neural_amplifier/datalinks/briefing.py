@@ -33,14 +33,34 @@ from .rdf import slug
 CANONICAL_ENGINES = frozenset({"smac"})
 
 
-def describe(item: Facility, links: Datalinks) -> str:
-    """One line a model can act on: cost, upkeep, effect, and the gate."""
-    parts = [f"{item.name} — cost {item.cost}"]
+def describe(item: Facility, links: Datalinks, compact: bool = False) -> str:
+    """One line a model can act on: cost, upkeep, effect, and the gate.
+
+    ``compact`` drops the two parts that are redundant *for every option equally* when the fact
+    accompanies an action space. That evenness is the whole point — na-373 showed that cutting
+    retrieval by dropping whole facts under-explains the options it drops and biases the choice,
+    so what is left has to shed the same kinds of content everywhere.
+
+    **Cost goes** because the action space already carries an authoritative one: the adapter
+    normalises the rulebook's "rows" into minerals with the faction's own cost factor, which
+    varies by difficulty. This is the raw rulebook value. Emitting both puts "cost 4" from
+    grounding beside "cost 44" from the action space *about the same thing* — the two-units
+    error that already produced bad arithmetic once, which is why ``quipu.format_row`` has
+    excluded cost all along. This function did not, so the two retrievers disagreed.
+
+    **The prerequisite goes** because the option is *in the action space*: the engine has
+    already ruled it buildable, so its tech gate is satisfied by construction. "needs Gene
+    Splicing" about something you can build this turn is a fact with no decision attached.
+
+    The briefing keeps both — it is a catalogue of what exists, read once, with no action space
+    beside it to make either redundant.
+    """
+    parts = [item.name if compact else f"{item.name} — cost {item.cost}"]
     if item.maintenance:
         parts.append(f"upkeep {item.maintenance}/turn")
     if item.effect:
         parts.append(item.effect)
-    if item.requires:
+    if item.requires and not compact:
         techs = links.by_abbrev()
         named = [techs[a].name if a in techs else a for a in item.requires]
         parts.append(f"needs {', '.join(named)}")
@@ -108,7 +128,9 @@ class DatalinksRetriever:
             if item is None or item.name in seen:
                 continue
             seen.add(item.name)
-            facts.append(describe(item, self.links))
+            # Compact: this fact travels *with* an action space, which makes the cost and
+            # the prerequisite redundant for every option alike (see `describe`).
+            facts.append(describe(item, self.links, compact=True))
             # `fac:<slug>` — the same id `rdf.py` mints for this facility, so a citation made
             # against this retriever resolves in the graph the Quipu path serves. Without ids
             # the model has nothing to cite, `cited` is empty on every run by construction,

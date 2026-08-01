@@ -24,6 +24,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import build_history  # noqa: E402
+import grounding_compaction  # noqa: E402
 import retrieval_ranking  # noqa: E402
 from harness import DEFAULT_LINKS, RUNS, check_prompts, write_prompts  # noqa: E402
 
@@ -39,6 +40,11 @@ EVALS = {
         build_history,
         "Does recent build history stop a base flip-flopping?",
         "Yes — 0.30 to 1.00 continued, and still 0.10 when the case actually changed.",
+    ),
+    "na-vbe": (
+        grounding_compaction,
+        "Can grounding drop what the action space already carries, without moving the choice?",
+        "Yes — grounding 43% smaller and the choice held 20/20 vs 19/20 (Fisher p=1.0).",
     ),
 }
 
