@@ -137,7 +137,7 @@ Full design — the contract Claude speaks, the two-engine strategy, and the roa
 
 ## 📊 Coverage & Plan
 
-**1 of 77 decision surfaces the brain can actually decide**, with three more observed. A surface
+**2 of 77 decision surfaces the brain can actually decide**, with two more observed. A surface
 is not covered until its decision can be *applied* — observing changes what is recorded, not
 what the game does.
 `just surfaces` prints it. The registry is frozen at 77
@@ -146,7 +146,7 @@ what the game does.
 | Surface | Scope | Status |
 | --- | --- | --- |
 | `base.production` | base | **Wired** · posts the world view and applies the returned build, falling back to the engine's own answer |
-| `faction.tech` | turn | Observed · researchable techs with the engine's own AI valuation weights |
+| `faction.tech` | turn | **Wired** · posts the world view and applies the returned tech, falling back to the engine's own answer |
 | `faction.se` | turn | Observed · legal (field, model) pairs with effect deltas, grounded from `#SOCIO` |
 | `base.hurry` | base | Observed · credit cost and turns saved; unaffordable option omitted |
 

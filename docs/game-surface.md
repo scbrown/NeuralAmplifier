@@ -71,12 +71,14 @@ Per-unit orders fire separately as the engine iterates units (`mod_enemy_turn`
 
 ## 2.5 Instrumentation status — measured 2026-07-29
 
-**1 of 77 surfaces the brain can actually decide**, with three more observed. `base.production`
-applies: the choice executes, and it is validated against the engine's own availability tests
-first, so an illegal order is rejected rather than applied. `faction.tech`, `faction.se` and
+**2 of 77 surfaces the brain can actually decide**, with two more observed. `base.production`
+and `faction.tech` apply: the choice executes, and it is validated against the engine's own
+availability tests first, so an illegal order is rejected rather than applied. `faction.se` and
 `base.hurry` emit a record and leave the choice to the engine — the adapter exports no decide
-entry point for them. A surface is not covered until its decision can be applied — `just
-surfaces` reports it from the frozen registry rather than from this paragraph.
+entry point for them yet, and both spend something irreversibly, so each needs its cost debited
+through the engine's own routine before it can decide rather than watch. A surface is not
+covered until its decision can be applied — `just surfaces` reports it from the frozen registry
+rather than from this paragraph.
 
 The registry is frozen at 77 (`orchestrator/surfaces.py`), partitioned by contract scope:
 `base` 25, `unit` 32, `turn` 20.
@@ -98,13 +100,20 @@ reconstruction of it:
 | `faction.se` | `apply-se <faction_id> se:<field>:<model>\|se:none` | `society_avail` | upheaval, debited via `social_upheaval` |
 | `base.hurry` | `apply-hurry <base_id> hurry:now\|hurry:none` | `can_hurry_item` + affordable `hurry_cost` | energy credits, debited via `hurry_item` |
 
-**These are probe verbs, not in-game decision hooks**, and the difference is the whole of why
-coverage reads 1 rather than 4. They are driven by the `na-command` file the window proc polls,
-so an agent outside the process can observe, decide and apply without an orchestrator. Only
-`base.production` has a decide entry point wired into the engine's own path
-(`na_decide_base_production`, called from `base.cpp` so its return replaces the engine's
-choice). On the other three the engine still chooses during play, whatever these verbs can do
-from outside.
+**These are probe verbs, and a probe verb is not an in-game decision hook** — the difference is
+the whole of why coverage reads 2 rather than 4. They are driven by the `na-command` file the
+window proc polls, so an agent outside the process can observe, decide and apply without an
+orchestrator. Applying *during play* is a separate thing and needs a `na_decide_*` entry point
+whose return the engine's own call site assigns:
+
+| Surface | Decide entry point | Engine call site |
+| --- | --- | --- |
+| `base.production` | `na_decide_base_production` | `base.cpp` — return replaces the engine's choice |
+| `faction.tech` | `na_decide_faction_tech` | `tech.cpp` — return replaces the engine's choice |
+| `faction.se` | — | engine still chooses |
+| `base.hurry` | — | engine still chooses |
+
+On the bottom two the engine chooses during play whatever these verbs can do from outside.
 
 Two of them spend something, and both debit through the engine's own routine — `hurry_item`
 does the credit debit and the mineral credit together, and reimplementing either half is how a

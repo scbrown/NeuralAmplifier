@@ -205,7 +205,7 @@ just surfaces        # what the brain can decide, what it only watches, what is 
 
 **A surface is not covered until its decision can be applied.** Observing changes what is
 recorded, not what the game does, so counting it as coverage claims influence the brain does not
-have — today that is 1 applied against 4 observed.
+have — today that is 2 applied against 4 observed.
 
 Which surfaces the brain may decide lives in the `[surfaces]` section of
 [`na.toml`](na.toml), one toggle each.

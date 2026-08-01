@@ -167,12 +167,19 @@ OBSERVED: Final[frozenset[str]] = frozenset(
 #: until then the LLM tier has no effect on the game, and counting observation as coverage
 #: overstates it fourfold today. Every applied surface is necessarily observed.
 #:
-#: Exactly one, and the adapter is the authority on that: `src/neural.h` in `scbrown/thinker`
-#: exports a single decide entry point, `na_decide_base_production`. The other three surfaces
-#: export `na_observe_*` only — they emit a record, and the engine still chooses. Listing them
-#: here would make this number claim the LLM tier affects a game it cannot yet touch, which is
-#: the fourfold overstatement the note above is about.
-APPLIED: Final[frozenset[str]] = frozenset({"base.production"})
+#: The adapter is the authority on this list: a surface belongs here when `src/neural.h` in
+#: `scbrown/thinker` exports a `na_decide_*` entry point for it AND the engine call site
+#: assigns the return. `na_observe_*` alone does not count — it emits a record and the engine
+#: still chooses, and listing such a surface would make this number claim the LLM tier affects
+#: a game it cannot yet touch.
+#:
+#: - `base.production` — `na_decide_base_production`, assigned at `base.cpp`.
+#: - `faction.tech` — `na_decide_faction_tech`, assigned at `tech.cpp`.
+#:
+#: `faction.se` and `base.hurry` remain observation-only. Both spend something irreversibly
+#: (upheaval, energy credits), so each needs its cost debited through the engine's own routine
+#: before it can decide rather than watch.
+APPLIED: Final[frozenset[str]] = frozenset({"base.production", "faction.tech"})
 
 
 def coverage() -> dict[str, int]:
