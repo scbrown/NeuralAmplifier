@@ -45,9 +45,7 @@ def test_a_non_boolean_toggle_is_refused(tmp_path: Path) -> None:
 def test_an_explicit_false_survives_a_permissive_default(tmp_path: Path) -> None:
     """The bug this nearly shipped with: storing only the enabled ids meant a `default = true`
     policy silently re-enabled everything anyone had deliberately switched off."""
-    policy = load(
-        write(tmp_path, 'default = true\n[surfaces]\n"base.production" = false\n')
-    )
+    policy = load(write(tmp_path, 'default = true\n[surfaces]\n"base.production" = false\n'))
     assert policy.allows("base.production") is False
     assert policy.allows("faction.tech") is True
 

@@ -127,9 +127,9 @@ Full design — the contract Claude speaks, the two-engine strategy, and the roa
 
 ## 📊 Coverage & Plan
 
-**1 of 77 decision surfaces the brain can actually decide**, and 4 instrumented. On the other
-three the engine still chooses and the brain only watches — a surface is not covered until its
-decision can be *applied*. `just surfaces` prints both. The registry is frozen at 77
+**4 of 77 decision surfaces the brain can actually decide.** A surface is not covered until its
+decision can be *applied* — observing changes what is recorded, not what the game does.
+`just surfaces` prints it. The registry is frozen at 77
 (`orchestrator/surfaces.py`) and partitioned by contract scope: `base` 25, `unit` 32, `turn` 20.
 
 | Surface | Scope | Status |
@@ -143,10 +143,10 @@ Every surface ships a **side-effect-free probe** (`observe`, `observe-tech`, `ob
 `observe-hurry`) because in-game input cannot be driven at all, so a decision that fires every five
 to ten turns is otherwise unverifiable without playing until it happens.
 
-Three of the four are **observation only** — the engine's own choice still executes. That is
-deliberate: it makes each surface falsifiable on its own before anything depends on it.
-`base.production` is the one that applies. Which surfaces the brain may decide is set per
-surface in [`surfaces.toml`](surfaces.toml).
+Each was **observed before it was applied** — deliberately, because that makes a surface
+falsifiable on its own before anything depends on it. Which surfaces the brain may decide is set
+per surface in [`surfaces.toml`](surfaces.toml), so the sequence is: instrument, watch it
+observe, then let it decide.
 
 ### The plan, in dependency order
 

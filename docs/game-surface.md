@@ -71,10 +71,10 @@ Per-unit orders fire separately as the engine iterates units (`mod_enemy_turn`
 
 ## 2.5 Instrumentation status — measured 2026-07-29
 
-**1 of 77 surfaces the brain can actually decide.** Four emit a decision record; on three of
-those the engine's own choice still executes, so the brain watches and has no influence. A
-surface is not covered until its decision can be *applied* — `just surfaces` reports both
-numbers, from the frozen registry rather than from this paragraph.
+**4 of 77 surfaces the brain can actually decide.** All four apply: the choice executes, and it
+is validated against the engine's own availability tests first, so an illegal order is rejected
+rather than applied. A surface is not covered until its decision can be applied — `just
+surfaces` reports it from the frozen registry rather than from this paragraph.
 
 The registry is frozen at 77 (`orchestrator/surfaces.py`), partitioned by contract scope:
 `base` 25, `unit` 32, `turn` 20.
@@ -86,11 +86,24 @@ The registry is frozen at 77 (`orchestrator/surfaces.py`), partitioned by contra
 | `faction.se` | turn | `mod_social_ai` | legal (field, model) pairs with effect deltas | `observe-se <faction_id>` |
 | `base.hurry` | base | `mod_base_hurry` (wrapped) | hurry / don't, with credit cost and turns saved; unaffordable option omitted | `observe-hurry <base_id>` |
 
-Three of the four are **observation only** — Thinker's choice still executes and the record is
-the whole product. `apply <base_id> <action_id>` closes the loop for `base.production` alone,
-validated against the engine's own availability tests, so an illegal order is rejected rather
-than applied. Closing the loop on the other three is the remaining work on surfaces already
-instrumented, and it is what turns three watched decisions into three decided ones.
+Each has an apply command, and each validates with the engine's own test rather than with a
+reconstruction of it:
+
+| Surface | Apply | Legality test | Costs |
+| --- | --- | --- | --- |
+| `base.production` | `apply <base_id> unit:<n>\|facility:<n>` | `mod_veh_avail` + `can_build_unit` / `mod_facility_avail` + `can_build` | — |
+| `faction.tech` | `apply-tech <faction_id> tech:<n>` | `tech_avail` | — |
+| `faction.se` | `apply-se <faction_id> se:<field>:<model>\|se:none` | `society_avail` | upheaval, debited via `social_upheaval` |
+| `base.hurry` | `apply-hurry <base_id> hurry:now\|hurry:none` | `can_hurry_item` + affordable `hurry_cost` | energy credits, debited via `hurry_item` |
+
+Two of them spend something, and both debit through the engine's own routine — `hurry_item`
+does the credit debit and the mineral credit together, and reimplementing either half is how a
+faction gets free production. `base.hurry` is the one that can lose something irreversibly, so
+it refuses an unaffordable order with the numbers rather than partially applying it.
+
+`faction.se` takes legality from `society_avail`, which is the engine's test and **not** the
+checks the observation's action space makes for itself. Those two are supposed to agree; this is
+the one that binds.
 
 **Which surfaces the brain may decide is configuration**, not code: `surfaces.toml` carries a
 toggle per surface, and one switched off is recorded at `deterministic` tier — explicitly not

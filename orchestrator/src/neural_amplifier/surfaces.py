@@ -166,7 +166,14 @@ OBSERVED: Final[frozenset[str]] = frozenset(
 #: **This is the coverage number.** A surface is not covered until the decision can be applied:
 #: until then the LLM tier has no effect on the game, and counting observation as coverage
 #: overstates it fourfold today. Every applied surface is necessarily observed.
-APPLIED: Final[frozenset[str]] = frozenset({"base.production"})
+APPLIED: Final[frozenset[str]] = frozenset(
+    {
+        "base.production",
+        "faction.tech",
+        "faction.se",
+        "base.hurry",
+    }
+)
 
 
 def coverage() -> dict[str, int]:

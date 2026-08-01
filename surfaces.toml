@@ -19,12 +19,13 @@
 default = false
 
 [surfaces]
-# Applied — the brain's choice actually executes.
+# All four apply: the brain's choice executes, validated against the engine's own availability
+# tests so an illegal order is rejected rather than applied.
 "base.production" = true
-
-# Observed only. The adapter emits a decision record and the engine's own choice still runs,
-# so turning these on changes what is recorded, not what the game does. They stay on because
-# the record is the point: coverage is measured from what fires.
 "faction.tech" = true
 "faction.se" = true
+
+# The one that spends something irreversibly. Left on, but this is the toggle to reach for
+# first if a run starts burning reserves — `apply-hurry` refuses an unaffordable order, which
+# is not the same as it being a good one.
 "base.hurry" = true
