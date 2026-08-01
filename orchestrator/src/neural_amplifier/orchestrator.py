@@ -27,15 +27,18 @@ from .decisions import (
 from .directives import DirectiveStore, accept, entities_shown, evaluate, relevant, tradeoffs
 from .fog import Redaction, redact
 from .knowledge import (
+    Grounding,
     Guard,
     Knowledge,
     Retriever,
+    Ruling,
     apply,
     grounded_ids,
     retrieve,
     rule,
     summarise,
 )
+from .policy import SurfacePolicy
 from .telemetry import Emitter, Sink
 from .validate import validate
 
@@ -64,6 +67,7 @@ class Orchestrator:
         retriever: Retriever | None = None,
         guard: Guard | None = None,
         plan: DirectiveStore | None = None,
+        policy: SurfacePolicy | None = None,
     ) -> None:
         self.brain = brain
         self.log = log
@@ -81,6 +85,9 @@ class Orchestrator:
         # The standing plan. Absent means every decision is made on its own, which is where
         # this project started and is still a legitimate way to run.
         self.plan = plan
+        # Which surfaces the LLM tier owns (``surfaces.toml``). Absent means nobody has
+        # expressed an opinion, which is how this behaved before the file existed.
+        self.policy = policy or SurfacePolicy()
 
     def decide(self, world_view: WorldView) -> Result:
         started = time.monotonic()
@@ -126,6 +133,17 @@ class Orchestrator:
         # drift leak into a replay that is supposed to isolate our own changes.
         if self.store is not None:
             self.store.put(world_view)
+
+        # Policy gate. After the world view is complete so a switched-off surface still writes a
+        # full record — grounding, plan, fairness — and before the brain so it costs nothing.
+        #
+        # Emitting the record rather than returning early is the point: a disabled surface and
+        # a surface nothing ever emitted have to be tellable apart, and only a record does that.
+        # It is NOT degraded. Degraded means the brain was asked and could not answer; this one
+        # was never asked, and putting a deliberate configuration into `degrade_rate` would
+        # corrupt the single number that catches a run where the brain was silently absent.
+        if not self.policy.allows(world_view.surface_id):
+            return self._deterministic(world_view, fog, grounding, dropped, started)
 
         try:
             orders = self.brain.decide(world_view)
@@ -187,6 +205,42 @@ class Orchestrator:
         self.telemetry.emit(record)
 
         return Result(orders=final, record=record)
+
+    def _deterministic(
+        self,
+        world_view: WorldView,
+        fog: Redaction,
+        grounding: Grounding,
+        dropped: list[str],
+        started: float,
+    ) -> Result:
+        """Record a decision this configuration hands to the engine.
+
+        Empty orders: the adapter applies its own answer when we name no action, which is what
+        it did before any of this existed. The record still lands, at ``deterministic`` tier and
+        explicitly not degraded.
+        """
+        orders = Orders()
+        record = self._record(
+            world_view=world_view,
+            orders=orders,
+            degrade_reason=None,
+            latency_ms=int((time.monotonic() - started) * 1000),
+            unknown=0,
+            fog=fog,
+            knowledge=summarise(grounding, Ruling(), self.guard is not None),
+            plan=self._plan_block(
+                world_view,
+                orders,
+                issued=[],
+                rejected=[],
+                configured=self.plan is not None,
+                dropped=dropped,
+            ),
+            tier="deterministic",
+        )
+        self.telemetry.emit(record)
+        return Result(orders=orders, record=record)
 
     def _with_directives(
         self, world_view: WorldView, entity_ids: Sequence[str] = ()
@@ -308,6 +362,7 @@ class Orchestrator:
         fog: Redaction,
         knowledge: Knowledge,
         plan: PlanBlock,
+        tier: str = "llm",
     ) -> DecisionRecord:
         fairness = world_view.fairness
         return DecisionRecord(
@@ -319,7 +374,7 @@ class Orchestrator:
             engine=world_view.engine,
             surface_id=world_view.surface_id,
             scope=world_view.scope,
-            tier="llm",
+            tier=tier,  # type: ignore[arg-type]
             world_view_hash=world_view_hash(world_view.model_dump(mode="json")),
             action_space_size=len(world_view.action_space),
             chosen=[c.model_dump(mode="json") for c in orders.choices],

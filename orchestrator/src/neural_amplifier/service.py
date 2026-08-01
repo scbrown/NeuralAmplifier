@@ -19,6 +19,7 @@ from .contract import Orders, WorldView
 from .coverage import report
 from .decisions import DecisionLog
 from .orchestrator import Orchestrator
+from .policy import load as load_policy
 from .replay import WorldViewStore
 from .telemetry import OtelSink, Sink
 
@@ -109,6 +110,9 @@ def create_app(
         store=WorldViewStore(store_path) if store_path else None,
         retriever=resolved_retriever,  # type: ignore[arg-type]
         guard=build_guard(resolved_retriever),  # type: ignore[arg-type]
+        # Loaded here rather than inside the loop: a malformed surfaces.toml should refuse to
+        # start the service, not fail one turn at a time in a running game.
+        policy=load_policy(),
     )
     app.state.orchestrator = orchestrator
 

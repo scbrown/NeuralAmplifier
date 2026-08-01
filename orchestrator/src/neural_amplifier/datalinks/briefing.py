@@ -45,7 +45,17 @@ def describe(item: Facility, links: Datalinks) -> str:
         named = [techs[a].name if a in techs else a for a in item.requires]
         parts.append(f"needs {', '.join(named)}")
     if item.secret_project:
-        parts.append("secret project — one per game, globally")
+        # NOT "one per game, globally", which is what this said and is not a rule the engine
+        # has. `SecretProjects[]` records which base *holds* each project: several bases may
+        # build the same one at once and the first to finish takes it, the rest lose the
+        # minerals. A project whose base is destroyed goes `SP_Destroyed` — and returns to the
+        # pool under Thinker's `rebuild_secret_projects`, which is a house rule and so cannot
+        # be stated at canonical tier at all.
+        #
+        # Worth the comment because the old wording was ours, not alphax.txt's, and it shipped
+        # on all 64 project lines of a briefing labelled canonical — the exact masquerade this
+        # plane exists to prevent, and from the one source that is supposed to be above it.
+        parts.append("secret project — only one base can hold it; others building it lose the race")
     return "; ".join(parts)
 
 
@@ -69,7 +79,7 @@ def briefing(links: Datalinks, engine: str = "thinker") -> str:
         "Base facilities (cost; effect; prerequisite):",
     ]
     lines += [f"  - {describe(f, links)}" for f in sorted(ordinary, key=lambda f: f.name)]
-    lines += ["", "Secret projects (one per game, globally):"]
+    lines += ["", "Secret projects (only one base can hold each):"]
     lines += [f"  - {describe(f, links)}" for f in sorted(projects, key=lambda f: f.name)]
     return "\n".join(lines)
 

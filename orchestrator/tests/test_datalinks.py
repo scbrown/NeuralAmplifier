@@ -168,8 +168,26 @@ def test_the_briefing_excludes_disabled_items(links) -> None:  # type: ignore[no
 
 def test_the_briefing_separates_secret_projects(links) -> None:  # type: ignore[no-untyped-def]
     text = briefing(links)
-    assert "Secret projects (one per game, globally):" in text
+    assert "Secret projects" in text
     assert "The Sample Project" in text.split("Secret projects")[1]
+
+
+def test_the_briefing_does_not_invent_a_rule_the_engine_does_not_have(links) -> None:
+    """This said "one per game, globally" on all 64 project lines, and it was ours — not a line
+    from alphax.txt — shipped in a briefing labelled *canonical*.
+
+    The engine has no such rule. `SecretProjects[]` records which base *holds* each project:
+    several bases may build the same one at once and the first to finish takes it. A project
+    whose base is destroyed goes `SP_Destroyed`, and comes back to the pool under Thinker's
+    `rebuild_secret_projects` — a house rule, so not statable at canonical tier at all.
+
+    A fabricated canonical fact is the precise failure the datalinks plane exists to prevent,
+    and it is worse from the briefing than from anywhere else: the briefing is cached once and
+    sits in front of every decision for a whole game.
+    """
+    text = briefing(links)
+    assert "one per game" not in text
+    assert "only one base can hold it" in text
 
 
 def test_prerequisites_are_named_not_abbreviated(links) -> None:  # type: ignore[no-untyped-def]

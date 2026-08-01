@@ -71,8 +71,13 @@ Per-unit orders fire separately as the engine iterates units (`mod_enemy_turn`
 
 ## 2.5 Instrumentation status — measured 2026-07-29
 
-**4 of 77 surfaces emit a decision record.** The registry is frozen at 77
-(`orchestrator/surfaces.py`), partitioned by contract scope: `base` 25, `unit` 32, `turn` 20.
+**1 of 77 surfaces the brain can actually decide.** Four emit a decision record; on three of
+those the engine's own choice still executes, so the brain watches and has no influence. A
+surface is not covered until its decision can be *applied* — `just surfaces` reports both
+numbers, from the frozen registry rather than from this paragraph.
+
+The registry is frozen at 77 (`orchestrator/surfaces.py`), partitioned by contract scope:
+`base` 25, `unit` 32, `turn` 20.
 
 | Surface | Scope | Seam | Action space | Probe |
 | --- | --- | --- | --- | --- |
@@ -81,9 +86,16 @@ Per-unit orders fire separately as the engine iterates units (`mod_enemy_turn`
 | `faction.se` | turn | `mod_social_ai` | legal (field, model) pairs with effect deltas | `observe-se <faction_id>` |
 | `base.hurry` | base | `mod_base_hurry` (wrapped) | hurry / don't, with credit cost and turns saved; unaffordable option omitted | `observe-hurry <base_id>` |
 
-All four are **observation only** — Thinker's choice still executes. `apply <base_id>
-<action_id>` closes the loop for `base.production`, validated against the engine's own
-availability tests, so an illegal order is rejected rather than applied.
+Three of the four are **observation only** — Thinker's choice still executes and the record is
+the whole product. `apply <base_id> <action_id>` closes the loop for `base.production` alone,
+validated against the engine's own availability tests, so an illegal order is rejected rather
+than applied. Closing the loop on the other three is the remaining work on surfaces already
+instrumented, and it is what turns three watched decisions into three decided ones.
+
+**Which surfaces the brain may decide is configuration**, not code: `surfaces.toml` carries a
+toggle per surface, and one switched off is recorded at `deterministic` tier — explicitly not
+degraded, because the brain was never asked. That is how a surface gets rolled out one step at a
+time: instrument it, watch it observe, then let it decide.
 
 **Every new surface ships a side-effect-free probe.** In-game input cannot be driven at all
 ([headless-harness.md](headless-harness.md) §3.0.2), so a surface that fires every five to ten

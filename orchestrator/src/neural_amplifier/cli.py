@@ -55,11 +55,17 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     if args.command == "surfaces":
+        from .policy import load as load_policy
         from .surfaces import coverage
 
         c = coverage()
-        print(f"{c['instrumented']} of {c['total']} surfaces emit a decision record.\n")
-        print(f"  {c['remaining']:>3}  remaining, which divides into:")
+        print(f"{c['applied']} of {c['total']} surfaces the brain can actually decide.\n")
+        print(f"  {c['applied']:>3}  applied — the brain's choice executes")
+        print(
+            f"  {c['observed_not_applied']:>3}  observed only — a record is written, the"
+            " engine still chooses"
+        )
+        print(f"  {c['remaining']:>3}  not instrumented, which divides into:")
         print(
             f"  {c['needs_tier_first']:>3}    no native AI path — the deterministic tier has to"
             " be built first,"
@@ -70,6 +76,15 @@ def main(argv: list[str] | None = None) -> int:
             " deterministic on volume grounds"
         )
         print(f"  {c['ready']:>3}    have a native path and a safe fallback — instrumentable now")
+        policy = load_policy()
+        if policy.source is None:
+            print("\nNo surfaces.toml — every surface the adapter emits is decided.")
+        else:
+            from .surfaces import OBSERVED
+
+            off = sorted(s for s in OBSERVED if not policy.allows(s))
+            print(f"\nPolicy ({policy.source.name}): default={str(policy.default).lower()}")
+            print(f"  instrumented but switched off: {', '.join(off) if off else 'none'}")
         print("\nSee docs/game-surface.md §2.5 for the per-surface matrix.")
         return 0
 

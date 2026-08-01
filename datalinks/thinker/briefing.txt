@@ -49,41 +49,41 @@ Base facilities (cost; effect; prerequisite):
   - Thermocline Transducer — cost 8; Sea Energy; needs Adaptive Economics
   - Tree Farm — cost 12; upkeep 3/turn; Econ/Psych/Forest; needs Environmental Economics
 
-Secret projects (one per game, globally):
-  - Clinical Immortality — cost 50; Extra Talent Every Base; needs Matter Editation; secret project — one per game, globally
-  - The Ascent to Transcendence — cost 200; End of Singular Sentience Era; needs Threshold of Transcendence; secret project — one per game, globally
-  - The Ascetic Virtues — cost 30; Pop. Limit Relaxed; +1 POLICE; needs Planetary Economics; secret project — one per game, globally
-  - The Bulk Matter Transmitter — cost 60; +50% Minerals Every Base; needs Matter Transmission; secret project — one per game, globally
-  - The Citizens' Defense Force — cost 30; Perimeter Defense Each Base; needs Intellectual Integrity; secret project — one per game, globally
-  - The Cloning Vats — cost 50; Population Boom At All Bases; needs Biomachinery; secret project — one per game, globally
-  - The Cloudbase Academy — cost 30; Faster/Stronger Air Units; needs Mind/Machine Interface; secret project — one per game, globally
-  - The Command Nexus — cost 20; Command Center Each Base; needs Doctrine: Loyalty; secret project — one per game, globally
-  - The Cyborg Factory — cost 40; Bioenh. Center Every Base; needs Mind/Machine Interface; secret project — one per game, globally
-  - The Dream Twister — cost 40; Psi Attack +50%; needs The Will to Power; secret project — one per game, globally
-  - The Empath Guild — cost 20; Commlink For Every Faction; needs Centauri Empathy; secret project — one per game, globally
-  - The Human Genome Project — cost 20; +1 Talent Each Base; needs Biogenetics; secret project — one per game, globally
-  - The Hunter-Seeker Algorithm — cost 30; Immunity to Probe Teams; needs Pre-Sentient Algorithms; secret project — one per game, globally
-  - The Living Refinery — cost 40; +2 SUPPORT (social); needs Advanced Spaceflight; secret project — one per game, globally
-  - The Longevity Vaccine — cost 30; Fewer Drones or More Profits; needs Bio-Engineering; secret project — one per game, globally
-  - The Manifold Harmonics — cost 50; Bonus Resources In Fungus; needs Secrets of the Manifolds; secret project — one per game, globally
-  - The Maritime Control Center — cost 30; Naval Movement +2; Naval Bases; needs Doctrine: Initiative; secret project — one per game, globally
-  - The Merchant Exchange — cost 20; +1 Energy Each Square Here; needs Industrial Base; secret project — one per game, globally
-  - The Nano Factory — cost 40; Repair Units; Low Upgrade Costs; needs Industrial Nanorobotics; secret project — one per game, globally
-  - The Nethack Terminus — cost 40; Stronger Probe Teams; needs Self-Aware Machines; secret project — one per game, globally
-  - The Network Backbone — cost 40; +1 Lab Per Commerce/Net Node; needs Digital Sentience; secret project — one per game, globally
-  - The Neural Amplifier — cost 30; Psi Defense +50%; needs Neural Grafting; secret project — one per game, globally
-  - The Pholus Mutagen — cost 40; Ecology Bonus; Lifecycle Bonus; needs Centauri Genetics; secret project — one per game, globally
-  - The Planetary Datalinks — cost 30; Any Tech Known To 3 Others; needs Cyberethics; secret project — one per game, globally
-  - The Planetary Energy Grid — cost 30; Energy Bank At Every Base; needs Adaptive Economics; secret project — one per game, globally
-  - The Planetary Transit System — cost 30; New Bases Begin At Size 3; needs Industrial Automation; secret project — one per game, globally
-  - The Self-Aware Colony — cost 50; Maintenance Halved; Extra Police; needs Self-Aware Machines; secret project — one per game, globally
-  - The Singularity Inductor — cost 60; Quantum Converter Every Base; needs Controlled Singularity; secret project — one per game, globally
-  - The Space Elevator — cost 50; Energy +100%/Orbital Cost Halved; needs Super Tensile Solids; secret project — one per game, globally
-  - The Supercollider — cost 30; Labs +100% At This Base; needs Applied Relativity; secret project — one per game, globally
-  - The Telepathic Matrix — cost 60; No More Drone Riots; +2 PROBE; needs Eudaimonia; secret project — one per game, globally
-  - The Theory of Everything — cost 40; Labs +100% At This Base; needs Unified Field Theory; secret project — one per game, globally
-  - The Universal Translator — cost 40; Two Free Techs; needs Homo Superior; secret project — one per game, globally
-  - The Virtual World — cost 30; Network Nodes Help Drones; needs Planetary Networks; secret project — one per game, globally
-  - The Voice of Planet — cost 60; Begins Ascent To Transcendence; needs Threshold of Transcendence; secret project — one per game, globally
-  - The Weather Paradigm — cost 20; Terraform Rate +50%; needs Centauri Ecology; secret project — one per game, globally
-  - The Xenoempathy Dome — cost 30; Fungus Movement Bonus; needs Centauri Meditation; secret project — one per game, globally
+Secret projects (only one base can hold each):
+  - Clinical Immortality — cost 50; Extra Talent Every Base; needs Matter Editation; secret project — only one base can hold it; others building it lose the race
+  - The Ascent to Transcendence — cost 200; End of Singular Sentience Era; needs Threshold of Transcendence; secret project — only one base can hold it; others building it lose the race
+  - The Ascetic Virtues — cost 30; Pop. Limit Relaxed; +1 POLICE; needs Planetary Economics; secret project — only one base can hold it; others building it lose the race
+  - The Bulk Matter Transmitter — cost 60; +50% Minerals Every Base; needs Matter Transmission; secret project — only one base can hold it; others building it lose the race
+  - The Citizens' Defense Force — cost 30; Perimeter Defense Each Base; needs Intellectual Integrity; secret project — only one base can hold it; others building it lose the race
+  - The Cloning Vats — cost 50; Population Boom At All Bases; needs Biomachinery; secret project — only one base can hold it; others building it lose the race
+  - The Cloudbase Academy — cost 30; Faster/Stronger Air Units; needs Mind/Machine Interface; secret project — only one base can hold it; others building it lose the race
+  - The Command Nexus — cost 20; Command Center Each Base; needs Doctrine: Loyalty; secret project — only one base can hold it; others building it lose the race
+  - The Cyborg Factory — cost 40; Bioenh. Center Every Base; needs Mind/Machine Interface; secret project — only one base can hold it; others building it lose the race
+  - The Dream Twister — cost 40; Psi Attack +50%; needs The Will to Power; secret project — only one base can hold it; others building it lose the race
+  - The Empath Guild — cost 20; Commlink For Every Faction; needs Centauri Empathy; secret project — only one base can hold it; others building it lose the race
+  - The Human Genome Project — cost 20; +1 Talent Each Base; needs Biogenetics; secret project — only one base can hold it; others building it lose the race
+  - The Hunter-Seeker Algorithm — cost 30; Immunity to Probe Teams; needs Pre-Sentient Algorithms; secret project — only one base can hold it; others building it lose the race
+  - The Living Refinery — cost 40; +2 SUPPORT (social); needs Advanced Spaceflight; secret project — only one base can hold it; others building it lose the race
+  - The Longevity Vaccine — cost 30; Fewer Drones or More Profits; needs Bio-Engineering; secret project — only one base can hold it; others building it lose the race
+  - The Manifold Harmonics — cost 50; Bonus Resources In Fungus; needs Secrets of the Manifolds; secret project — only one base can hold it; others building it lose the race
+  - The Maritime Control Center — cost 30; Naval Movement +2; Naval Bases; needs Doctrine: Initiative; secret project — only one base can hold it; others building it lose the race
+  - The Merchant Exchange — cost 20; +1 Energy Each Square Here; needs Industrial Base; secret project — only one base can hold it; others building it lose the race
+  - The Nano Factory — cost 40; Repair Units; Low Upgrade Costs; needs Industrial Nanorobotics; secret project — only one base can hold it; others building it lose the race
+  - The Nethack Terminus — cost 40; Stronger Probe Teams; needs Self-Aware Machines; secret project — only one base can hold it; others building it lose the race
+  - The Network Backbone — cost 40; +1 Lab Per Commerce/Net Node; needs Digital Sentience; secret project — only one base can hold it; others building it lose the race
+  - The Neural Amplifier — cost 30; Psi Defense +50%; needs Neural Grafting; secret project — only one base can hold it; others building it lose the race
+  - The Pholus Mutagen — cost 40; Ecology Bonus; Lifecycle Bonus; needs Centauri Genetics; secret project — only one base can hold it; others building it lose the race
+  - The Planetary Datalinks — cost 30; Any Tech Known To 3 Others; needs Cyberethics; secret project — only one base can hold it; others building it lose the race
+  - The Planetary Energy Grid — cost 30; Energy Bank At Every Base; needs Adaptive Economics; secret project — only one base can hold it; others building it lose the race
+  - The Planetary Transit System — cost 30; New Bases Begin At Size 3; needs Industrial Automation; secret project — only one base can hold it; others building it lose the race
+  - The Self-Aware Colony — cost 50; Maintenance Halved; Extra Police; needs Self-Aware Machines; secret project — only one base can hold it; others building it lose the race
+  - The Singularity Inductor — cost 60; Quantum Converter Every Base; needs Controlled Singularity; secret project — only one base can hold it; others building it lose the race
+  - The Space Elevator — cost 50; Energy +100%/Orbital Cost Halved; needs Super Tensile Solids; secret project — only one base can hold it; others building it lose the race
+  - The Supercollider — cost 30; Labs +100% At This Base; needs Applied Relativity; secret project — only one base can hold it; others building it lose the race
+  - The Telepathic Matrix — cost 60; No More Drone Riots; +2 PROBE; needs Eudaimonia; secret project — only one base can hold it; others building it lose the race
+  - The Theory of Everything — cost 40; Labs +100% At This Base; needs Unified Field Theory; secret project — only one base can hold it; others building it lose the race
+  - The Universal Translator — cost 40; Two Free Techs; needs Homo Superior; secret project — only one base can hold it; others building it lose the race
+  - The Virtual World — cost 30; Network Nodes Help Drones; needs Planetary Networks; secret project — only one base can hold it; others building it lose the race
+  - The Voice of Planet — cost 60; Begins Ascent To Transcendence; needs Threshold of Transcendence; secret project — only one base can hold it; others building it lose the race
+  - The Weather Paradigm — cost 20; Terraform Rate +50%; needs Centauri Ecology; secret project — only one base can hold it; others building it lose the race
+  - The Xenoempathy Dome — cost 30; Fungus Movement Bonus; needs Centauri Meditation; secret project — only one base can hold it; others building it lose the race

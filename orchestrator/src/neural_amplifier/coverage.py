@@ -25,18 +25,30 @@ class Report:
     adherence_violations: int = 0
     unknown_surface_ids: set[str] = field(default_factory=set)
     missing_surface_id: int = 0
+    #: Decisions the brain was actually asked to make. `total` minus the surfaces
+    #: `surfaces.toml` hands to the engine.
+    llm_decisions: int = 0
+    #: Decisions handed to the engine by configuration — not failures, and reported separately
+    #: so a deliberately narrow run is legible rather than looking like an absent brain.
+    deterministic_decisions: int = 0
     handicaps: set[str] = field(default_factory=set)
     redacted_deltas: int = 0
     ungated_decisions: int = 0
 
     @property
     def degrade_rate(self) -> float:
-        """Share of decisions that came from the fallback rather than the brain.
+        """Share of **LLM-tier** decisions that came from the fallback rather than the brain.
 
-        A run of pure fallbacks completes and looks green; this is the number
-        that catches it. Assert a ceiling in the harness.
+        A run of pure fallbacks completes and looks green; this is the number that catches it.
+        Assert a ceiling in the harness.
+
+        The denominator is `llm_decisions`, not `total`, and that is load-bearing now that
+        surfaces can be switched off in `surfaces.toml`. A deterministic-tier decision is one
+        the brain was never asked for; counting it here would dilute the rate and let a run
+        where the brain failed on every surface it *did* own read as healthy, simply because
+        most surfaces were configured off.
         """
-        return self.degraded / self.total if self.total else 0.0
+        return self.degraded / self.llm_decisions if self.llm_decisions else 0.0
 
     @property
     def adherent(self) -> bool:
@@ -88,6 +100,8 @@ class Report:
             "decisions": self.total,
             "surfaces_fired": len(self.fired),
             "surfaces_known": len(surfaces.ALL),
+            "llm_decisions": self.llm_decisions,
+            "deterministic_decisions": self.deterministic_decisions,
             "degrade_rate": round(self.degrade_rate, 4),
             "adherence_violations": self.adherence_violations,
             "unknown_surface_ids": sorted(self.unknown_surface_ids),
@@ -105,6 +119,10 @@ def report(records: Iterable[DecisionRecord]) -> Report:
     out = Report()
     for record in records:
         out.total += 1
+        if record.tier == "llm":
+            out.llm_decisions += 1
+        else:
+            out.deterministic_decisions += 1
         if record.degraded:
             out.degraded += 1
         out.adherence_violations += record.adherence_violations

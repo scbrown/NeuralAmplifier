@@ -87,6 +87,7 @@ changing the module — most of these look like ordinary plumbing and are not.
 | `decisions.py` | The record + JSONL log | The record of truth, written before any exporter |
 | `telemetry.py` | Sink fan-out + OTel | The record is assembled **once**; layers are projections of one object |
 | `coverage.py` | Run health | `degrade_rate` and `fair_play` are measured, not asserted |
+| `policy.py` | `surfaces.toml` — which surfaces the LLM owns | Off is **deterministic**, never *degraded* |
 | `replay.py` | World-view store + diffing | A log alone can't be replayed — something must keep the bytes |
 | `datalinks/` | SMAC's own rules → Quipu | Provenance on every fact, and **filtered on read** or the tag is decoration |
 | `brain.py` | Claude / scripted brains | CI never makes a paid call |
@@ -169,6 +170,22 @@ just glsmac test          # build test lint fmt  (test = headless --gse-tests)
 just thinker build        # build test           (needs the Thinker toolchain)
 just play thinker GAIANS  # full observe→decide→act loop for an engine
 ```
+
+## Surface coverage
+
+```bash
+just surfaces        # what the brain can decide, what it only watches, what is left
+```
+
+**A surface is not covered until its decision can be applied.** Observing changes what is
+recorded, not what the game does, so counting it as coverage claims influence the brain does not
+have — today that is 1 applied against 4 observed.
+
+Which surfaces the brain may decide lives in [`surfaces.toml`](surfaces.toml), one toggle each.
+A surface switched off is recorded at `deterministic` tier and is **not** degraded: degraded
+means the brain was asked and could not answer, and `degrade_rate` — measured over LLM-tier
+decisions only — is the number that catches a run where the brain was silently absent. Never let
+configuration into it.
 
 ## Evals
 
