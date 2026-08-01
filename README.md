@@ -50,8 +50,8 @@ copilot**.
 
 ## 🤔 Why Neural Amplifier?
 
-|  | **Built-in 4X AI** | **Scripted bots** | **Neural Amplifier** |
-|--|:-----------------:|:-----------------:|:--------------------:|
+| | **Built-in 4X AI** | **Scripted bots** | **Neural Amplifier** |
+| -- | :-----------------: | :-----------------: | :--------------------: |
 | Reasons about long-horizon tradeoffs | ❌ | ❌ | ✅ |
 | Explains *why* it made a move | ❌ | ❌ | ✅ |
 | Every input fully inspectable | ❌ | ⚠️ | ✅ |
@@ -137,11 +137,14 @@ Full design — the contract Claude speaks, the two-engine strategy, and the roa
 
 ## 📊 Coverage & Plan
 
-**4 of 77 decision surfaces are instrumented.** The registry is frozen at 77
+**1 of 77 decision surfaces the brain can actually decide**, with three more observed. A surface
+is not covered until its decision can be *applied* — observing changes what is recorded, not
+what the game does.
+`just surfaces` prints it. The registry is frozen at 77
 (`orchestrator/surfaces.py`) and partitioned by contract scope: `base` 25, `unit` 32, `turn` 20.
 
 | Surface | Scope | Status |
-|---|---|---|
+| --- | --- | --- |
 | `base.production` | base | **Wired** · posts the world view and applies the returned build, falling back to the engine's own answer |
 | `faction.tech` | turn | Observed · researchable techs with the engine's own AI valuation weights |
 | `faction.se` | turn | Observed · legal (field, model) pairs with effect deltas, grounded from `#SOCIO` |
@@ -153,13 +156,17 @@ to ten turns is otherwise unverifiable without playing until it happens.
 
 All four **emit the contract directly** — no translation layer between the adapter and the brain.
 
-`base.production` is the first surface where the brain's answer actually executes. Three gates make
-that safe rather than hopeful: the returned id must parse as one the adapter minted, the item must
-pass the *engine's own* availability tests for that base, and the whole exchange is bounded by
-`llm_timeout_ms` (default 2500 ms). Every failure — unreachable orchestrator, timeout, malformed
-reply, illegal id — applies the deterministic tier's choice and records why. The other three
-surfaces remain observation-only on purpose: each stays falsifiable on its own before anything
-depends on it.
+Each was **observed before it was applied** — deliberately, because that makes a surface
+falsifiable on its own before anything depends on it. Which surfaces the brain may decide is set
+per surface in the `[surfaces]` section of [`na.toml`](na.toml), so the sequence is: instrument, watch it
+observe, then let it decide.
+
+`base.production` is the first surface to finish that sequence, and the first where the brain's
+answer actually executes. Three gates make that safe rather than hopeful: the returned id must
+parse as one the adapter minted, the item must pass the *engine's own* availability tests for that
+base, and the whole exchange is bounded by `llm_timeout_ms` (default 2500 ms). Every failure —
+unreachable orchestrator, timeout, malformed reply, illegal id — applies the deterministic tier's
+choice and records why.
 
 > **Built, not yet proven.** The wire is tested end-to-end under Wine against a real orchestrator
 > (`just thinker wire`), but no decision has executed inside a running game — that needs a game
@@ -203,9 +210,11 @@ tier on top of it. That also means the work is independently useful: a better de
 improves the game whether or not a brain is attached, and it gives the LLM something to be measured
 *against* rather than merely compared to.
 
-The remaining 32 `unit`-scope surfaces mostly stay deterministic on volume grounds — see
-[docs/decision-inputs.md](docs/decision-inputs.md) §5 for why, and why revisiting them should mean
-deciding *operations* rather than tile moves.
+Of the remaining 52, **25 are `unit`-scope** and mostly stay deterministic on volume grounds —
+see [docs/decision-inputs.md](docs/decision-inputs.md) §5 for why, and why revisiting them should
+mean deciding *operations* rather than tile moves. That leaves **27 base and faction surfaces
+that already have a native path and so already have a safe fallback**: the bucket to work
+through. `just surfaces` prints the split from the registry.
 
 Detail, including the seam and action-space quality per surface:
 **[docs/game-surface.md](docs/game-surface.md) §2.5**. What each surface needs in its world view:
@@ -311,10 +320,12 @@ just check               # Full quality gate (pre-commit hooks)
 just orchestrator test   # Component-scoped recipes: <component> <cmd>
 just glsmac test         # GLSMAC adapter (headless --gse-tests)
 just thinker build       # Thinker adapter (needs the Thinker toolchain)
-just docs check          # Markdown lint
+just docs check          # Markdown lint, then build the book
+just docs serve          # The docs site at localhost, with hot reload
 
 just thinker wire        # Adapter's HTTP client under Wine vs. a real orchestrator — no game
 just play                # Serve decisions for an attached agent (NA_BRAIN=agent)
+just eval list           # Behavioural evals: what was measured, and what it found
 just coverage            # Run health: surfaces fired, fallback rate, adherence
 just replay --store …    # Re-run a recorded log against the current code — no game
 just ingest              # Your alphax.txt → the smac: RDF graph + static briefing

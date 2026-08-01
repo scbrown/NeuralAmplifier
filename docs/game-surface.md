@@ -71,19 +71,46 @@ Per-unit orders fire separately as the engine iterates units (`mod_enemy_turn`
 
 ## 2.5 Instrumentation status — measured 2026-07-29
 
-**4 of 77 surfaces emit a decision record.** The registry is frozen at 77
-(`orchestrator/surfaces.py`), partitioned by contract scope: `base` 25, `unit` 32, `turn` 20.
+**1 of 77 surfaces the brain can actually decide**, with three more observed. `base.production`
+applies: the choice executes, and it is validated against the engine's own availability tests
+first, so an illegal order is rejected rather than applied. `faction.tech`, `faction.se` and
+`base.hurry` emit a record and leave the choice to the engine — the adapter exports no decide
+entry point for them. A surface is not covered until its decision can be applied — `just
+surfaces` reports it from the frozen registry rather than from this paragraph.
+
+The registry is frozen at 77 (`orchestrator/surfaces.py`), partitioned by contract scope:
+`base` 25, `unit` 32, `turn` 20.
 
 | Surface | Scope | Seam | Action space | Probe |
-|---|---|---|---|---|
+| --- | --- | --- | --- | --- |
 | `base.production` | base | `mod_base_build` | engine-authoritative, costed in minerals, roles + effects | `observe <base_id>` |
 | `faction.tech` | turn | `mod_tech_selection` | `tech_avail`, with the AI's own valuation weights | `observe-tech <faction_id>` |
 | `faction.se` | turn | `mod_social_ai` | legal (field, model) pairs with effect deltas | `observe-se <faction_id>` |
 | `base.hurry` | base | `mod_base_hurry` (wrapped) | hurry / don't, with credit cost and turns saved; unaffordable option omitted | `observe-hurry <base_id>` |
 
-All three are **observation only** — Thinker's choice still executes. `apply <base_id>
-<action_id>` closes the loop for `base.production`, validated against the engine's own
-availability tests, so an illegal order is rejected rather than applied.
+Each has an apply command, and each validates with the engine's own test rather than with a
+reconstruction of it:
+
+| Surface | Apply | Legality test | Costs |
+| --- | --- | --- | --- |
+| `base.production` | `apply <base_id> unit:<n>\|facility:<n>` | `mod_veh_avail` + `can_build_unit` / `mod_facility_avail` + `can_build` | — |
+| `faction.tech` | `apply-tech <faction_id> tech:<n>` | `tech_avail` | — |
+| `faction.se` | `apply-se <faction_id> se:<field>:<model>\|se:none` | `society_avail` | upheaval, debited via `social_upheaval` |
+| `base.hurry` | `apply-hurry <base_id> hurry:now\|hurry:none` | `can_hurry_item` + affordable `hurry_cost` | energy credits, debited via `hurry_item` |
+
+Two of them spend something, and both debit through the engine's own routine — `hurry_item`
+does the credit debit and the mineral credit together, and reimplementing either half is how a
+faction gets free production. `base.hurry` is the one that can lose something irreversibly, so
+it refuses an unaffordable order with the numbers rather than partially applying it.
+
+`faction.se` takes legality from `society_avail`, which is the engine's test and **not** the
+checks the observation's action space makes for itself. Those two are supposed to agree; this is
+the one that binds.
+
+**Which surfaces the brain may decide is configuration**, not code: `na.toml` carries a
+toggle per surface, and one switched off is recorded at `deterministic` tier — explicitly not
+degraded, because the brain was never asked. That is how a surface gets rolled out one step at a
+time: instrument it, watch it observe, then let it decide.
 
 **Every new surface ships a side-effect-free probe.** In-game input cannot be driven at all
 ([headless-harness.md](headless-harness.md) §3.0.2), so a surface that fires every five to ten
@@ -95,9 +122,14 @@ and never the decision function.
 Measured with the same model (Haiku) on two surfaces, same graph, same retrieval path:
 
 | Surface | Options | Facts offered | Cited | Utilisation |
-|---|---|---|---|---|
+| --- | --- | --- | --- | --- |
 | `base.production` | 8 | 7 | 1 | **0.14** |
 | `base.hurry` | 2 | 1 | 1 | **1.00** |
+
+`base.production` was re-measured later over twenty decisions, once citations were asked to
+include facts that helped *rule an option out*: 1.45 of 8 cited, utilisation **0.18**. Higher,
+and the conclusion is unchanged — see the `na-373` eval (`just eval score na-373`), which also
+records why narrowing the offered set turned out not to be the fix.
 
 The wide surface paid for six facts nobody read. That is not a model failure — retrieval fetched
 one fact per offered action, and a decision only turns on a few of them. It is a retrieval-tuning
@@ -113,16 +145,23 @@ needs outcome measurement over a game, not a single decision.
 
 The gap is not uniform, and the interesting split is not by scope:
 
-- **21 surfaces the native AI never decides at all** (`NO_AI_PATH`) — `base.abandon`,
-  `council.vote`, `base.retool`, `diplo.base_swap` and the rest. These have no deterministic
-  tier to fall back to, which cuts both ways: an LLM adds capability the engine genuinely
-  lacks, and there is no native answer to degrade to when the brain is unavailable. Anything
-  moved here needs its fallback designed, not inherited.
-- **32 `unit`-scope surfaces**, most of which should stay deterministic on volume grounds —
-  see the `unit.move` entry in [decision-inputs.md](decision-inputs.md) §5 for why, and why a
-  revisit should decide *operations* rather than tile moves.
-- **The rest** are base and faction decisions with an existing native path, so they can be
-  instrumented incrementally with a safe fallback already in place.
+Run `just surfaces` for these numbers rather than trusting this paragraph — they come from the
+frozen registry (`surfaces.coverage()`), and the prose version of this list was wrong for a
+while in a way worth recording. It counted "21 with no AI path" and "32 unit-scope" as separate
+piles; seven surfaces are **both**, so the remainder looked like 20 when it is 27. A third more
+work was available than the document admitted. The buckets below partition, and a test now
+enforces that they do.
+
+- **21 the native AI never decides at all** (`NO_AI_PATH`) — `base.abandon`, `council.vote`,
+  `base.retool`, `diplo.base_swap` and the rest. No deterministic tier to fall back to, which
+  cuts both ways: an LLM adds capability the engine genuinely lacks, and there is no native
+  answer to degrade to when the brain is unavailable. Anything moved here needs its fallback
+  designed, not inherited — that is step 0 of the plan, and the one that is expensive to skip.
+- **25 `unit`-scope with a native path**, most of which should stay deterministic on volume
+  grounds — see the `unit.move` entry in [decision-inputs.md](decision-inputs.md) §5 for why, and
+  why a revisit should decide *operations* rather than tile moves.
+- **27 base and faction decisions with an existing native path**, so they can be instrumented
+  incrementally with a safe fallback already in place. This is the bucket to work through.
 
 One known limitation, recorded because it is invisible otherwise: **`faction.se` never fires for
 a human-slot faction.** `mod_social_ai` returns immediately for humans, so in the recommended
@@ -138,7 +177,7 @@ LLM drills down.
 ### 3.1 Base & economy — scope `base`
 
 | Surface | AI | Path | Tier |
-|---|:--:|---|:--:|
+| --- | :--: | --- | :--: |
 | `base.production` | ✅ | `mod_base_build` base.cpp:1145 → `select_build` build.cpp:810 | D+L |
 | `base.queue` | ✅ | `base_queue` base.cpp:1276 | D |
 | `base.hurry` | ✅ | `mod_base_hurry` build.cpp:40 → `hurry_item` :214 | D+L |
@@ -168,7 +207,7 @@ LLM drills down.
 ### 3.2 Units, military, terraforming — scope `unit`
 
 | Surface | AI | Path | Tier |
-|---|:--:|---|:--:|
+| --- | :--: | --- | :--: |
 | `unit.turn_order` | ✅ | `mod_enemy_turn` veh_turn.cpp:4 (10-pass priority loop :6-67) | D |
 | `unit.dispatch` | ✅ | `mod_enemy_move` veh_turn.cpp:137; table :164-190 | D+L |
 | `unit.move` | ✅ | `action_go_to` veh_action.cpp:449; `TileSearch` path.cpp:5-232 | D |
@@ -204,7 +243,7 @@ LLM drills down.
 ### 3.3 Faction level — scope `turn`
 
 | Surface | AI | Path | Tier |
-|---|:--:|---|:--:|
+| --- | :--: | --- | :--: |
 | `faction.tech` | ✅ | `mod_tech_ai` tech.cpp:613; scoring `mod_tech_val` :366 | **L** |
 | `faction.tech_steal` | ✅ | `steal_tech` faction.cpp:744 | L |
 | `faction.se` | ⚠️ | `mod_social_ai` faction.cpp:1458 — **hard-returns for humans** :1463 | **L** |
@@ -312,7 +351,7 @@ they stay on this side of the line.
 **Difficulty-selected** — scale with `*DiffLevel`; a user choice:
 
 | Asymmetry | Where | In force when | Favours |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | Unit support bonus | base.cpp:1645 (`unit_support_bonus[*DiffLevel]`) | configured non-zero — **never, by default** | AI |
 | Facility maintenance discount | game.cpp:1846-1859 (`*DiffLevel >= DIFF_THINKER`) | Thinker+ | AI |
 | Tech cost factor | tech.cpp:1155 (`tech_cost_factor[*DiffLevel]`) | any level except Librarian | **human** below Librarian, AI above |
@@ -323,7 +362,7 @@ they stay on this side of the line.
 **Structural** — flat `is_human` or separate config; present at every difficulty:
 
 | Asymmetry | Where | In force when | Favours |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | **Retool penalty — AI pays none, ever** | base.cpp:1045, build.cpp:11 | `retool_penalty_prod_change != 0` | AI |
 | **Global warming — AI exempt below difficulty 4** | base.cpp:3205 | below Thinker | AI |
 | Mineral carry-over cap | base.cpp:3382, 3655 | always | AI |
@@ -338,7 +377,7 @@ Three of these favour the *human* — the ledger is not uniformly tilted, which 
 to record rather than hand-wave.
 
 > **This table is an index, not the source of truth.** Building
-> [`fairness.py`](../orchestrator/src/neural_amplifier/fairness.py) against the fork showed a
+> [`fairness.py`](https://github.com/scbrown/NeuralAmplifier/blob/main/orchestrator/src/neural_amplifier/fairness.py) against the fork showed a
 > static `favours` column cannot be right: `tech_cost_factor` is `{124,116,108,100,84,76}`
 > (`main.h:327`), so the AI pays *more* below Thinker and the entry flips sides at Librarian
 > where the factor is exactly 100. `content_pop` flips at the same level for the same reason
@@ -357,7 +396,7 @@ to record rather than hand-wave.
 Which side owns a decision is partly configurable (`struct Config`, `main.h:205+`):
 
 | Option | Line | Effect |
-|---|---|---|
+| --- | --- | --- |
 | `manage_player_bases` | main.h:225 | Thinker drives **human** bases (base.cpp:991, build.cpp:55) |
 | `manage_player_units` | main.h:225 | Thinker drives **human** units set to automated (move.cpp:2074) |
 | `factions_enabled` | thinker.ini:90 | Which factions get Thinker's AI at all |

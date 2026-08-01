@@ -29,7 +29,8 @@ from __future__ import annotations
 from collections.abc import Callable, Iterable
 
 from .contract import Orders, WorldView
-from .knowledge import Ruling, plan_entities
+from .directives import entities_shown
+from .knowledge import Ruling, grounded_ids
 
 #: Resolves a fact id to whether it exists in the datalinks graph. Injected so the policy is
 #: testable without a store, and so the same policy can run against Quipu, a local TTL, or a
@@ -49,12 +50,14 @@ class CitationGuard:
         something informed the decision when nothing did.
     ``unresolvable``
         The id was offered, but does not resolve in the graph. That is not the model's fault;
-        it means retrieval emitted a pointer to a node that is missing, which is a datalinks
-        integrity problem.
+        it means something emitted a pointer to a node that is missing — retrieval, or a
+        directive naming an entity that no longer exists. Either way a datalinks integrity
+        problem rather than a reasoning one.
     ``uncited``
         Facts were offered and none were cited. Not an error — a decision can legitimately
         turn on state rather than rules — but worth surfacing, because a run where this is
-        always true is paying for retrieval nobody reads.
+        always true is paying for retrieval nobody reads. Scoped to *grounding* alone: it is a
+        statement about retrieval, and directive entities are not retrieved.
 
     Verdict is **warn**, never deny. A suspect justification does not make an order illegal,
     and denying a legal move because its reasoning was sloppy would break the game to make a
@@ -68,7 +71,15 @@ class CitationGuard:
         self.resolver = resolver
 
     def rule(self, orders: Orders, world_view: WorldView) -> Ruling:
-        offered = self._offered(world_view)
+        # Two id spaces that are deliberately the same. A directive's ``entities`` *are*
+        # grounding fact ids — that is what makes the multi-hop walk work — but they reach the
+        # brain through the directives block. Reading the offered set out of grounding alone
+        # made every such citation look fabricated (na-zgz).
+        #
+        # They stay two names past this line because only ``grounded`` is about retrieval, and
+        # the ``uncited`` advisory below is a statement about retrieval.
+        grounded = grounded_ids(world_view)
+        offered = grounded | entities_shown(world_view)
         cited = list(dict.fromkeys(orders.cited))
 
         advisories: list[str] = []
@@ -88,40 +99,12 @@ class CitationGuard:
                     + ", ".join(sorted(unresolvable))
                 )
 
-        if offered and not cited:
+        if grounded and not cited:
             advisories.append(
-                f"{len(offered)} fact(s) offered, none cited — grounding may be unread"
+                f"{len(grounded)} fact(s) offered, none cited — grounding may be unread"
             )
 
         return Ruling(verdict="warn" if advisories else "allow", advisories=tuple(advisories))
-
-    def _offered(self, world_view: WorldView) -> set[str]:
-        """Every fact id the brain was actually shown — from two places, not one.
-
-        The ``grounding`` block is the obvious source: retrieved facts, injected id-first.
-
-        The second source is less obvious and was a real bug. A directive carries ``entities``,
-        which *are* grounding fact ids — that identity is what makes the multi-hop walk work,
-        since a decision reaches a plan by matching the entity it is deciding about. Those ids
-        are printed in front of the model inside every ``DirectiveStatus``. Reading only the
-        grounding block therefore made a perfectly honest citation look fabricated: measured,
-        this fired on three to four runs in five, always on the entity of a plan the model had
-        just been shown and had correctly reasoned about.
-
-        "Offered" means shown, not retrieved. Both belong.
-        """
-        grounding = world_view.grounding or []
-        offered = {gid for gid in (self._id_of(line) for line in grounding) if gid}
-        return offered | plan_entities(world_view)
-
-    @staticmethod
-    def _id_of(line: str) -> str:
-        """Facts are injected as ``"<id> <text>"``; the id is the first token.
-
-        Kept deliberately dumb. A richer encoding would need the contract to carry structured
-        grounding, and that is a contract change rather than a guard's business.
-        """
-        return line.split(" ", 1)[0].strip() if line else ""
 
     def _safe_resolve(self, fact_id: str) -> bool:
         """A resolver that throws must not turn into a violation.

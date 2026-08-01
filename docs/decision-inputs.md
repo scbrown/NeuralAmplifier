@@ -22,7 +22,7 @@ Eight categories. Not every surface needs every one, but every surface should be
 every one — the point is to make an omission deliberate rather than accidental.
 
 | # | Category | The question it answers | Who supplies it |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | 1 | **Subject** | What is deciding, and what state is it in? | Adapter |
 | 2 | **Action space** | What may it legally do — *and what does each option cost and do?* | Adapter (engine-authoritative) |
 | 3 | **Local context** | What is nearby that bears on this choice? | Adapter (fog-limited) |
@@ -107,22 +107,56 @@ turn at the engine level, gated to one decision by `call_seq == 1`
 terseness is a design goal.
 
 | # | Category | Fields |
-|---|---|---|
+| --- | --- | --- |
 | 1 | Subject | base name, id, coords; size (population); nutrient / mineral / energy surplus; minerals accumulated toward the current item; current item and turns remaining; drone and talent counts; facilities already built |
 | 2 | Action space | every legal build, each with: `id`, display name, **mineral cost**, **`turns_if_switched` / `turns_if_continued`** (computed — see below), category (unit / facility / project), and a one-line **role** (units) or **effect** (facilities) |
 | 3 | Local context | garrison strength in this base; visible hostile units within a few tiles; distance to the nearest known hostile base; whether this base is coastal |
 | 4 | Strategic context | faction energy reserve; base count; tech currently researched; social-engineering settings; who we are at war with |
-| 5 | Temporal context | what this base built in the last few turns (avoids oscillation); whether the current item was chosen by Claude or by Thinker |
+| 5 | Temporal context | `history` — what this base built in the last few turns, each with the `tier` that chose it (**built**, see below) |
 | 6 | Grounding | from `alphax.txt` via Quipu: what each offered facility/unit actually does, at **canonical** tier — never a mod's stats presented as canonical |
 | 7 | Fairness | the active handicap ledger for this faction |
 | 8 | Exclusions | anything outside this faction's fog; other factions' production; unmet factions' existence |
+
+### Temporal context works, and is not an anchor (na-61c.2)
+
+Production is re-decided every turn, so a stateless brain re-argues the case from nothing each
+time: every choice defensible, the sequence accumulating nothing. `WorldView.history` is the fix
+— a short ring buffer per base, oldest first, each entry carrying the `tier` that made it.
+
+This was worth checking before building, because the case weakened once decision instability was
+measured properly. A stable decision cannot demonstrate anything (history can only fail to help
+a choice already made unanimously), so the check used a **contested** one: the same
+`base.production` world view grounded with four facts splits three ways. Ten runs per arm on
+Haiku, with history naming the option the brain picks *least* often — the version that can fail:
+
+| arm | continued the prior choice |
+| --- | --- |
+| no history | 0.30 |
+| + three turns of `llm` history | **1.00** |
+| + history, but the case changed | **0.10** |
+
+The third arm is the one that makes the other two mean anything. History alone cannot separate
+"correctly continued" from "anchored regardless" — nothing in that world view argued for
+switching, so continuing was right by construction. So the third arm changes the case: drones
+triple and a priority-8 directive caps them, which the history's item does not address and
+another option does. The brain abandons its own history 9 times in 10.
+
+So history buys continuity without buying deference. The `tier` field is what keeps that true at
+the other end: a `deterministic` entry is a default to improve on, not a decision to respect, and
+collapsing the two would have the brain defer to a choice nobody made.
+
+**Still outstanding.** This is ten independent samples of one synthetic re-decision, not ten
+consecutive turns of a real game, which is what the bead's acceptance criterion asks for and what
+would actually show a base finishing what it starts. The `changed` arm also moves two things at
+once (the metric and the directive), so it shows the brain will switch when the case changes
+without saying which change did it.
 
 **Measured stability, five identical prompts.** 4 of 5 chose Colony Pod, 1 chose Formers —
 `stability 0.80`, `utilisation 0.20`. Both choices were legal and defensible. That is low enough
 to matter on a decision re-evaluated every turn and high enough that the earlier alarm about
 oscillation was overstated: an uncontrolled pair of disagreeing runs turned out to be this same
 one-in-five, not evidence of a coin flip. Run it with
-[`scripts/decision_stability.py`](../scripts/decision_stability.py).
+[`scripts/decision_stability.py`](https://github.com/scbrown/NeuralAmplifier/blob/main/scripts/decision_stability.py).
 
 **Why category 5 is on this list.** Production decisions are re-evaluated constantly, and a
 stateless brain will happily flip between two options every turn, accumulating nothing. Recent
@@ -139,7 +173,7 @@ So the adapter computes turns, and ships **two separately named numbers** rather
 ambiguous `turns`:
 
 | Field | Meaning |
-|---|---|
+| --- | --- |
 | `turns_if_switched` | `ceil(cost / surplus)`, ignoring the bank — switching item category forfeits progress, so this is the conservative and usually correct read |
 | `turns_if_continued` | only on the item currently in production, where the bank does apply |
 
@@ -222,7 +256,7 @@ it.
 where to spend context.
 
 | # | Category | Fields |
-|---|---|---|
+| --- | --- | --- |
 | 1 | Subject | the faction: current techs known, research output per turn, accumulated research |
 | 2 | Action space | each researchable tech: `id`, name, **cost in research points**, turns at current output, what it unlocks (units, facilities, projects, SE options) |
 | 3 | Local context | n/a — this is a faction-level decision |
@@ -244,7 +278,7 @@ is exactly what a language model is good at and a weight table is not.
 **Status:** not yet implemented. Strong LLM fit; low frequency.
 
 | # | Category | Fields |
-|---|---|---|
+| --- | --- | --- |
 | 1 | Subject | current SE settings and the resulting effect totals |
 | 2 | Action space | each legal SE combination, with its **net effect deltas** and any unlock requirement |
 | 3 | Local context | drone/talent balance across bases — the constraint that usually binds |

@@ -156,13 +156,63 @@ The live risk is latency and token cost (see the honesty section below). The rul
   prompt enforces — canonical datalinks outrank learned tactics
   ([knowledge-architecture.md](knowledge-architecture.md), *Precedence*).
 
+### Ranking then truncating does not work — measured, and refuted (na-373)
+
+Utilisation scales inversely with action-space width: `base.production` offered 7 facts for 8
+options and got 1 cited; `base.hurry` offered 1 for 2 and got 1. The obvious fix is to rank
+facts by usefulness and keep the top k. It was implemented, measured, and it fails.
+
+The rule tried was **information value** — score a fact by what it adds beyond the option's own
+name, blind to cost and affordability so that retrieval informs the choice rather than biasing
+it. Twenty decisions per configuration, Haiku, one real `base.production` world view, eight real
+facility options grounded from the Thinker datalinks:
+
+| config | facts offered | mean cited | utilisation | choice |
+| --- | --- | --- | --- | --- |
+| all (action-space order) | 8 | 1.45 | 0.18 | Network Node **18/20** |
+| ranked, top 4 | 4 | 1.00 | 0.25 | Research Hospital 17/20, two others 3/20 |
+
+Utilisation rose 0.18 → 0.25, and the number is worthless: it rose because the denominator
+shrank. What the same run shows is that **truncation changed the decision and destabilised it**
+— the choice moved from Network Node to Research Hospital, and stability fell from 0.90 to 0.85.
+
+The rule has no predictive power. Of 29 citations across the baseline runs, 9 fell in its top
+four — **0.31, against the 0.50 that pure noise would give**. `fac:network-node` was cited in
+20 of 20 decisions and the rule ranked it fifth of eight: the first fact it discards is the only
+one every decision used.
+
+Both arms were re-measured after the system prompt gained its `history` section, so the table is
+current rather than merely once-true (`just eval check`). The first measurement, against the
+earlier prompt, gave 0.22 → 0.28 and 0.43-against-chance — the same conclusion, slightly weaker.
+Re-running moved every number a little and none of them qualitatively, which is roughly what a
+finding this size should do.
+
+**Why, and it generalises past this one rule.** Grounding is one fact per option. Dropping a
+fact does not remove *information*, it removes the *explanation of a specific option* — and an
+unexplained option loses. So any top-k truncation over a per-option grounding block biases the
+choice, whatever it ranks by. This is the failure
+[directives.md](directives.md) predicted for desirability ranking, arriving by a different road:
+the bias is invisible, because the record shows which facts were offered and never which options
+were left comparatively unargued.
+
+What follows for anyone picking this up:
+
+- **Cutting cost on a wide surface has to be neutral across options.** Shorten every fact, or
+  drop facts only for options the engine has already excluded. Do not keep "the best k".
+- **Utilisation is not an optimisation target.** It is a diagnostic. Maximising it rewards
+  offering less, which is why the acceptance criterion pairs it with decision quality — and why
+  this attempt fails despite moving the number the right way.
+- The harness is `scripts/retrieval_utilisation.py` (`prompts`, `score`, `predict`), and the
+  refuted rule lives in it rather than in the retriever, so a better rule can be measured the
+  same way.
+
 ## `group_id` conventions
 
 Quipu `group_id` **organizes facts within a store**; it is **not** a security
 boundary (see below and [tenancy-and-isolation.md](tenancy-and-isolation.md)).
 
 | `group_id` | Plane | Contents |
-|---|---|---|
+| --- | --- | --- |
 | `datalinks:smac` | Datalinks | Canonical stock `alphax.txt` rules |
 | `datalinks:thinker` | Datalinks | Thinker house-rule overrides |
 | `datalinks:glsmac` | Datalinks | GLSMAC deviations (all `aspirational`) |

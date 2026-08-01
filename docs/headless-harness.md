@@ -19,7 +19,7 @@ Engine specifics are grounded in source: `thinker/...` paths cite the fork at
 Conflating these is the most expensive mistake available here, so name them separately:
 
 | | **Thinker / `terranx.exe`** | **GLSMAC `--gse-tests`** |
-|---|---|---|
+| --- | --- | --- |
 | What it means | Unattended — no *visible* display, no human input | Truly headless — `graphics::Null`, no display at all |
 | How | Wine + **Xvfb** (virtual framebuffer); the game still renders | Null subsystems; nothing renders |
 | Needs game assets? | Yes — a real SMAC install | **No** |
@@ -55,7 +55,7 @@ match is fine, and the game itself tells you which you have.
 builds:
 
 | | Bytes | SHA-1 |
-|---|---|---|
+| --- | --- | --- |
 | Technical.md anchor (GOG) | 3 084 288 | `4b19c1fe3266b5ebc4305cd182ed6e864e3a1c4a` |
 | **Steam, app 2204130** | **3 094 576** | **`7bbcc54e64760c11a24f48862f15dbaaeab61435`** |
 
@@ -73,7 +73,7 @@ provenance line and let Thinker adjudicate, not grounds to reject the install. T
 ### 2.2 Sourcing: Steam primary, ISO as validator
 
 | Source | Role | Notes |
-|---|---|---|
+| --- | --- | --- |
 | **Steam** — [Planetary Pack](https://store.steampowered.com/app/2204130/Sid_Meiers_Alpha_Centauri_Planetary_Pack/) (app 2204130) | **Primary — confirmed working** | Ships SMAC + SMACX at v2.0. Verified 2026-07-29: Thinker v5.4 patches and plays it (§2.1). No patching step needed. |
 | **Physical media (ISO backup)** | **Optional validator** | Discs are v1.0, which Thinker does not support; requires the official Alien Crossfire v2.0 patch. Slower to prepare, and **no longer on the critical path**. |
 
@@ -104,7 +104,7 @@ $SMAC_DIR/            # extracted once, lives outside the repo, never committed
 the repository or into public CI. What is version-controlled lives in `fixtures/smac/`:
 
 | File | Role |
-|---|---|
+| --- | --- |
 | `steam-2204130.manifest` | `sha1 <TAB> size <TAB> relpath`, sorted — the reference fixture (1 624 files) |
 | `overlays.tsv` | Known **mod** hashes, so a mismatch can be *explained* rather than merely reported |
 | `PROVENANCE.md` | Where the bytes came from, which `terranx.exe` hashes we accept, what is unresolved |
@@ -165,7 +165,7 @@ in the loop.
 Dependencies, all installed by `just setup-host` (`scripts/setup-host.sh`):
 
 | Dependency | Why |
-|---|---|
+| --- | --- |
 | `build-essential`, `g++-mingw-w64-i686-posix` | Thinker is a 32-bit Windows DLL; Linux cross-compile is upstream-supported (`thinker/Technical.md`). GCC < 8.1.0 unsupported. |
 | `cmake` ≥ 3.31 | Required by the fork's `CMakePresets.json`, newer than several distro packages |
 | `wine` | `terranx.exe` is a 32-bit Windows GUI binary |
@@ -198,7 +198,7 @@ new-wow64**, and SMAC was verified booting that way here on Wine 11.9.
 Two display settings that are not optional in practice, both measured on a 4K host:
 
 | Symptom | Cause | Fix |
-|---|---|---|
+| --- | --- | --- |
 | UI renders at a quarter scale, unreadable | `video_mode=0` is fullscreen at the *native* desktop resolution, and SMAC's UI is fixed-size | `video_mode=2` (borderless windowed) with `window_width=2560`, `window_height=1440` |
 | Clicks land far from the cursor | Wine maps pointer coordinates against the full desktop while the window is at the game's resolution | A Wine **virtual desktop** at exactly the game's resolution, so Wine owns window and coordinate space together |
 
@@ -312,7 +312,7 @@ Green is reachable, red is not. The startup screen was never the problem; confla
 modal dialogs is what cost the time.
 
 | Layer | Pumped by | Can we drive it? |
-|---|---|---|
+| --- | --- | --- |
 | **Startup screen** — START GAME / QUICK START / LOAD GAME | the normal window loop, so `ModWinProc` runs | **Yes.** An in-process `PostMessage` click opens LOAD GAME |
 | **Modal dialogs** — the file picker, and anything drawn over the game | its own nested message pump | **No.** See below |
 | **In-game menu bar** — the `Menu` class at `0x5FB100` | normal loop | Yes, but it is not involved in startup |
@@ -370,7 +370,7 @@ nothing.
 **Dead ends, recorded so they are not retried:**
 
 | Attempt | Result |
-|---|---|
+| --- | --- |
 | Write `GameHalted = 0` after loading | State loads, stays on menu |
 | `0x58F450(1, arg2)`, `arg2 ∈ {0, 1}` | Loads, but raises the engine's own picker over the session |
 | `0x58F450(1, arg2)`, `arg2 ∈ {2, −1}` | No modal, but ends back at the startup screen |
@@ -385,7 +385,7 @@ channel. Two files in the game directory, two owners, deliberately separate so t
 race over who consumes a command:
 
 | File | Owner | Commands |
-|---|---|---|
+| --- | --- | --- |
 | `na-command` | the window procedure | `shot [path]`, `load <path>`, `observe <base_id>`, `enter <a> <b>` |
 | `na-input` | a worker thread | `click x y`, `dclick x y`, `key <vk>`, `text <s>` |
 
@@ -428,7 +428,7 @@ choose a map.
 **Thinker already exposes the seams to skip this entirely.** Three, all pre-existing:
 
 | Seam | Where | What it buys |
-|---|---|---|
+| --- | --- | --- |
 | `load_daemon` / `save_daemon` | `src/engine.cpp:1049,1051` (`0x5A9760` / `0x5A94F0`); also `load_game` at `:1056` | Load a prepared savegame **programmatically** — no menu navigation. `mod_load_daemon` (`src/game.cpp:1182`, hooked at `src/patch.cpp:635`) is existing precedent for driving loads from mod code. |
 | `cmd_parse` | `src/main.cpp:403-423` | Already parses custom flags (`-smac`, `-native`, `-screen`, `-windowed`) into `Config`. The launcher forwards argv straight through to the game (`src/launch.cpp:65-71`), so **new flags need no launcher change**. |
 | `mod_auto_save` | `src/game.cpp:1188-1197`; `autosave_interval` defaults to `1` (`src/main.h:223`) | Already writes `saves/auto/Autosave_<year>.sav` **every turn** — a per-turn artifact stream for assertions and replay, for free. |
@@ -486,7 +486,7 @@ scripted decisions should produce the same autosave sequence.
 answer. Three distinct classes, which must be handled differently:
 
 | Class | Examples | Unattended posture |
-|---|---|---|
+| --- | --- | --- |
 | **Thinker error dialogs** | `exit_fail`, ini/DLL startup failures (`src/main.cpp:429-441,451-468`) | **Suppress** → stderr + exit (§3.3) |
 | **SMAC in-game dialogs** | `popp`, `pop_ask*`, `X_pop_*`, `NetMsg_pop` — council votes, tech choice, events, diplomacy | **Intercept**, never suppress — these are contract decision points |
 | **Our own dialogs** | Copilot advice, order approval, drill-down explanation | **Add** — see §4.3 |
@@ -584,7 +584,7 @@ interpolate strings and numbers, `__` nests list items, and `#itemlist` makes it
 list. The call returns the chosen index:
 
 | Need | Call | Example |
-|---|---|---|
+| --- | --- | --- |
 | Message / menu, returns choice | `popp(file, label, 0, "img.pcx", 0)` | `src/gui.cpp:1205,1221`; `src/base.cpp:1181` |
 | Checkbox list | `X_pop_9(file, label, -1, 0, PopDialogCheckbox\|PopDialogBtnCancel, 0)` | `src/gui.cpp:1140` |
 | Numeric input | `pop_ask_number_4(file, label, value, 0)` | `src/gui.cpp:706,759` |
@@ -630,10 +630,10 @@ The resulting cadence:
 ## 6. Proposed sequencing
 
 Ordered so each step is verifiable **without the next one existing**, and the slow lane is
-built last. Maps onto [VISION.md](../VISION.md) §7.
+built last. Maps onto [VISION.md](https://github.com/scbrown/NeuralAmplifier/blob/main/VISION.md) §7.
 
 | Step | What | Game needed? | Roadmap |
-|---|---|---|:---:|
+| --- | --- | --- | :---: |
 | **0** | Game fixture: manifest, `just game verify`, `$SMAC_DIR` wiring, Steam + ISO extraction docs | own it, don't run it | — |
 | **1** | Orchestrator walking skeleton — `POST /decide` returns a choice from `action_space`; fake Claude; fixtures | ❌ | S1 |
 | **2** | Cross-compile `thinker.dll` in CI — `apt install build-essential cmake g++-mingw-w64-i686-posix` (`thinker/Technical.md:157`), `cmake --preset develop` | ❌ | A0 (build half) |

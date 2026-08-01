@@ -19,7 +19,8 @@ from pathlib import Path
 
 import pytest
 
-from neural_amplifier.contract import Action, Directive, Orders, WorldView
+from neural_amplifier.brain import ScriptedBrain
+from neural_amplifier.contract import Action, Choice, Directive, Orders, WorldView
 from neural_amplifier.directives import (
     DirectiveError,
     DirectiveStore,
@@ -29,7 +30,9 @@ from neural_amplifier.directives import (
     tradeoffs,
     validate,
 )
+from neural_amplifier.knowledge import Grounding
 from neural_amplifier.metrics import VOCABULARY
+from neural_amplifier.orchestrator import Orchestrator
 
 
 def view(
@@ -551,3 +554,77 @@ def test_survival_intent_is_shown_even_though_unrelated() -> None:
     world = view(metrics={"energy_reserves": 82}, actions=_hurry_actions())
 
     assert "hold-hq" in [h.directive.id for h in relevant([critical, *_many(10)], world).hits]
+
+
+# --- the plan's own id space, end to end (na-zgz) ---------------------------
+
+
+class _Retriever:
+    """Facts with ids, which is what makes a citation checkable at all."""
+
+    def retrieve(self, world_view: WorldView) -> Grounding:
+        return Grounding(
+            facts=("Weather Paradigm doubles terraforming rate.", "Formers terraform terrain."),
+            fact_ids=("fac:weather-paradigm-rule", "unit:formers"),
+        )
+
+
+def _citing_brain() -> ScriptedBrain:
+    """Cites one retrieved fact and one entity only the directive named."""
+    return ScriptedBrain(
+        [
+            Orders(
+                choices=[Choice(action_id="hurry:none", reason="saving for the project")],
+                cited=["unit:formers", "fac:the-weather-paradigm"],
+            )
+        ]
+    )
+
+
+def _plan(tmp_path: Path) -> DirectiveStore:
+    store = DirectiveStore(tmp_path / "plan.json")
+    store.add([saving(id="fund", entities=["fac:the-weather-paradigm"])])
+    return store
+
+
+def _world() -> WorldView:
+    return view(metrics={"energy_reserves": 82}, actions=_hurry_actions())
+
+
+def test_a_citation_the_plan_alone_offered_is_recorded_not_discarded(tmp_path: Path) -> None:
+    """The other half of na-zgz. ``summarise`` filters citations against grounding — correctly,
+    or utilisation would stop being about retrieval — so before this the id was dropped there
+    *and* flagged as fabricated by the guard: a decision reasoning from an entity the plan put
+    in front of it was indistinguishable from one that read nothing."""
+    result = Orchestrator(_citing_brain(), retriever=_Retriever(), plan=_plan(tmp_path)).decide(
+        _world()
+    )
+
+    assert result.record.plan.entities_cited == ["fac:the-weather-paradigm"]
+    # Still absent from the retrieval half — it was never retrieved.
+    assert result.record.knowledge.quipu_cited == ["unit:formers"]
+
+
+def test_directives_do_not_move_grounding_utilisation(tmp_path: Path) -> None:
+    """Acceptance criterion for na-zgz. Utilisation answers "was retrieval read?"; folding the
+    plan's entities into either half would make a retrieval metric drift every time the plan
+    changed shape, and push it above 1.0 the moment a decision cited one."""
+    without = Orchestrator(_citing_brain(), retriever=_Retriever()).decide(_world())
+    with_plan = Orchestrator(_citing_brain(), retriever=_Retriever(), plan=_plan(tmp_path)).decide(
+        _world()
+    )
+
+    assert with_plan.record.plan.in_force == ["fund"], "the plan must actually be in play"
+    assert without.record.knowledge.utilisation == with_plan.record.knowledge.utilisation == 0.5
+    assert without.record.plan.entities_cited == []
+
+
+def test_an_entity_only_grounding_offered_is_not_claimed_by_the_plan(tmp_path: Path) -> None:
+    """Grounding wins where both showed the id: there it is already counted as retrieval doing
+    its job, and counting it twice would make the plan look like it contributed retrieval."""
+    store = DirectiveStore(tmp_path / "plan.json")
+    store.add([saving(id="fund", entities=["unit:formers"])])
+    result = Orchestrator(_citing_brain(), retriever=_Retriever(), plan=store).decide(_world())
+
+    assert result.record.plan.entities_cited == []
+    assert result.record.knowledge.quipu_cited == ["unit:formers"]

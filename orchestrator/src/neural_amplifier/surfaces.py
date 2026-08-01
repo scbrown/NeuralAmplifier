@@ -146,6 +146,65 @@ NO_AI_PATH: Final[frozenset[str]] = frozenset(
 )
 
 
+#: Surfaces an adapter reports — the brain sees the decision and a record is written, but the
+#: engine's own choice still executes.
+#:
+#: Observing is a prerequisite for coverage, not coverage itself. A surface here is one we can
+#: *watch*; the brain has no influence over it whatsoever.
+OBSERVED: Final[frozenset[str]] = frozenset(
+    {
+        "base.production",
+        "faction.tech",
+        "faction.se",
+        "base.hurry",
+    }
+)
+
+#: Surfaces where the brain's choice actually executes — validated against the engine's own
+#: availability tests, so an illegal order is rejected rather than applied.
+#:
+#: **This is the coverage number.** A surface is not covered until the decision can be applied:
+#: until then the LLM tier has no effect on the game, and counting observation as coverage
+#: overstates it fourfold today. Every applied surface is necessarily observed.
+#:
+#: Exactly one, and the adapter is the authority on that: `src/neural.h` in `scbrown/thinker`
+#: exports a single decide entry point, `na_decide_base_production`. The other three surfaces
+#: export `na_observe_*` only — they emit a record, and the engine still chooses. Listing them
+#: here would make this number claim the LLM tier affects a game it cannot yet touch, which is
+#: the fourfold overstatement the note above is about.
+APPLIED: Final[frozenset[str]] = frozenset({"base.production"})
+
+
+def coverage() -> dict[str, int]:
+    """The counts `docs/game-surface.md` §2.5 and the README quote — computed, not typed.
+
+    Two numbers, and conflating them is the mistake this replaced. ``applied`` is how much of
+    the game the brain can actually *decide*; ``observed`` is how much it can see. The gap
+    between them is real work — an observed surface still needs its apply path built and
+    validated — and reporting only the larger one claims influence the brain does not have.
+
+    The three remaining buckets **partition** what is left, which the prose version did not: a
+    ``unit``-scope surface can also have no native AI path (seven do), so counting them as
+    separate piles double-counted those seven and made the remainder look smaller than it is.
+
+    ``needs_tier_first`` has no native answer to fall back on, so an LLM there breaks invariant
+    9 until the deterministic tier is built; ``ready`` already has a safe fallback.
+    """
+    remaining = ALL - OBSERVED
+    needs_tier_first = remaining & NO_AI_PATH
+    volume_bound = {s for s in remaining - NO_AI_PATH if scope_for(s) == "unit"}
+    return {
+        "total": len(ALL),
+        "applied": len(APPLIED),
+        "observed": len(OBSERVED),
+        "observed_not_applied": len(OBSERVED - APPLIED),
+        "remaining": len(remaining),
+        "needs_tier_first": len(needs_tier_first),
+        "volume_bound": len(volume_bound),
+        "ready": len(remaining - needs_tier_first - volume_bound),
+    }
+
+
 def is_known(surface_id: str) -> bool:
     """Whether ``surface_id`` is in the frozen registry."""
     return surface_id in ALL

@@ -21,6 +21,7 @@ Two parsing traps this handles, both load-bearing:
 
 from __future__ import annotations
 
+import hashlib
 from collections.abc import Iterable, Iterator
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -79,6 +80,41 @@ def looks_modded(text: str) -> str | None:
     for marker in MOD_MARKERS:
         if marker in top:
             return marker
+    return None
+
+
+#: Known non-vanilla file hashes, mapping sha1 to the mod that ships them
+#: (``fixtures/smac/overlays.tsv``). Repo root, beside the justfile.
+OVERLAYS = Path(__file__).resolve().parents[4] / "fixtures" / "smac" / "overlays.tsv"
+
+
+def overlay_source(data: bytes, overlays: Path | None = None) -> str | None:
+    """Which mod ships this exact file, by content hash, or ``None`` if unrecognised.
+
+    :func:`looks_modded` reads the header, which only catches a mod polite enough to say so.
+    This catches one that is not: the bytes are the bytes, and ``overlays.tsv`` already records
+    every overlay hash the fixture checker knows about — including three ``alphax.txt`` variants
+    from Thinker v5.4.
+
+    Neither check subsumes the other. The header catches an unknown mod that announces itself;
+    the hash catches a known mod that does not, and names its *version* rather than just
+    reporting that something looked off.
+
+    Duplicates a few lines of ``scripts/game_fixture.py``. Deliberately: that script runs under
+    bare ``python3`` with the package uninstalled, so it cannot import this, and a shared helper
+    would have to live somewhere both can reach — which is a bigger change than ten lines of
+    TSV parsing is worth.
+    """
+    path = overlays or OVERLAYS
+    if not path.exists():
+        return None
+    digest = hashlib.sha1(data).hexdigest()  # noqa: S324 — matching an existing manifest
+    for line in path.read_text(encoding="utf-8").splitlines():
+        if not line.strip() or line.lstrip().startswith("#"):
+            continue
+        fields = line.split("\t")
+        if len(fields) >= 3 and fields[0] == digest:
+            return fields[2]
     return None
 
 
@@ -284,6 +320,92 @@ class Unit:
         return PLAN_ROLES.get(self.plan, "")
 
 
+@dataclass(frozen=True)
+class TerraformAction:
+    """One thing a former can do to a tile — ``#TERRAIN``.
+
+    ``land`` and ``sea`` are two variants of the same order, which is why they are one record
+    rather than two: "Farm" and "Kelp Farm" are the same key press on different terrain. A
+    ``Disable`` in the sea prerequisite means **there is no sea variant**, not that the action
+    is switched off — Forest has none, and reading that as "forests are disabled" would delete a
+    core terraform from the brain's picture.
+
+    ``verb`` carries the file's own template (``Cultivate $STR0``), which is the difference
+    between "Fungus" and "Fungus": the section has two rows with that name, one to *remove* it
+    and one to *plant* it. Keyed by name alone they collide and one silently wins, so these are
+    a list rather than a dict.
+    """
+
+    land: str
+    sea: str
+    #: Turns of former work, before terrain and ability modifiers.
+    rate: int
+    #: The file's own action template — "Plant $STR0", "Remove $STR0", "Terraform UP".
+    verb: str
+    requires: tuple[str, ...]
+    disabled: bool
+    sea_requires: tuple[str, ...]
+    #: True when the order has no sea form at all, as distinct from one needing a tech.
+    land_only: bool
+
+    @property
+    def name(self) -> str:
+        """A stable label. Two rows share ``land`` — the verb is what separates them."""
+        action = self.verb.split("$STR0")[0].strip() or self.verb.strip()
+        return f"{action} {self.land}".strip()
+
+
+@dataclass(frozen=True)
+class ResourceYield:
+    """What a special square produces — ``#RESOURCEINFO``.
+
+    ``None`` means the file wrote ``*``, which its own comment glosses as "ignored entirely":
+    the value comes from the tile's temperature, rainfall and rockiness instead. Parsing that
+    as ``0`` would tell the brain Improved Land yields no minerals, which is confidently wrong
+    rather than merely absent — the failure this whole plane exists to avoid.
+    """
+
+    name: str
+    nutrients: int | None
+    minerals: int | None
+    energy: int | None
+
+
+def _terraform(row: Row) -> TerraformAction:
+    land_requires, land_disabled = prereqs(row.get(1))
+    sea_requires, sea_disabled = prereqs(row.get(3))
+    return TerraformAction(
+        land=row.get(0),
+        sea=row.get(2),
+        rate=row.number(4),
+        verb=row.get(5),
+        requires=land_requires,
+        disabled=land_disabled,
+        sea_requires=sea_requires,
+        land_only=sea_disabled,
+    )
+
+
+def _yield_value(raw: str) -> int | None:
+    """``"*"`` means the engine computes it from the tile; anything else is a count."""
+    raw = raw.strip()
+    if raw in ("*", ""):
+        return None
+    try:
+        return int(raw)
+    except ValueError:
+        return None
+
+
+def _resource(row: Row) -> ResourceYield:
+    return ResourceYield(
+        name=row.get(0),
+        nutrients=_yield_value(row.get(1)),
+        minerals=_yield_value(row.get(2)),
+        energy=_yield_value(row.get(3)),
+    )
+
+
 class _Disableable(Protocol):
     # A read-only property, not a mutable attribute: the part classes are frozen
     # dataclasses, and a settable-attribute protocol does not match them.
@@ -312,6 +434,9 @@ class Datalinks:
     reactors: dict[str, Reactor] = field(default_factory=dict)
     abilities: dict[str, Ability] = field(default_factory=dict)
     social_models: list[SocialModel] = field(default_factory=list)
+    #: A list, not a dict: ``#TERRAIN`` has two rows named "Fungus" (remove, and plant).
+    terraform: list[TerraformAction] = field(default_factory=list)
+    resources: dict[str, ResourceYield] = field(default_factory=dict)
 
     def design_space(self) -> int:
         """How many distinct unit designs the rules permit.
@@ -539,9 +664,10 @@ def _is_int(value: str) -> bool:
     return True
 
 
-#: Sections parsed today. Chassis, terrain, and the social-engineering tables share
-#: the file but not the shape, and are tracked separately rather than half-parsed — a
-#: partial fact tagged canonical is worse than a missing one.
+#: Weapons and armour share a row shape, so one reader serves both. Everything else with its
+#: own shape has its own reader. What remains unparsed — RULES, WORLDBUILDER, MORALE, the
+#: SOC<EFFECT> ladders and the translator tables — is skipped rather than half-read: a partial
+#: fact tagged canonical is worse than a missing one.
 COMPONENT_SECTIONS = {"WEAPONS": "weapon", "DEFENSES": "armor"}
 
 
@@ -575,6 +701,11 @@ def parse(text: str) -> Datalinks:
             if len(row.fields) > 1:
                 unit = _unit(row)
                 out.units[unit.name] = unit
+        elif row.section == "TERRAIN":
+            out.terraform.append(_terraform(row))
+        elif row.section == "RESOURCEINFO":
+            res = _resource(row)
+            out.resources[res.name] = res
         elif row.section in COMPONENT_SECTIONS:
             out.components.append(_component(COMPONENT_SECTIONS[row.section], row))
     out.social_models = _social_rows(socio)

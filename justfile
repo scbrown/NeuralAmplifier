@@ -13,6 +13,13 @@ smac := env_var_or_default("SMAC_DIR", "../smac")
 # Path to a local Thinker checkout (source of the committed house-rule graph)
 thinker := env_var_or_default("THINKER_DIR", "../thinker")
 
+# Pinned, and it must match the rev in .pre-commit-config.yaml. `just docs` and the
+# pre-commit hook lint the same files with the same config, so a version skew between
+# them means one gate passes and the other fails on a tree nobody changed — which is
+# exactly what an unpinned `npx` did here: it floated to 0.23.2, picked up the new
+# MD060, and left `just docs check` red against a green `just check` (na-hn6).
+markdownlint := "markdownlint-cli2@0.23.2"
+
 # Default recipe - show available commands
 default:
     @just --list
@@ -110,7 +117,28 @@ play port="8000":
 
 # === Integration ===
 
+# === Evals (behavioural, model in the loop) ===
+
+# A behavioural question about the brain, not a unit test: what a decision does over many
+# runs, which `just test` cannot assert. `score` reads a committed run and needs no model,
+# no game and no sibling checkout; `prompts` regenerates the inputs and needs the rulebook.
+# Behavioural evals: just eval list | prompts <id> | score <id> | check [<id>]
+eval cmd="list" id="":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    # Resolved from the repo root, not from orchestrator/, so an absolute THINKER_DIR works.
+    # The recipe used to prefix "../" unconditionally and turned /home/user/thinker into
+    # ../home/user/thinker.
+    links="$(cd "$(dirname "{{thinker}}/docs/alphax.txt")" 2>/dev/null && pwd)/alphax.txt" || links="{{thinker}}/docs/alphax.txt"
+    uv run --directory orchestrator python ../evals/run.py {{cmd}} {{id}} --links "$links"
+
 # === Coverage ===
+
+# Answers "how much of the game can we see" from the frozen registry rather than from a
+# document — the doc version had already drifted (docs/game-surface.md §2.5).
+# Surface instrumentation: how much of the game surface emits a decision record
+surfaces:
+    @cd orchestrator && uv run neural-amplifier surfaces
 
 # Fails if the brain was largely absent or an illegal action slipped through.
 # Summarise a decision log: surfaces fired, fallback rate, adherence
@@ -201,15 +229,19 @@ quipu-serve db=".quipu/na.db" bind="127.0.0.1:3030":
 
 # === Documentation ===
 
+# mdBook renders docs/ in place — see book.toml for why `src` points there
+# rather than at a copy. `check` is the docs gate: lint, then prove it builds.
 # Documentation: just docs <cmd>
-# Commands: lint fix fmt check
+# Commands: build serve lint fix fmt check
 docs cmd="check":
     #!/usr/bin/env bash
     set -euo pipefail
     case "{{cmd}}" in
-        lint)  npx markdownlint-cli2 "**/*.md" ;;
-        fix)   npx markdownlint-cli2 --fix "**/*.md" ;;
+        build) mdbook build ;;
+        serve) mdbook serve --open ;;
+        lint)  npx --yes {{markdownlint}} "**/*.md" ;;
+        fix)   npx --yes {{markdownlint}} --fix "**/*.md" ;;
         fmt)   npx prettier --write "**/*.md" --prose-wrap preserve ;;
-        check) npx markdownlint-cli2 "**/*.md" ;;
-        *)     echo "Unknown: {{cmd}}. Try: lint fix fmt check" ;;
+        check) npx --yes {{markdownlint}} "**/*.md" && mdbook build ;;
+        *)     echo "Unknown: {{cmd}}. Try: build serve lint fix fmt check" ;;
     esac

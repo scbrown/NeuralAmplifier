@@ -15,7 +15,7 @@ the harness (the *game fixture*) and driving it with no human at the keyboard.
 ## The pieces
 
 | Component | Build | Test | In default CI? |
-|-----------|-------|------|:--------------:|
+| ----------- | ------- | ------ | :--------------: |
 | `orchestrator/` (Python) | `uv sync` | `pytest` + `ruff`/`mypy` on fixtures, fake Claude | ✅ |
 | `orchestrator/datalinks` | none | parses a synthetic `alphax.txt`; Turtle round-trips through rdflib | ✅ |
 | Quipu-backed retrieval | none | mocked by default; live tests skip unless `NA_QUIPU_URL` is set | ⚠️ live lane opt-in |
@@ -106,10 +106,43 @@ that a captured world view is well-formed and that orders reference real `action
 against fixtures from either engine, with no game. Recording a real GLSMAC `--gse-tests` world
 view produces an orchestrator fixture *and* a contract fixture from one run.
 
+## 5a. Configuring a run
+
+Everything is in [`na.toml`](https://github.com/scbrown/NeuralAmplifier/blob/main/na.toml) at
+the repo root, or wherever `NA_CONFIG` points. The `NA_*` variables all still work and **take
+precedence over the file** — the file is what a run *is*, and a variable is how you override one
+thing for one run without editing the tree, which is what CI and the cloud setup script do.
+
+| Variable | `na.toml` |
+| --- | --- |
+| `NA_BRAIN`, `NA_BRAIN_MODEL`, `NA_BRAIN_EFFORT` | `[brain] kind`, `model`, `effort` |
+| `NA_QUIPU_URL`, `NA_ENGINE`, `NA_TOKEN_BUDGET`, `NA_HANK_GUARD` | `[knowledge]` |
+| `NA_DECISION_LOG`, `NA_WORLD_VIEW_STORE`, `NA_PLAN`, `NA_OTEL` | `[run]` |
+| — | `[surfaces]` + `surface_default` — which surfaces the LLM tier decides |
+
+A malformed file refuses to start the service rather than failing one turn at a time in a
+running game, and an unknown surface id is an error rather than a toggle that appears set and
+does nothing.
+
+## 5b. Evals — the layer the pyramid has no room for
+
+Every level above asserts a value. A whole class of question about this system is not a value:
+whether grounding is read, whether a standing plan is followed, whether the same world view
+decides the same way twice. Those are distributions over a model's outputs, and a test that
+asserted one would either be flaky or be asserting something weaker than the question.
+
+So they live in [`evals/`](https://github.com/scbrown/NeuralAmplifier/blob/main/evals/README.md)
+and run on demand rather than in CI — they need a model, and CI never makes a paid call. What
+makes them more than anecdote is that the prompts *and* the answers are committed:
+`just eval score <id>` re-derives any published number on a fresh clone with no model, no game
+and no sibling checkout.
+
+The rule that follows: **do not quote a measurement that is not in `evals/runs/`.**
+
 ## 6. CI
 
-Default CI (`.github/workflows/ci.yml`) runs only the fast, self-contained lanes: markdown
-lint, the pre-commit gate, the orchestrator (`ruff`, `ruff format`, `mypy`, `pytest`), and the
+Default CI (`.github/workflows/ci.yml`) runs only the fast, self-contained lanes: the docs
+lane (markdown lint plus `mdbook build`), the pre-commit gate, the orchestrator (`ruff`, `ruff format`, `mypy`, `pytest`), and the
 **Thinker DLL cross-compile**, which uploads `thinker.dll` as a build artifact. None of these
 need a game, an adapter checkout of SMAC, or an API key — the scripted brain is the default, so
 CI never makes a paid call. Game-dependent lanes — the GLSMAC builtin build, GLSMAC full-game
@@ -117,6 +150,16 @@ integration (SMAC assets), and Thinker/Wine e2e — run locally via `just` and, 
 nightly runner.
 GLSMAC upstream CI compiles but runs no tests; adding a Debug `--gse-tests` step (no display,
 no assets) is the cleanest check to build on.
+
+**The docs lane builds the book, it does not merely lint it.** A chapter renamed or deleted
+without updating `docs/SUMMARY.md` satisfies every markdown rule and still breaks the site, so
+lint alone would pass a broken tree. `just docs check` is the same pair locally.
+
+markdownlint's version is pinned in three places that must agree —
+`.pre-commit-config.yaml`, the justfile's `markdownlint` variable, and the CI step. They are
+separate because the three runners install it differently, not because they may differ: an
+unpinned `npx` once floated onto a newer rule set and left `just docs check` red against a green
+`just check`, on a tree nobody had touched.
 
 ## What's testable when (maps to VISION §Roadmap)
 

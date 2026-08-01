@@ -20,7 +20,7 @@ Companions: [contract.md](contract.md) (the fields this rides on),
 Build one thing for all three and it serves none. Every signal below is tagged with who it is for.
 
 | Consumer | Question | Section |
-|---|---|---|
+| --- | --- | --- |
 | **Developer** | why did turn 42 take 90 seconds? | §6 ops |
 | **Test harness** | did this run exercise unit design, and is it still deterministic? | §5 testing |
 | **Human watching** | *why did Claude do that?* | §7 legibility |
@@ -234,7 +234,7 @@ RED (rate / errors / duration) plus the domain-specific ones. Two of these answe
 VISION §2 explicitly lists as **honest unknowns** — they stop being unknowns once the record exists.
 
 | Signal | Why | VISION link |
-|---|---|---|
+| --- | --- | --- |
 | `decision.latency` p50/p95 per surface | Is the model fast enough for turn pace? | **named unknown** |
 | `tokens.per_turn`, `cost.per_game` | Is this economically viable? | **named unknown** |
 | `degrade.rate` | Is the brain actually present? | §5.4 |
@@ -282,7 +282,7 @@ reference, the action space, and the knowledge annotations — which is everythi
 Each step is useful on its own and none requires a running game until the last.
 
 | Step | What | Game? |
-|---|---|---|
+| --- | --- | --- |
 | **1** | Freeze the surface ID scheme in [game-surface.md](game-surface.md) | ❌ |
 | **2** | Add `surface_id`, `trace`, `degraded` to [contract.md](contract.md) | ❌ |
 | **3** | Decision record + JSONL writer in the orchestrator; assert in fixture tests | ❌ |

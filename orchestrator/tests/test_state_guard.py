@@ -411,7 +411,8 @@ def test_a_plan_entity_citation_lands_on_the_record_separately() -> None:
     different question. But a citation the model was legitimately shown cannot simply vanish —
     it would be invisible in both directions, neither flagged nor counted.
     """
-    from neural_amplifier.knowledge import Grounding, plan_entities, summarise
+    from neural_amplifier.directives import entities_shown
+    from neural_amplifier.knowledge import Grounding, summarise
     from neural_amplifier.knowledge import Ruling as _Ruling
 
     world_view = _view_with_plan([], grounding=["fac:recycling-tanks increases minerals"])
@@ -423,7 +424,7 @@ def test_a_plan_entity_citation_lands_on_the_record_separately() -> None:
         _Ruling(),
         guarded=True,
         cited=["fac:recycling-tanks", "fac:the-weather-paradigm"],
-        shown_by_plan=plan_entities(world_view),
+        shown_by_plan=entities_shown(world_view),
     )
     assert knowledge.quipu_cited == ["fac:recycling-tanks"]
     assert knowledge.plan_cited == ["fac:the-weather-paradigm"]
@@ -449,7 +450,7 @@ def test_an_invented_citation_reaches_neither_bucket() -> None:
 
 def test_a_directive_with_no_entities_changes_nothing() -> None:
     from neural_amplifier.contract import Directive, DirectiveStatus
-    from neural_amplifier.knowledge import plan_entities
+    from neural_amplifier.directives import entities_shown
 
     world_view = WorldView(
         engine="thinker",
@@ -464,4 +465,4 @@ def test_a_directive_with_no_entities_changes_nothing() -> None:
             )
         ],
     )
-    assert plan_entities(world_view) == set()
+    assert entities_shown(world_view) == set()

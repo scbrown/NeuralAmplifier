@@ -1,0 +1,20 @@
+{"choice": "build:3", "cited": ["fac:network-node", "fac:research-hospital"]}
+{"choice": "build:3", "cited": ["fac:network-node"]}
+{"choice": "build:1", "cited": ["fac:recreation-commons"]}
+{"choice": "build:3", "cited": ["fac:network-node"]}
+{"choice": "build:3", "cited": ["fac:network-node"]}
+{"choice": "build:3", "cited": ["fac:network-node"]}
+{"choice": "build:3", "cited": ["fac:network-node", "fac:research-hospital"]}
+{"choice": "build:3", "cited": ["fac:network-node", "fac:research-hospital"]}
+{"choice": "build:3", "cited": ["fac:network-node", "fac:research-hospital"]}
+{"choice": "build:3", "reason": "Network Node provides Labs Bonus to boost research output, directly supporting University's research focus, with lower cost (80) and faster build (27 turns) than Research Hospital (120, 40 turns).", "cited": ["fac:network-node", "fac:research-hospital"]}
+{"choice": "build:3", "cited": ["fac:network-node"]}
+{"choice": "build:3", "cited": ["fac:network-node"]}
+{"choice": "build:3", "cited": ["fac:network-node"]}
+{"choice": "build:3", "cited": ["fac:network-node", "fac:research-hospital"]}
+{"choice": "build:3", "cited": ["fac:network-node"]}
+{"choice": "build:3", "cited": ["fac:network-node"]}
+{"choice": "build:3", "cited": ["fac:network-node", "fac:research-hospital"]}
+{"choice": "build:3", "cited": ["fac:network-node"]}
+{"choice": "build:3", "cited": ["fac:network-node"]}
+{"choice": "build:3", "cited": ["fac:network-node"], "reason": "Network Node provides direct labs bonus to accelerate University's core research advantage; 82 energy reserves and +14/turn income sustain 1/turn upkeep."}

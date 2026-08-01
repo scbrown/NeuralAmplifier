@@ -92,6 +92,13 @@ APT_PID=$!
 
   have pre-commit || pip install --quiet --break-system-packages pre-commit >/dev/null 2>&1 || true
 
+  # mdBook renders docs/ into the docs site (`just docs build`). The release
+  # tarball, not `cargo install mdbook`: that is a multi-minute compile and
+  # this script has a ~5 minute budget for every lane put together.
+  have mdbook || curl -sSL --max-time 60 \
+      "https://github.com/rust-lang/mdBook/releases/download/v0.4.43/mdbook-v0.4.43-x86_64-unknown-linux-gnu.tar.gz" \
+      2>/dev/null | tar xz -C /usr/local/bin mdbook >/dev/null 2>&1 || true
+
   # The Thinker fork's CMakePresets.json requires CMake >= 3.31, newer than
   # Ubuntu's package and several CI images.
   if ! have cmake || [ "$(cmake --version 2>/dev/null | head -1 | cut -d. -f2)" -lt 31 ]; then
@@ -114,7 +121,7 @@ fi
 # A setup script that half-worked and exited 0 is worse than one that failed,
 # so print the truth rather than assuming the installs above landed.
 log "Installed"
-for tool in just bd uv pre-commit cmake ninja i686-w64-mingw32-g++ wine quipu quipu-server; do
+for tool in just bd uv pre-commit mdbook cmake ninja i686-w64-mingw32-g++ wine quipu quipu-server; do
     if have "$tool"; then
         printf '  %-24s %s\n' "$tool" "$("$tool" --version 2>&1 | head -1)"
     else

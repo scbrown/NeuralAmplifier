@@ -1,0 +1,10 @@
+{"choice": "build:1", "cited": ["fac:recreation-commons", "fac:children-s-creche"], "followed": ["hold-drones"]}
+{"choice": "build:1", "cited": ["fac:recreation-commons"]}
+{"choice": "build:1", "cited": ["fac:recreation-commons"], "reason": "Priority-8 drone directive unsatisfied (target 2, current 6). Recreation Commons directly reduces drones; production loss from unrest per turn justifies switching from partly-built Children's Creche."}
+{"choice": "build:1", "cited": ["fac:recreation-commons"]}
+{"choice": "build:1", "cited": ["fac:recreation-commons"], "followed": ["hold-drones"], "reason": "Drone crisis (6 vs target 2, priority-8 violated) requires immediate action; Recreation Commons directly provides fewer drones to address ongoing production loss."}
+{"choice": "build:1", "cited": ["fac:recreation-commons"], "followed": ["hold-drones"]}
+{"choice": "build:1", "cited": ["fac:recreation-commons"]}
+{"choice": "build:1", "cited": ["fac:recreation-commons"]}
+{"choice": "build:1", "cited": ["fac:recreation-commons", "fac:children-s-creche"], "followed": ["hold-drones"]}
+{"choice": "build:1", "cited": ["fac:recreation-commons"], "reason": "Override 3-turn Children's Creche commitment. Drone_total at 6 violates priority-8 hold-drones directive (target ≤2); unrest rising. Recreation Commons reduces drones, directly addressing this constraint. Changed circumstance (critical directive violation) justifies switch.", "followed": ["hold-drones"], "overrode": [], "directives": []}

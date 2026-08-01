@@ -54,12 +54,13 @@ touch that component.
 ### Core (always)
 
 | Tool | Install | Used for |
-|---|---|---|
+| --- | --- | --- |
 | [just](https://github.com/casey/just) | `npm install -g rust-just` (seconds; `cargo install just` also works but takes minutes) | The single entry point for every command |
 | [uv](https://github.com/astral-sh/uv) | `curl -LsSf https://astral.sh/uv/install.sh \| sh` | Python env + deps for `orchestrator/` |
 | [pre-commit](https://pre-commit.com/) | `pip install pre-commit` | The quality gate (`just check`) |
 | [Node](https://nodejs.org/) 22+ | your platform's installer | markdown + `.gls.js` tooling via `npx` |
 | [beads](https://github.com/steveyegge/beads) (`bd`) | `npm install -g @beads/bd` — or `brew install beads` | Task tracking (see below) |
+| [mdBook](https://rust-lang.github.io/mdBook/) | `cargo install mdbook` — or grab a [release binary](https://github.com/rust-lang/mdBook/releases) | Building the docs site (`just docs build`) |
 
 > **Install `bd` from npm or Homebrew, not `go install`.** The `go install` route documented
 > upstream builds with `CGO_ENABLED=0`, and embedded Dolt needs CGO — `bd init` then fails with
@@ -76,7 +77,7 @@ just test      # every component's tests
 ### Per-component
 
 | If you're touching… | You also need |
-|---|---|
+| --- | --- |
 | `orchestrator/` telemetry | Nothing extra — `opentelemetry-sdk` is in the dev group so the exporter is tested in the default lane. At runtime it's the `otel` extra (`uv sync --extra otel`), enabled with `NA_OTEL=1`; layer 1 (JSONL) has no dependencies. |
 | `adapters/thinker/` | A 32-bit MinGW toolchain and **CMake ≥ 3.31** — see below |
 | `adapters/glsmac/` | A [GLSMAC](https://github.com/afwbkbc/glsmac) checkout + its build deps (SDL2, GL/GLU/GLEW, FreeType, yaml-cpp, uuid). Point `just` at it with `GLSMAC_DIR=/path/to/glsmac`. Headless logic tests use GLSMAC's own `--gse-tests` path — no display. [Notes](docs/glsmac-integration-notes.md). |

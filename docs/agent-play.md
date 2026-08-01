@@ -66,7 +66,7 @@ see §4.
 There are two ways an agent learns a decision is open, and they are **not** equal.
 
 | | How | Guarantee |
-|---|---|---|
+| --- | --- | --- |
 | **Poll** — the mechanism | `next_decision(wait_seconds=60)` blocks server-side until one arrives | Always works. No configuration, nothing to misconfigure |
 | **Doorbell** — a convenience | orchestrator runs `tmux send-keys` at a pane named by `NA_TMUX_TARGET` | Best-effort. May be absent, may be silently lost |
 
@@ -120,7 +120,7 @@ seconds is the right price for not mutating the board re-entrantly.
 Four tools: the three moments of a decision, plus setting a plan that outlives the turn.
 
 | Tool | For |
-|---|---|
+| --- | --- |
 | `next_decision(wait_seconds)` | Collect the decision waiting for you, with its full world view |
 | `submit_orders(decision_id, action_id, reason, cited, followed, overrode)` | Answer it, choosing from the action space |
 | `decisions_waiting()` | What is outstanding — for re-orienting after a reconnect or compaction |

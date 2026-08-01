@@ -47,6 +47,8 @@ def main(argv: list[str] | None = None) -> int:
         help="require identical decisions (scripted-brain runs only)",
     )
 
+    sub.add_parser("surfaces", help="how much of the game surface is instrumented")
+
     ing = sub.add_parser("ingest", help="parse alphax.txt into the smac: datalinks graph")
     ing.add_argument("alphax", type=Path, help="path to alphax.txt in your SMAC install")
     ing.add_argument("--out", type=Path, help="write Turtle here")
@@ -67,10 +69,64 @@ def main(argv: list[str] | None = None) -> int:
 
         return mcp_main(args.url)
 
+    if args.command == "surfaces":
+        from .config import load as load_config
+        from .surfaces import coverage
+
+        c = coverage()
+        print(f"{c['applied']} of {c['total']} surfaces the brain can actually decide.\n")
+        print(f"  {c['applied']:>3}  applied — the brain's choice executes")
+        print(
+            f"  {c['observed_not_applied']:>3}  observed only — a record is written, the"
+            " engine still chooses"
+        )
+        print(f"  {c['remaining']:>3}  not instrumented, which divides into:")
+        print(
+            f"  {c['needs_tier_first']:>3}    no native AI path — the deterministic tier has to"
+            " be built first,"
+        )
+        print("        or there is nothing to degrade to (invariant 9)")
+        print(
+            f"  {c['volume_bound']:>3}    unit-scope with a native path — mostly stay"
+            " deterministic on volume grounds"
+        )
+        print(f"  {c['ready']:>3}    have a native path and a safe fallback — instrumentable now")
+        config = load_config()
+        if config.source is None:
+            print("\nNo na.toml — every surface the adapter emits is decided.")
+        else:
+            from .surfaces import OBSERVED
+
+            off = sorted(s for s in OBSERVED if not config.surfaces.allows(s))
+            print(
+                f"\nPolicy ({config.source.name}): "
+                f"surface_default={str(config.surfaces.default).lower()}"
+            )
+            print(f"  instrumented but switched off: {', '.join(off) if off else 'none'}")
+        print("\nSee docs/game-surface.md §2.5 for the per-surface matrix.")
+        return 0
+
     if args.command == "ingest":
         from .datalinks import Provenance, briefing, looks_modded, parse_file, turtle
+        from .datalinks.parse import overlay_source
 
-        text = args.alphax.read_text(encoding="latin-1")
+        raw = args.alphax.read_bytes()
+        text = raw.decode("latin-1")
+
+        # Two independent checks, and neither subsumes the other. The hash catches a known mod
+        # that does not announce itself; the header catches an unknown one that does. This one
+        # first because it can name the mod *and its version*.
+        overlay = overlay_source(raw)
+        if overlay and args.tier == "canonical":
+            print(
+                f"FAIL: {args.alphax} is byte-identical to {overlay}'s alphax.txt "
+                "(fixtures/smac/overlays.tsv), but --tier is 'canonical'. Your $SMAC_DIR has a "
+                "mod installed over it. Use `just ingest-thinker` for the house-rule graph, or "
+                "point at a clean install.",
+                file=sys.stderr,
+            )
+            return 1
+
         marker = looks_modded(text)
         if marker and args.tier == "canonical":
             # The whole point of the tier predicate. A mod's alphax.txt is
@@ -94,6 +150,7 @@ def main(argv: list[str] | None = None) -> int:
             "engine": args.engine,
             "tier": args.tier,
             "modded_source": marker,
+            "overlay_source": overlay,
         }
         if args.out:
             provenance = Provenance(engine=args.engine, tier=args.tier, source=args.alphax.name)

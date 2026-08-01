@@ -1,0 +1,20 @@
+{"choice": "build:0", "reason": "Recycling Tanks provide bonus resources, accelerating all future production and research facility construction—a foundational multiplier for the University faction.", "cited": ["fac:recycling-tanks"], "followed": [], "overrode": [], "directives": []}
+{"choice": "build:0", "reason": "Recycling Tanks accelerate mineral production via Bonus Resources, enabling faster completion of high-value research facilities like Network Node. This resource-acceleration strategy maximizes University's research advantage within practical build constraints.", "cited": ["fac:recycling-tanks"]}
+{"choice": "build:3", "cited": ["fac:network-node"]}
+{"choice": "build:3", "cited": ["fac:network-node"]}
+{"choice": "build:3", "cited": ["fac:network-node"], "reason": "University faction prioritizes research output. Network Node provides labs bonus, which directly advances core strategic objective. Current drone count (2) is already low, so Recreation Commons is unnecessary; energy reserves (82) and income (14/turn) support the 27-turn build horizon."}
+{"choice": "build:3", "cited": ["fac:network-node"]}
+{"choice": "build:3", "cited": ["fac:network-node"]}
+{"choice": "build:3", "cited": ["fac:network-node"]}
+{"choice": "build:3", "cited": ["fac:network-node"]}
+{"choice": "build:3", "cited": ["fac:network-node"]}
+{"choice": "build:3", "cited": ["fac:network-node", "fac:recycling-tanks"]}
+{"choice": "build:3", "cited": ["fac:network-node"]}
+{"choice": "build:3", "cited": ["fac:network-node", "fac:recreation-commons"]}
+{"choice": "build:3", "cited": ["fac:network-node"]}
+{"choice": "build:3", "cited": ["fac:network-node"]}
+{"choice": "build:3", "cited": ["fac:network-node"]}
+{"choice": "build:3", "cited": ["fac:network-node"]}
+{"choice": "build:3", "cited": ["fac:network-node"]}
+{"choice": "build:3", "cited": ["fac:network-node"]}
+{"choice": "build:3", "cited": ["fac:network-node"]}

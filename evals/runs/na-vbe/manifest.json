@@ -1,0 +1,16 @@
+{
+  "note": "Can grounding drop what the action space already carries, without moving the choice?",
+  "arms": {
+    "verbose": {
+      "prompt_sha256": "702b655bb1b0",
+      "facts_offered": 8,
+      "options": 8
+    },
+    "compact": {
+      "prompt_sha256": "d9209f53e11c",
+      "facts_offered": 8,
+      "options": 8
+    }
+  },
+  "answered_by": "unrecorded"
+}

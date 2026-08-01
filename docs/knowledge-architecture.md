@@ -9,7 +9,7 @@
 
 ## Why this exists
 
-Today [VISION.md](../VISION.md) §2 says *"We feed state, not the rules — Claude already knows
+Today [VISION.md](https://github.com/scbrown/NeuralAmplifier/blob/main/VISION.md) §2 says *"We feed state, not the rules — Claude already knows
 SMAC."* This architecture **evolves** that stance. Claude knows *Sid Meier's Alpha Centauri*
 broadly from training, but that is not enough to play *well* over a long horizon: it doesn't
 distinguish canonical SMAC from a Thinker house-rule or a GLSMAC deviation, it can't cite how a
@@ -51,7 +51,7 @@ different domain than *code structure*. The two planes join deliberately at one 
 Core classes, and the `alphax.txt` section each is parsed from:
 
 | Class | Key predicates | `alphax.txt` section |
-|---|---|---|
+| --- | --- | --- |
 | `smac:Technology` | `abbrev`, `aiWeight{Growth,Tech,Wealth,Power}`, `requiresTech` (0..2 → **the tech graph**), `flags` | `#TECHNOLOGY` |
 | `smac:Chassis`/`Reactor`/`Weapon`/`Armor`/`Ability` | component stats, `cost`, `requiresTech` | `#CHASSIS`…`#ABILITIES` |
 | `smac:UnitProto` | `hasChassis`/`hasReactor`/`hasWeapon`/`hasArmor`/`hasAbility`, `isPredefined` | `#UNITS` |
@@ -185,7 +185,7 @@ live board:
 ## Hot (Hank) vs persisted (Quipu) split
 
 | Concern | Hank (hot / ephemeral) | Quipu (persisted / durable) |
-|---|---|---|
+| --- | --- | --- |
 | Live board graph (units/bases/tiles) | ✅ per-turn COW overlay | end-of-game snapshots only |
 | Per-turn policy-guard + what-if | ✅ `hank_guard`/`hank_whatif` | authors/stores the policies |
 | Static datalinks KB | read-cache (projected) | ✅ canonical store |
@@ -314,7 +314,7 @@ Steps 1, 3 (action-space grounding only), 6 (one policy) and 7 run. Steps 2, 5 a
 yet.
 
 | Step | State |
-|---|---|
+| --- | --- |
 | Quipu action-space grounding | **Working.** One batched query over exactly this turn's `action_space` |
 | Static briefing, `quipu_context`, hybrid tactics | Not wired. `quipu_context` additionally needs an embedding model |
 | Hank ingest / what-if | Not built (roles d, e) |
@@ -332,12 +332,28 @@ looks exactly like a quiet day, so the record separates states that are easy to 
   and the ratio. `quipu_hits` counts what was *offered*; without citations, twelve facts
   retrieved and all ignored is indistinguishable from twelve that drove the decision.
 
+**Two independent checks stop a mod's rules entering as canonical** (invariant 4). `just ingest`
+refuses a file whose sha1 matches a known overlay in `fixtures/smac/overlays.tsv`, naming the mod
+and its version; it separately refuses one whose header announces itself. Neither subsumes the
+other — the hash catches a known mod that stays quiet, the header catches an unknown mod that
+does not — and both fire only at `--tier canonical`, so `just ingest-thinker` is unaffected.
+
+Closing it here rather than in the operator's memory matters because the failure is silent and
+permanent: a mod's `alphax.txt` is byte-for-byte the same *shape* as stock, so once its rules are
+stored as canonical nothing downstream can tell them apart, and every decision grounded on them
+is grounded on a house rule presented as the game's own.
+
 Facts are injected **id-first** (`unit:formers Formers; terraforms terrain`) because the brain
 cannot cite what it cannot see, and the id is the node's own IRI — so a citation resolves back
 into the graph and to `smac:sourcedFrom`. Citations are filtered against what was actually
 offered: a model naming a fact nobody gave it is a hallucination, and laundering that into the
 provenance block would make the record assert that something informed a decision when nothing
 did.
+
+Grounding is not the only route an id takes to the brain — a directive's `entities` are ids in
+this same space, shown through the `directives` block. Both count as **offered**, so a citation
+of one is not fabricated; only grounding counts as **retrieved**, so `utilisation` keeps meaning
+"was retrieval read". See [directives.md](directives.md#two-id-spaces-that-are-deliberately-the-same).
 
 First measured utilisation, Haiku on a real turn-35 base-production decision: **1 of 7 facts
 cited**. Six were paid for and unread — which is a retrieval-tuning signal that did not exist

@@ -1,13 +1,13 @@
 # GLSMAC Integration Notes
 
 Source-grounded reference for the **GLSMAC adapter** (Track B / long-term). For the overall
-dual-engine design and the shared contract, see [VISION.md](../VISION.md) and
+dual-engine design and the shared contract, see [VISION.md](https://github.com/scbrown/NeuralAmplifier/blob/main/VISION.md) and
 [contract.md](contract.md); for the near-term engine, [thinker-adapter-notes.md](thinker-adapter-notes.md).
 
 The turnkey, source-grounded reference for building Neural Amplifier against GLSMAC.
 Everything here was verified by reading the fork at `scbrown/glsmac` (paths are
 `src/...` in that tree); `file:line` citations point at the evidence. Treat this as the
-"what's actually true today" companion to the aspirational [VISION.md](../VISION.md).
+"what's actually true today" companion to the aspirational [VISION.md](https://github.com/scbrown/NeuralAmplifier/blob/main/VISION.md).
 
 > **Headline:** GLSMAC is early. The scripting engine, event system, and a handful of
 > managers are real, but most of the *game* — production, research, diplomacy, combat
@@ -37,7 +37,7 @@ Everything here was verified by reading the fork at `scbrown/glsmac` (paths are
 Fired in `Game::AdvanceTurn` (`Game.cpp:1216-1252`), master-only:
 
 | Event | Target | Payload | Notes |
-|-------|--------|---------|-------|
+| ------- | -------- | --------- | ------- |
 | `turn` | `game` | `{ year: Int }` | Turn-poor — no turn id, no player, no lists. Call back into `um/bm/tm` yourself. `Game.cpp:1245-1250` |
 | `unit_turn` | `um` | `{ unit }` | Per-unit; engine resets `moved_this_turn` after (`Game.cpp:1219-1228`) |
 | `base_turn` | `bm` | `{ base }` | Per-base (`Game.cpp:1233-1240`) |
@@ -49,7 +49,7 @@ Also relevant: `um.on('unit_spawn'/'unit_despawn'/'unit_turn')`, `bm.on('base_sp
 ## 2. Readable state (the world view we can build today)
 
 | Source | Fields exposed to script | Cite |
-|--------|--------------------------|------|
+| -------- | -------------------------- | ------ |
 | Game/turn | `get_turn()`, `get_year()`, `is_turn_complete(slot)`, `get_player[s]()`, `is_master/slave/started`, `random`, `get_map()` | `Game.cpp:537-781` |
 | Player | `id`, `type` (always `"human"`), `name`, `is_ready/master`, `get_faction()` | `Player.cpp:107-195` |
 | Faction (`fm`) | `id`, `name`, `text_color`, `is_naval`, `is_progenitor`; `fm.list/add/remove` | `Faction.cpp:71-94`, `FactionManager.cpp:72+` |
@@ -68,7 +68,7 @@ bot; *not fair*, and "fair fog" is fork work (§5).
 All require an RW window (inside an event apply/rollback or a turn handler).
 
 | Action | Status | Evidence |
-|--------|:------:|----------|
+| -------- | :------: | ---------- |
 | Spawn / despawn unit | ✅ | `um.spawn_unit(...)` `UnitManager.cpp:465-518` |
 | Move unit | ⚠️ basic | `unit.move_to_tile(tile, cb)` `Unit.cpp:144-166` → `UnitManager.cpp:643-692`. **No pathfinding, no adjacency/terrain check, no movement-point cost.** Teleports to any tile. |
 | Set unit movement/morale/health | ✅ | `Unit.cpp:167-176` |

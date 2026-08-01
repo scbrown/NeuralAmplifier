@@ -200,7 +200,10 @@ def cmd_scan(args: argparse.Namespace) -> int:
 def cmd_verify(args: argparse.Namespace) -> int:
     root = Path(args.dir).expanduser().resolve()
     if not root.is_dir():
-        print(f"FAIL  $SMAC_DIR does not exist or is not a directory: {root}", file=sys.stderr)
+        print(
+            f"FAIL  $SMAC_DIR does not exist or is not a directory: {root}",
+            file=sys.stderr,
+        )
         print(
             "      Point SMAC_DIR at your extracted install (docs/headless-harness.md §2.3).",
             file=sys.stderr,

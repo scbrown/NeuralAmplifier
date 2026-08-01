@@ -8,6 +8,7 @@ technologies, 133 facilities, 64 secret-project rows) during development.
 
 from __future__ import annotations
 
+import hashlib
 from pathlib import Path
 
 import pytest
@@ -168,8 +169,26 @@ def test_the_briefing_excludes_disabled_items(links) -> None:  # type: ignore[no
 
 def test_the_briefing_separates_secret_projects(links) -> None:  # type: ignore[no-untyped-def]
     text = briefing(links)
-    assert "Secret projects (one per game, globally):" in text
+    assert "Secret projects" in text
     assert "The Sample Project" in text.split("Secret projects")[1]
+
+
+def test_the_briefing_does_not_invent_a_rule_the_engine_does_not_have(links) -> None:
+    """This said "one per game, globally" on all 64 project lines, and it was ours — not a line
+    from alphax.txt — shipped in a briefing labelled *canonical*.
+
+    The engine has no such rule. `SecretProjects[]` records which base *holds* each project:
+    several bases may build the same one at once and the first to finish takes it. A project
+    whose base is destroyed goes `SP_Destroyed`, and comes back to the pool under Thinker's
+    `rebuild_secret_projects` — a house rule, so not statable at canonical tier at all.
+
+    A fabricated canonical fact is the precise failure the datalinks plane exists to prevent,
+    and it is worse from the briefing than from anywhere else: the briefing is cached once and
+    sits in front of every decision for a whole game.
+    """
+    text = briefing(links)
+    assert "one per game" not in text
+    assert "only one base can hold it" in text
 
 
 def test_prerequisites_are_named_not_abbreviated(links) -> None:  # type: ignore[no-untyped-def]
@@ -412,3 +431,145 @@ def test_unrecognised_social_effect_is_dropped_not_guessed() -> None:
     assert social_effect("++NOTATHING") is None
     assert social_effect("POLICE") is None  # no sign, so no magnitude
     assert social_effect("") is None
+
+
+def test_grounding_carries_citable_ids(links) -> None:  # type: ignore[no-untyped-def]
+    """Without ids the brain cannot cite, so `cited` is empty by construction.
+
+    This retriever returned facts and no `fact_ids` for as long as it existed, which made three
+    things silently impossible on the K1 path: a citation (the model has no id to name), the
+    citation guard's offered set (empty, so every citation reads fabricated), and utilisation
+    (unmeasurable rather than low — `Grounding.fact_ids` empty is the documented "retriever does
+    not label its facts" case).
+
+    The ids are the ones `rdf.py` mints for the same node, so a citation made here resolves in
+    the graph the Quipu path serves rather than merely looking like an identifier.
+    """
+    view = WorldView(
+        engine="thinker",
+        scope="base",
+        turn=1,
+        faction="GAIANS",
+        action_space=[Action(id="a1", action="Sample Tanks")],
+    )
+    grounding = DatalinksRetriever(links).retrieve(view)
+
+    assert grounding.fact_ids == ("fac:sample-tanks",)
+    # Positionally aligned with `facts` — the orchestrator zips them into "<id> <text>" lines
+    # and a misalignment would attach every citation to the wrong node.
+    assert len(grounding.fact_ids) == len(grounding.facts)
+
+
+# --- anti-masquerade: a mod's rules must not enter the graph as canonical ------
+
+
+def test_a_known_overlay_is_recognised_by_its_bytes(tmp_path: Path) -> None:
+    """`looks_modded` reads the header, which only catches a mod polite enough to say so.
+
+    This catches one that is not. `fixtures/smac/overlays.tsv` already records every overlay
+    hash the fixture checker knows, so the same table closes the ingest hole — and it names the
+    mod's *version*, where a header marker only reports that something looked off.
+    """
+    from neural_amplifier.datalinks.parse import overlay_source
+
+    overlays = tmp_path / "overlays.tsv"
+    body = b"; a mod that does not announce itself\n#TECHNOLOGY\n"
+    digest = hashlib.sha1(body).hexdigest()
+    overlays.write_text(f"# comment\n{digest}\talphax.txt\tsome-mod-v1\n")
+
+    assert overlay_source(body, overlays) == "some-mod-v1"
+    assert overlay_source(b"different bytes", overlays) is None
+    # No table is not an error: a checkout without the fixture still ingests.
+    assert overlay_source(body, tmp_path / "absent.tsv") is None
+
+
+def test_the_two_checks_are_independent(tmp_path: Path) -> None:
+    """Neither subsumes the other, which is why both run.
+
+    A known mod that stays quiet in its header is caught only by the hash; an unknown mod that
+    announces itself is caught only by the header.
+    """
+    from neural_amplifier.datalinks.parse import looks_modded, overlay_source
+
+    quiet_known = b"; ordinary looking header\n#TECHNOLOGY\n"
+    overlays = tmp_path / "overlays.tsv"
+    overlays.write_text(f"{hashlib.sha1(quiet_known).hexdigest()}\talphax.txt\tquiet-mod\n")
+
+    assert looks_modded(quiet_known.decode()) is None
+    assert overlay_source(quiet_known, overlays) == "quiet-mod"
+
+    loud_unknown = "; Thinker mod data\n#TECHNOLOGY\n"
+    assert looks_modded(loud_unknown) == "thinker mod"
+    assert overlay_source(loud_unknown.encode(), overlays) is None
+
+
+# --- #TERRAIN and #RESOURCEINFO (na-3qy) --------------------------------------
+
+
+def test_two_terraform_rows_share_a_name_and_must_not_collide() -> None:
+    """`#TERRAIN` has two rows called "Fungus": one removes it, one plants it.
+
+    Keyed by name alone one silently wins, and the brain loses a core former order. The verb is
+    what separates them, which is why these are a list rather than a dict.
+    """
+    from neural_amplifier.datalinks.parse import parse
+
+    text = (
+        "#TERRAIN\n"
+        "Fungus, None, Sea Fungus, None, 6, Remove $STR0, F, F\n"
+        "Fungus, EcoEng, Sea Fungus, EcoEng, 6, Plant $STR0, F, Ctrl+F\n"
+    )
+    actions = parse(text).terraform
+
+    assert [a.name for a in actions] == ["Remove Fungus", "Plant Fungus"]
+    assert actions[1].requires == ("EcoEng",)
+
+
+def test_no_sea_variant_is_not_the_same_as_disabled() -> None:
+    """The file writes "no sea form" as the literal `Disable` in the sea prerequisite — the
+    same token that means "switched off" in the land column.
+
+    Reading Forest's sea column as a disable would delete a core terraform from the picture.
+    """
+    from neural_amplifier.datalinks.parse import parse
+
+    text = (
+        "#TERRAIN\n"
+        "Forest, None, ..., Disable, 4, Plant $STR0, F, Shift+F\n"
+        "Monolith, Disable, Monolith, Disable, 8, Place Monolith, ?, ?\n"
+    )
+    forest, monolith = parse(text).terraform
+
+    assert forest.land_only is True and forest.disabled is False
+    assert monolith.disabled is True
+
+
+def test_a_star_yield_is_absent_not_zero() -> None:
+    """The file's own comment says `*` columns are "ignored entirely" — the engine derives
+    them from the tile's temperature, rainfall and rockiness.
+
+    Parsing one as 0 would tell the brain Improved Land produces no minerals, which is
+    confidently wrong rather than merely missing. An absent predicate is a gap a reader can
+    see; a zero is an answer.
+    """
+    from neural_amplifier.datalinks.parse import parse
+
+    text = "#RESOURCEINFO\nImproved Land, 1, *, *, 0,\nBorehole Square, 0, 6, 6, 0,\n"
+    res = parse(text).resources
+
+    assert res["Improved Land"].nutrients == 1
+    assert res["Improved Land"].minerals is None
+    assert res["Borehole Square"].minerals == 6
+    # And a real zero survives as a zero.
+    assert res["Borehole Square"].nutrients == 0
+
+
+def test_a_star_yield_is_omitted_from_the_graph() -> None:
+    """Same rule at the RDF boundary: no predicate rather than a zero one."""
+    from neural_amplifier.datalinks import Provenance, turtle
+    from neural_amplifier.datalinks.parse import parse
+
+    graph = turtle(parse("#RESOURCEINFO\nImproved Land, 1, *, *, 0,\n"), Provenance())
+
+    assert "smac:yieldNutrients 1" in graph
+    assert "yieldMinerals" not in graph

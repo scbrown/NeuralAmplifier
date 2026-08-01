@@ -21,13 +21,19 @@ the whole mechanism drift into decoration.
 Adding a name here is cheap and safe. It is a promise that some adapter reports it, so the
 honest order of work is: emit it from the adapter first, add the name second.
 
-That promise is now *enforced*, because it had already been broken once —
-``test_adapter_contract.py`` asserts that every faction-scope name here appears in the metrics
-block of every pinned adapter record, and every base-scope name in every base-scope record. A
-name nothing reports is worse than a missing one: a directive written against it is accepted at
-issue time and evaluates UNMEASURABLE forever, which in a record reads as compliance rather
-than as a gap. An agent can issue directives directly now, so an aspirational name is a trap
-with a user-facing path to it.
+That promise is now *enforced*, because it had already been broken once. A name nothing reports
+is worse than a missing one: a directive written against it is accepted at issue time and
+evaluates UNMEASURABLE forever, which in a record reads as compliance rather than as a gap. An
+agent can issue directives directly now, so an aspirational name is a trap with a user-facing
+path to it.
+
+Two tests hold the line, from opposite ends. ``test_metrics_vocabulary.py`` compares this set
+against what the Thinker adapter emits and fails if the two drift — the promise checked as a
+set. ``test_adapter_contract.py`` checks it against evidence: every faction-scope name here has
+to appear in the metrics block of every pinned adapter record, and every base-scope name in
+every base-scope record. The first catches a name added ahead of its adapter; the second
+catches a name the adapter stopped reporting.
+
 """
 
 from __future__ import annotations
@@ -131,13 +137,22 @@ VOCABULARY: Final[dict[str, Metric]] = {
             "lower",
             "Minerals still needed to finish what this base is building.",
         ),
+        # Removed once (na-c17) on the grounds that no adapter emitted it and the arithmetic is
+        # subtly wrong on a partially built item. The first half stopped being true and the
+        # second was answered rather than argued with: the Thinker adapter emits this, and
+        # omits the key entirely when mineral_surplus <= 0 rather than emitting a zero that
+        # would read as "completes this turn" — the opposite of the truth. So it is reported,
+        # conditionally and honestly, and a directive written against it can be checked.
+        #
+        # ``better`` is None deliberately. Fewer turns is not inherently better: it is better
+        # for a defender wanted now and worse for a secret project deliberately paced.
         _m(
             "turns_to_completion",
             "base",
             "turns",
             None,
-            "Turns until current production finishes at the current surplus. Direction "
-            "depends on what is being built, so no better-ness is claimed.",
+            "Turns until this base finishes what it is building, at the current mineral"
+            " surplus. Absent when the base produces no surplus and would never finish.",
         ),
         _m("pop_size", "base", "citizens", "higher", "Population of this base."),
     )

@@ -25,18 +25,22 @@ from .decisions import (
     PlanBlock,
     world_view_hash,
 )
-from .directives import DirectiveStore, accept, evaluate, relevant, tradeoffs
+from .directives import DirectiveStore, accept, entities_shown, evaluate, relevant, tradeoffs
+from .fairness import profile as fairness_profile
 from .fog import Redaction, redact
 from .knowledge import (
+    Grounding,
     Guard,
     Knowledge,
     Retriever,
+    Ruling,
     apply,
-    plan_entities,
+    grounded_ids,
     retrieve,
     rule,
     summarise,
 )
+from .policy import SurfacePolicy
 from .telemetry import Emitter, Sink
 from .validate import validate
 
@@ -96,6 +100,7 @@ class Orchestrator:
         guard: Guard | None = None,
         plan: DirectiveStore | None = None,
         repair_attempts: int | None = None,
+        policy: SurfacePolicy | None = None,
     ) -> None:
         self.brain = brain
         # How many times a decision whose every choice was thrown out may be re-asked with the
@@ -123,6 +128,9 @@ class Orchestrator:
         # The standing plan. Absent means every decision is made on its own, which is where
         # this project started and is still a legitimate way to run.
         self.plan = plan
+        # Which surfaces the LLM tier owns (``na.toml``). Absent means nobody has
+        # expressed an opinion, which is how this behaved before the file existed.
+        self.policy = policy or SurfacePolicy()
 
     def decide(self, world_view: WorldView) -> Result:
         started = time.monotonic()
@@ -168,6 +176,20 @@ class Orchestrator:
         # drift leak into a replay that is supposed to isolate our own changes.
         if self.store is not None:
             self.store.put(world_view)
+
+        # Policy gate. After the world view is complete so a switched-off surface still writes a
+        # full record — grounding, plan, fairness — and before the brain so it costs nothing.
+        #
+        # Emitting the record rather than returning early is the point: a disabled surface and
+        # a surface nothing ever emitted have to be tellable apart, and only a record does that.
+        # It is NOT degraded. Degraded means the brain was asked and could not answer; this one
+        # was never asked, and putting a deliberate configuration into `degrade_rate` would
+        # corrupt the single number that catches a run where the brain was silently absent.
+        #
+        # Ahead of the repair loop below, not inside it: a surface the policy does not own is
+        # never asked once, so there is nothing to repair.
+        if not self.policy.allows(world_view.surface_id):
+            return self._deterministic(world_view, fog, grounding, dropped, started)
 
         # Ask, check, and — where something is repairable — ask once more with the reason.
         #
@@ -248,7 +270,7 @@ class Orchestrator:
                 ruling,
                 self.guard is not None,
                 cited=orders.cited,
-                shown_by_plan=plan_entities(world_view),
+                shown_by_plan=entities_shown(world_view),
             ),
             plan=self._plan_block(
                 world_view,
@@ -264,6 +286,42 @@ class Orchestrator:
         self.telemetry.emit(record)
 
         return Result(orders=final, record=record)
+
+    def _deterministic(
+        self,
+        world_view: WorldView,
+        fog: Redaction,
+        grounding: Grounding,
+        dropped: list[str],
+        started: float,
+    ) -> Result:
+        """Record a decision this configuration hands to the engine.
+
+        Empty orders: the adapter applies its own answer when we name no action, which is what
+        it did before any of this existed. The record still lands, at ``deterministic`` tier and
+        explicitly not degraded.
+        """
+        orders = Orders()
+        record = self._record(
+            world_view=world_view,
+            orders=orders,
+            degrade_reason=None,
+            latency_ms=int((time.monotonic() - started) * 1000),
+            unknown=0,
+            fog=fog,
+            knowledge=summarise(grounding, Ruling(), self.guard is not None),
+            plan=self._plan_block(
+                world_view,
+                orders,
+                issued=[],
+                rejected=[],
+                configured=self.plan is not None,
+                dropped=dropped,
+            ),
+            tier="deterministic",
+        )
+        self.telemetry.emit(record)
+        return Result(orders=orders, record=record)
 
     def _with_directives(
         self, world_view: WorldView, entity_ids: Sequence[str] = ()
@@ -333,12 +391,19 @@ class Orchestrator:
         statuses = world_view.directives or []
         in_force = [s.directive.id for s in statuses]
         offered = set(in_force)
+        # A directive's entities are grounding ids, but they reach the brain through the
+        # directives block. ``summarise`` filters ``cited`` against grounding alone — correctly,
+        # or utilisation would stop measuring retrieval — so a citation of one of these would
+        # otherwise vanish from the record entirely. Grounding wins where both offered the id;
+        # there it is already counted as retrieval doing its job.
+        via_plan = entities_shown(world_view) - grounded_ids(world_view)
         return PlanBlock(
             in_force=in_force,
             # Filtered against what was actually in force, exactly as ``cited`` is filtered
             # against the offered facts: an id the model invented must not inflate attention.
             followed=[d for d in dict.fromkeys(orders.followed) if d in offered],
             overrode=[d for d in dict.fromkeys(orders.overrode) if d in offered],
+            entities_cited=[c for c in dict.fromkeys(orders.cited) if c in via_plan],
             unmeasurable=[s.directive.id for s in statuses if s.satisfied is None],
             unsatisfied=[s.directive.id for s in statuses if s.satisfied is False],
             issued=issued,
@@ -378,8 +443,29 @@ class Orchestrator:
         fog: Redaction,
         knowledge: Knowledge,
         plan: PlanBlock,
+        tier: str = "llm",
     ) -> DecisionRecord:
+        # Derive the ledger when the adapter stamped the *inputs* but not the entries.
+        #
+        # An empty `fairness_profile` is documented as the claim "won under unmodified rules"
+        # (docs/observability.md), so an AI-slot decision recorded with no handicaps asserts
+        # fair play on a game that had none. An adapter that knows only what the engine tells
+        # it — which slot, which difficulty — would produce exactly that.
+        #
+        # Deriving here rather than in the adapter is also what `fairness.py` is for: three
+        # entries change which side they favour as difficulty moves and two are inert under the
+        # fork's defaults, so a static list stamped in C++ would declare handicaps that are not
+        # in force and mislabel ones that are. The adapter reports the inputs; the rules live
+        # in one place. An adapter that stamps entries itself is left alone and checked by
+        # `fairness.drift` instead.
         fairness = world_view.fairness
+        if (
+            fairness is not None
+            and fairness.slot
+            and fairness.difficulty
+            and not fairness.handicaps
+        ):
+            fairness = fairness_profile(fairness.slot, fairness.difficulty)
         return DecisionRecord(
             trace_id=world_view.traceparent(),
             game_id=self.game_id,
@@ -389,7 +475,7 @@ class Orchestrator:
             engine=world_view.engine,
             surface_id=world_view.surface_id,
             scope=world_view.scope,
-            tier="llm",
+            tier=tier,  # type: ignore[arg-type]
             world_view_hash=world_view_hash(world_view.model_dump(mode="json")),
             action_space_size=len(world_view.action_space),
             chosen=[c.model_dump(mode="json") for c in orders.choices],

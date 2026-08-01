@@ -17,13 +17,14 @@ Read the design before writing code — it is source-grounded and will save you 
 ## Before You Implement
 
 | If you're working on… | Read first |
-|---|---|
+| --- | --- |
 | Anything at all | [VISION.md](VISION.md), [docs/contract.md](docs/contract.md) |
 | A Thinker hook, or choosing which faction slot Claude drives | [docs/thinker-adapter-notes.md](docs/thinker-adapter-notes.md) — esp. §5.0 slot modes |
 | Running the game unattended, dialogs, or the SMAC game fixture | [docs/headless-harness.md](docs/headless-harness.md) |
 | Deciding what an AI player must cover, or adding a decision hook | [docs/game-surface.md](docs/game-surface.md) |
 | Moving a surface to the LLM tier, or wondering why a decision is poor | [docs/decision-inputs.md](docs/decision-inputs.md) — the per-surface input checklist |
 | Tests, CI lanes, or fixtures | [docs/building-and-testing.md](docs/building-and-testing.md) |
+| Measuring what a decision actually does, or quoting a number | [evals/README.md](evals/README.md) |
 | Logging, metrics, tracing, or measuring coverage | [docs/observability.md](docs/observability.md) |
 | A GLSMAC mod or the GSE builtin | [docs/glsmac-integration-notes.md](docs/glsmac-integration-notes.md) |
 | Knowledge, memory, or guardrails | [docs/knowledge-architecture.md](docs/knowledge-architecture.md) |
@@ -83,7 +84,7 @@ Every module owns one invariant. The invariant is why the module exists, so chec
 changing the module — most of these look like ordinary plumbing and are not.
 
 | Module | Owns | The invariant it protects |
-|---|---|---|
+| --- | --- | --- |
 | `contract.py` | The wire types (`docs/contract.md`) | A field an engine lacks is *omitted*, never faked |
 | `surfaces.py` | The frozen 77-surface registry | A renamed surface invalidates every recorded run |
 | `orchestrator.py` | `decide()` — the whole loop | **Exactly one decision record per decision**, on every path |
@@ -95,6 +96,8 @@ changing the module — most of these look like ordinary plumbing and are not.
 | `decisions.py` | The record + JSONL log | The record of truth, written before any exporter |
 | `telemetry.py` | Sink fan-out + OTel | The record is assembled **once**; layers are projections of one object |
 | `coverage.py` | Run health | `degrade_rate` and `fair_play` are measured, not asserted |
+| `config.py` | `na.toml` — the whole run's configuration | env > file > default, always |
+| `policy.py` | `[surfaces]` — which surfaces the LLM owns | Off is **deterministic**, never *degraded* |
 | `replay.py` | World-view store + diffing | A log alone can't be replayed — something must keep the bytes |
 | `datalinks/` | SMAC's own rules → Quipu | Provenance on every fact, and **filtered on read** or the tag is decoration |
 | `brain.py` | Claude / scripted brains | CI never makes a paid call |
@@ -157,7 +160,7 @@ Conventions for this repo:
 
 Tooling you need to install first — and the two cross-compile gotchas — is in
 [CONTRIBUTING.md](CONTRIBUTING.md#tooling). Core tooling (`just`, `uv`, `pre-commit`, Node,
-`bd`) needs no game and no cross-compiler.
+`bd`, `mdbook`) needs no game and no cross-compiler.
 
 ```bash
 just --list          # Show available commands
@@ -181,6 +184,74 @@ just glsmac test          # build test lint fmt  (test = headless --gse-tests)
 just thinker build        # build test           (needs the Thinker toolchain)
 just play thinker GAIANS  # full observe→decide→act loop for an engine
 ```
+
+## Configuration
+
+One file: [`na.toml`](na.toml) at the repo root, or wherever `NA_CONFIG` points. Brain, the
+Quipu/Hank seam, where a run's evidence goes, and which surfaces the LLM owns.
+
+**Precedence is env > file > default**, deliberately. The file is what a run *is*; a variable is
+how you override one thing for one run without editing the tree, which is what CI and the cloud
+setup script do. The other order would let a checked-in file silently override the harness.
+
+A malformed file refuses to start the service rather than failing one turn at a time in a
+running game.
+
+## Surface coverage
+
+```bash
+just surfaces        # what the brain can decide, what it only watches, what is left
+```
+
+**A surface is not covered until its decision can be applied.** Observing changes what is
+recorded, not what the game does, so counting it as coverage claims influence the brain does not
+have — today that is 1 applied against 4 observed.
+
+Which surfaces the brain may decide lives in the `[surfaces]` section of
+[`na.toml`](na.toml), one toggle each.
+A surface switched off is recorded at `deterministic` tier and is **not** degraded: degraded
+means the brain was asked and could not answer, and `degrade_rate` — measured over LLM-tier
+decisions only — is the number that catches a run where the brain was silently absent. Never let
+configuration into it.
+
+## Evals
+
+`just test` asserts values; **evals** ask what a decision does over many runs, which is a
+distribution rather than a value. Both live results are committed, so a number can be re-derived
+without a model, a game, or the sibling checkout.
+
+```bash
+just eval list              # what exists, what each asked, what it found
+just eval score na-373      # recompute a finding from the committed run
+just eval check             # are the committed answers still about the current prompt?
+just eval prompts na-373    # regenerate the inputs (needs THINKER_DIR)
+```
+
+Run `just eval check` after changing the system prompt, a retriever, or anything an eval's
+world view is built from. A stale run keeps scoring cleanly and says nothing about what ships.
+
+**Do not quote a measurement that is not in `evals/runs/`.** A number in a doc that nothing can
+recompute is an assertion, and this project has already had to walk one back. If you measure
+something new, commit the run — see [evals/README.md](evals/README.md).
+
+## Documentation Commands
+
+```bash
+just docs build      # Build the mdBook into book/ (gitignored)
+just docs serve      # Serve it locally with hot reload
+just docs lint       # Lint markdown
+just docs check      # Lint, then prove the book builds
+```
+
+**mdBook renders `docs/` in place** — `book.toml` points `src` at the real directory rather than
+a copy under a book-specific tree, so a doc has one path and one source of truth. Two
+consequences worth knowing before you move a file:
+
+- **`docs/SUMMARY.md` is the table of contents.** A new doc that is not listed there is not in
+  the book, and mdBook will not tell you — it is not an error, just an absence.
+- **Links out of `docs/` must be absolute.** mdBook rewrites `.md` to `.html` relative to the
+  source root, so a `../VISION.md` resolves outside the book and 404s. Use the full GitHub URL;
+  sibling links inside `docs/` stay relative and work in both renderers.
 
 ## Quality Requirements
 
@@ -207,6 +278,9 @@ merge-conflict detection, markdown linting, and Ruff (once Python code exists).
 - User-facing changes MUST include documentation updates.
 - Update `README.md` if the change affects quick-start or usage.
 - Update `docs/building-and-testing.md` if the build or test flow changes.
+- If you touched `docs/`, run `just docs check` — `just check` lints markdown but does not build
+  the book, and a chapter renamed without updating `docs/SUMMARY.md` passes every markdown rule.
+- A new doc goes in `docs/SUMMARY.md` in the same change, or it ships invisible.
 
 ## Landing the Plane (Session Completion)
 

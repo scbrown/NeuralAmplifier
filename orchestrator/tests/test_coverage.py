@@ -108,3 +108,56 @@ def test_missing_surface_id_is_counted_not_ignored(thinker_base: WorldView, tmp_
     result = report(log.read())
     assert result.missing_surface_id == 1
     assert result.summary()["surfaces_fired"] == 0
+
+
+# --- surface registry coverage ---------------------------------------------
+
+
+def test_the_remaining_surfaces_partition_exactly() -> None:
+    """The three buckets must sum to what is left, or planning reads off a false number.
+
+    They did not. `docs/game-surface.md` described the gap as "21 with no AI path", "32
+    unit-scope", and "the rest" — which double-counts the seven surfaces that are both, and
+    understates the immediately-instrumentable pile as 20 when it is 27.
+    """
+    from neural_amplifier.surfaces import coverage
+
+    c = coverage()
+    assert c["observed"] + c["remaining"] == c["total"]
+    assert c["needs_tier_first"] + c["volume_bound"] + c["ready"] == c["remaining"]
+
+
+def test_applied_is_the_coverage_number_and_never_exceeds_observed() -> None:
+    """A surface is not covered until the decision can be *applied*.
+
+    Observing changes what is recorded, not what the game does — the engine's own choice still
+    executes — so counting observation as coverage claims influence the brain does not have.
+    Applying without observing is incoherent in the other direction: nothing would have produced
+    the action space the choice was made from.
+    """
+    from neural_amplifier.surfaces import APPLIED, OBSERVED, coverage
+
+    assert APPLIED <= OBSERVED
+    c = coverage()
+    assert c["applied"] <= c["observed"] <= c["total"]
+    assert c["observed_not_applied"] == c["observed"] - c["applied"]
+
+
+def test_every_instrumented_surface_is_in_the_frozen_registry() -> None:
+    """A surface id not in the registry cannot be measured against it — and the registry is
+    frozen precisely so a rename invalidates recorded runs loudly."""
+    from neural_amplifier.surfaces import ALL, OBSERVED
+
+    assert OBSERVED <= ALL
+
+
+def test_nothing_applied_lacks_a_fallback() -> None:
+    """Invariant 9. A surface with no native AI path has nothing to degrade to, so the brain
+    must not be allowed to *decide* it before its deterministic tier exists.
+
+    Scoped to APPLIED rather than OBSERVED deliberately: observing a no-AI-path surface is
+    harmless and in fact the first step, because the engine still does whatever it did.
+    """
+    from neural_amplifier.surfaces import APPLIED, NO_AI_PATH
+
+    assert not (APPLIED & NO_AI_PATH)

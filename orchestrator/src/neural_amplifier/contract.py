@@ -198,6 +198,24 @@ class Action(_Model):
     effects: dict[str, float] | None = None
 
 
+class PriorChoice(_Model):
+    """What this decision's subject was doing on an earlier turn.
+
+    ``tier`` is the half that is easy to leave out and expensive to leave out. A decision
+    re-reading its own past reasoning is in a different position from one looking at the
+    deterministic tier's answer: the first can ask "do I still believe that", the second cannot,
+    because there was no argument — only a default. Collapsing them would have the brain defer to
+    a choice nobody made.
+
+    ``None`` means the adapter does not track authorship, which is not the same as
+    ``"deterministic"``.
+    """
+
+    turn: int
+    item: str
+    tier: Literal["llm", "deterministic"] | None = None
+
+
 class WorldView(_Model):
     """Adapter → orchestrator. The complete input to a decision."""
 
@@ -216,6 +234,19 @@ class WorldView(_Model):
     fairness: Fairness | None = None
     action_space: list[Action] = Field(default_factory=list)
     memory: str | None = None
+
+    #: What this subject chose on recent turns, oldest first. Adapter-supplied.
+    #:
+    #: Production is re-decided every turn — several times per turn at the engine level — and a
+    #: stateless brain re-argues it from nothing each time. Every individual choice can be
+    #: defensible while the sequence accumulates nothing, because a base that switches target
+    #: every few turns finishes neither. This is the cheapest thing that makes a stable choice
+    #: possible: a short ring buffer per subject, which the adapter can keep for nothing.
+    #:
+    #: Deliberately *not* a summary string like ``memory``. The brain has to be able to see that
+    #: the last three turns all chose the same item and that it chose them, and a paraphrase
+    #: cannot be checked against anything.
+    history: list[PriorChoice] | None = None
 
     #: Retrieved facts and guard advisories the *orchestrator* injects before
     #: the brain call. Not adapter fields — an adapter never sets these; they

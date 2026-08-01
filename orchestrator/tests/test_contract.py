@@ -54,3 +54,43 @@ def test_unmodelled_fields_are_preserved_not_rejected() -> None:
         }
     )
     assert view.model_dump()["some_future_section"] == {"a": 1}
+
+
+def test_history_carries_the_tier_that_made_each_choice() -> None:
+    """`tier` is what stops history becoming deference to a choice nobody made.
+
+    Re-reading your own earlier reasoning is a different act from reading the deterministic
+    tier's default: the first has an argument you can still weigh, the second has none. Measured
+    (na-61c.2): with three turns of `llm` history behind it, a decision that continued its prior
+    choice 3 times in 10 continued it 10 times in 10.
+    """
+    view = WorldView.model_validate(
+        {
+            "engine": "thinker",
+            "scope": "base",
+            "turn": 35,
+            "faction": "University",
+            "history": [
+                {"turn": 33, "item": "Network Node", "tier": "llm"},
+                {"turn": 34, "item": "Network Node", "tier": "deterministic"},
+                {"turn": 34, "item": "Recreation Commons"},
+            ],
+        }
+    )
+    assert view.history is not None
+    assert [h.item for h in view.history][0] == "Network Node"
+    assert [h.tier for h in view.history] == ["llm", "deterministic", None]
+
+
+def test_absent_history_is_not_an_empty_history() -> None:
+    """An adapter that does not track builds is distinguishable from a base on its first turn.
+
+    The first is a gap to fix, the second is a decision genuinely made from nothing, and a
+    brain told "you have never chosen anything here" when the truth is "nobody recorded it"
+    would draw the wrong conclusion about its own consistency.
+    """
+    bare = WorldView(engine="thinker", scope="base", turn=1, faction="University")
+    fresh = WorldView(engine="thinker", scope="base", turn=1, faction="University", history=[])
+
+    assert bare.history is None
+    assert fresh.history == []
