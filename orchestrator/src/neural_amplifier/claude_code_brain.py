@@ -30,7 +30,7 @@ import json
 import re
 import subprocess
 
-from .brain import _SYSTEM, BrainError, DEFAULT_MODEL
+from .brain import _SYSTEM, DEFAULT_MODEL, BrainError
 from .contract import Orders, WorldView
 
 #: Long, because the point is a considered decision rather than a fast one, and a fresh CLI

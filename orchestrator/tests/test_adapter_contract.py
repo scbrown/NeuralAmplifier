@@ -176,8 +176,14 @@ FACTION_TECH = {
         "military_units": 3,
         "drone_total": 1,
     },
-    "tech_accumulated": 12,
+    "tech_accumulated": 0,
     "tech_rate": 40,
+    # Research is not production. tech_selection fires only when tech_research_id < 0
+    # (tech.cpp:233), so a real selection COMMITS the faction until the tech completes —
+    # which is what makes this a long-horizon surface rather than a per-turn pick.
+    "research_state": "idle",
+    "tech_cost": 280,
+    "turns_to_complete": 7,
     "native_choice": 5,
     "native_choice_name": "Centauri Ecology",
     "action_space": [
@@ -410,3 +416,32 @@ def test_every_base_metric_is_reported_on_base_scope_surfaces() -> None:
             continue
         missing = base_metrics - set(record.get("metrics") or {})
         assert not missing, f"{record['surface_id']} is base-scope but omits {sorted(missing)}"
+
+
+def test_faction_tech_says_whether_it_is_a_commitment() -> None:
+    """The field that turns a tech pick into a long-horizon decision.
+
+    Selection fires only when nothing is being researched, so the choice binds until the tech
+    completes. Without `research_state` and `turns_to_complete` the payload looked like a
+    one-turn pick, and a brain asked whether the decision "sets direction for future turns" had
+    nothing to answer with — measured, it issued no directive on ten consecutive runs.
+
+    `in_progress` is not a decision at all: the probe passes the current target as
+    `native_choice`, so a reader has to be able to tell a serialiser test from a selection.
+    """
+    assert FACTION_TECH["research_state"] in {"idle", "in_progress"}
+    assert FACTION_TECH["turns_to_complete"] > 1, "a commitment shorter than a turn is not one"
+    world_view = WorldView.model_validate(FACTION_TECH)
+    assert world_view.scope == "turn"
+
+
+def test_per_option_tech_turns_are_omitted_when_they_cannot_differ() -> None:
+    """Stock SMAC charges the same for whichever tech is next (tech.cpp:308 asserts it).
+
+    A per-option turns column would then be identical down the list, which invites a brain to
+    compare options on a difference that does not exist. It is emitted only under Thinker's
+    revised_tech_cost house rule, where the cost genuinely is per-tech.
+    """
+    for action in FACTION_TECH["action_space"]:
+        assert "turns_to_complete" not in action
+        assert "cost" not in action
