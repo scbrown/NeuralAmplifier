@@ -32,7 +32,9 @@ from neural_amplifier.datalinks.briefing import DatalinksRetriever  # noqa: E402
 from neural_amplifier.datalinks.parse import parse  # noqa: E402
 
 #: Words too common to count as information.
-_NOISE = frozenset({"a", "an", "the", "and", "or", "of", "to", "per", "for", "with", "upkeep"})
+_NOISE = frozenset(
+    {"a", "an", "the", "and", "or", "of", "to", "per", "for", "with", "upkeep"}
+)
 _WORD = re.compile(r"[a-z0-9+%-]+")
 
 
@@ -55,6 +57,7 @@ def information_value(fact: str, label: str) -> float:
     known = set(_words(label))
     fresh = [w for w in _words(fact) if w not in known]
     return len(fresh) + sum(1.0 for w in fresh if any(c.isdigit() for c in w))
+
 
 #: The eight options the measured decision offered. Real facility names, so they resolve in the
 #: datalinks graph — a made-up option would ground to nothing and measure the fixture instead of
@@ -99,7 +102,9 @@ def world_view(links_path: Path) -> tuple[WorldView, DatalinksRetriever]:
     return view, DatalinksRetriever(links, engine="thinker")
 
 
-def ground(view: WorldView, retriever: DatalinksRetriever, keep: int | None) -> WorldView:
+def ground(
+    view: WorldView, retriever: DatalinksRetriever, keep: int | None
+) -> WorldView:
     """Inject grounding exactly as ``orchestrator.decide`` does — id-first lines.
 
     ``keep`` applies the ranking rule and truncates. ``None`` leaves the retriever's own order,
@@ -124,7 +129,10 @@ def cmd_prompts(args: argparse.Namespace) -> None:
     out = args.out
     out.mkdir(parents=True, exist_ok=True)
 
-    configs = {"all": ground(view, retriever, None), "ranked": ground(view, retriever, args.keep)}
+    configs = {
+        "all": ground(view, retriever, None),
+        "ranked": ground(view, retriever, args.keep),
+    }
     for name, wv in configs.items():
         (out / f"{name}.system.txt").write_text(_SYSTEM)
         (out / f"{name}.worldview.json").write_text(wv.model_dump_json(indent=2))
@@ -141,7 +149,9 @@ def cmd_score(args: argparse.Namespace) -> None:
         if not answers_path.exists():
             continue
         offered = set(json.loads((args.out / f"{name}.offered.json").read_text()))
-        rows = [json.loads(x) for x in answers_path.read_text().splitlines() if x.strip()]
+        rows = [
+            json.loads(x) for x in answers_path.read_text().splitlines() if x.strip()
+        ]
         if not rows:
             continue
         # Filtered against the offered set, exactly as `summarise` does — an invented id must
@@ -182,7 +192,12 @@ def cmd_predict(args: argparse.Namespace) -> None:
 
     path = args.out / "all.answers.jsonl"
     rows = [json.loads(x) for x in path.read_text().splitlines() if x.strip()]
-    hits = [positions[c] for r in rows for c in dict.fromkeys(r.get("cited", [])) if c in positions]
+    hits = [
+        positions[c]
+        for r in rows
+        for c in dict.fromkeys(r.get("cited", []))
+        if c in positions
+    ]
     if not hits:
         print("no citations to score")
         return
@@ -192,14 +207,18 @@ def cmd_predict(args: argparse.Namespace) -> None:
     print(f"expected if ranking were noise: {args.keep / n:.2f}")
     print(f"mean rank: {sum(hits) / len(hits):.2f}  (0 = ranked first)")
     for fid in sorted({ranked_ids[h] for h in hits}, key=lambda f: positions[f]):
-        print(f"  rank {positions[fid]}  {fid}  ×{sum(1 for h in hits if h == positions[fid])}")
+        print(
+            f"  rank {positions[fid]}  {fid}  ×{sum(1 for h in hits if h == positions[fid])}"
+        )
 
 
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("cmd", choices=["prompts", "score", "predict"])
     ap.add_argument("--out", type=Path, default=ROOT / "runs" / "na-373")
-    ap.add_argument("--links", type=Path, default=Path("/home/user/thinker/docs/alphax.txt"))
+    ap.add_argument(
+        "--links", type=Path, default=Path("/home/user/thinker/docs/alphax.txt")
+    )
     ap.add_argument("--keep", type=int, default=4)
     args = ap.parse_args()
     {"prompts": cmd_prompts, "score": cmd_score, "predict": cmd_predict}[args.cmd](args)
