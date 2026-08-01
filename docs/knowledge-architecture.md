@@ -332,6 +332,17 @@ looks exactly like a quiet day, so the record separates states that are easy to 
   and the ratio. `quipu_hits` counts what was *offered*; without citations, twelve facts
   retrieved and all ignored is indistinguishable from twelve that drove the decision.
 
+**Two independent checks stop a mod's rules entering as canonical** (invariant 4). `just ingest`
+refuses a file whose sha1 matches a known overlay in `fixtures/smac/overlays.tsv`, naming the mod
+and its version; it separately refuses one whose header announces itself. Neither subsumes the
+other — the hash catches a known mod that stays quiet, the header catches an unknown mod that
+does not — and both fire only at `--tier canonical`, so `just ingest-thinker` is unaffected.
+
+Closing it here rather than in the operator's memory matters because the failure is silent and
+permanent: a mod's `alphax.txt` is byte-for-byte the same *shape* as stock, so once its rules are
+stored as canonical nothing downstream can tell them apart, and every decision grounded on them
+is grounded on a house rule presented as the game's own.
+
 Facts are injected **id-first** (`unit:formers Formers; terraforms terrain`) because the brain
 cannot cite what it cannot see, and the id is the node's own IRI — so a citation resolves back
 into the graph and to `smac:sourcedFrom`. Citations are filtered against what was actually

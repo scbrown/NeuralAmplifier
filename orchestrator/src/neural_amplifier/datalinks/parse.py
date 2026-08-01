@@ -21,6 +21,7 @@ Two parsing traps this handles, both load-bearing:
 
 from __future__ import annotations
 
+import hashlib
 from collections.abc import Iterable, Iterator
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -79,6 +80,41 @@ def looks_modded(text: str) -> str | None:
     for marker in MOD_MARKERS:
         if marker in top:
             return marker
+    return None
+
+
+#: Known non-vanilla file hashes, mapping sha1 to the mod that ships them
+#: (``fixtures/smac/overlays.tsv``). Repo root, beside the justfile.
+OVERLAYS = Path(__file__).resolve().parents[4] / "fixtures" / "smac" / "overlays.tsv"
+
+
+def overlay_source(data: bytes, overlays: Path | None = None) -> str | None:
+    """Which mod ships this exact file, by content hash, or ``None`` if unrecognised.
+
+    :func:`looks_modded` reads the header, which only catches a mod polite enough to say so.
+    This catches one that is not: the bytes are the bytes, and ``overlays.tsv`` already records
+    every overlay hash the fixture checker knows about — including three ``alphax.txt`` variants
+    from Thinker v5.4.
+
+    Neither check subsumes the other. The header catches an unknown mod that announces itself;
+    the hash catches a known mod that does not, and names its *version* rather than just
+    reporting that something looked off.
+
+    Duplicates a few lines of ``scripts/game_fixture.py``. Deliberately: that script runs under
+    bare ``python3`` with the package uninstalled, so it cannot import this, and a shared helper
+    would have to live somewhere both can reach — which is a bigger change than ten lines of
+    TSV parsing is worth.
+    """
+    path = overlays or OVERLAYS
+    if not path.exists():
+        return None
+    digest = hashlib.sha1(data).hexdigest()  # noqa: S324 — matching an existing manifest
+    for line in path.read_text(encoding="utf-8").splitlines():
+        if not line.strip() or line.lstrip().startswith("#"):
+            continue
+        fields = line.split("\t")
+        if len(fields) >= 3 and fields[0] == digest:
+            return fields[2]
     return None
 
 

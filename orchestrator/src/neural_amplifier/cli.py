@@ -93,8 +93,25 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "ingest":
         from .datalinks import Provenance, briefing, looks_modded, parse_file, turtle
+        from .datalinks.parse import overlay_source
 
-        text = args.alphax.read_text(encoding="latin-1")
+        raw = args.alphax.read_bytes()
+        text = raw.decode("latin-1")
+
+        # Two independent checks, and neither subsumes the other. The hash catches a known mod
+        # that does not announce itself; the header catches an unknown one that does. This one
+        # first because it can name the mod *and its version*.
+        overlay = overlay_source(raw)
+        if overlay and args.tier == "canonical":
+            print(
+                f"FAIL: {args.alphax} is byte-identical to {overlay}'s alphax.txt "
+                "(fixtures/smac/overlays.tsv), but --tier is 'canonical'. Your $SMAC_DIR has a "
+                "mod installed over it. Use `just ingest-thinker` for the house-rule graph, or "
+                "point at a clean install.",
+                file=sys.stderr,
+            )
+            return 1
+
         marker = looks_modded(text)
         if marker and args.tier == "canonical":
             # The whole point of the tier predicate. A mod's alphax.txt is
@@ -118,6 +135,7 @@ def main(argv: list[str] | None = None) -> int:
             "engine": args.engine,
             "tier": args.tier,
             "modded_source": marker,
+            "overlay_source": overlay,
         }
         if args.out:
             provenance = Provenance(engine=args.engine, tier=args.tier, source=args.alphax.name)

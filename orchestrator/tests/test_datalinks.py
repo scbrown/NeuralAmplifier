@@ -8,6 +8,7 @@ technologies, 133 facilities, 64 secret-project rows) during development.
 
 from __future__ import annotations
 
+import hashlib
 from pathlib import Path
 
 import pytest
@@ -457,3 +458,46 @@ def test_grounding_carries_citable_ids(links) -> None:  # type: ignore[no-untype
     # Positionally aligned with `facts` — the orchestrator zips them into "<id> <text>" lines
     # and a misalignment would attach every citation to the wrong node.
     assert len(grounding.fact_ids) == len(grounding.facts)
+
+
+# --- anti-masquerade: a mod's rules must not enter the graph as canonical ------
+
+
+def test_a_known_overlay_is_recognised_by_its_bytes(tmp_path: Path) -> None:
+    """`looks_modded` reads the header, which only catches a mod polite enough to say so.
+
+    This catches one that is not. `fixtures/smac/overlays.tsv` already records every overlay
+    hash the fixture checker knows, so the same table closes the ingest hole — and it names the
+    mod's *version*, where a header marker only reports that something looked off.
+    """
+    from neural_amplifier.datalinks.parse import overlay_source
+
+    overlays = tmp_path / "overlays.tsv"
+    body = b"; a mod that does not announce itself\n#TECHNOLOGY\n"
+    digest = hashlib.sha1(body).hexdigest()
+    overlays.write_text(f"# comment\n{digest}\talphax.txt\tsome-mod-v1\n")
+
+    assert overlay_source(body, overlays) == "some-mod-v1"
+    assert overlay_source(b"different bytes", overlays) is None
+    # No table is not an error: a checkout without the fixture still ingests.
+    assert overlay_source(body, tmp_path / "absent.tsv") is None
+
+
+def test_the_two_checks_are_independent(tmp_path: Path) -> None:
+    """Neither subsumes the other, which is why both run.
+
+    A known mod that stays quiet in its header is caught only by the hash; an unknown mod that
+    announces itself is caught only by the header.
+    """
+    from neural_amplifier.datalinks.parse import looks_modded, overlay_source
+
+    quiet_known = b"; ordinary looking header\n#TECHNOLOGY\n"
+    overlays = tmp_path / "overlays.tsv"
+    overlays.write_text(f"{hashlib.sha1(quiet_known).hexdigest()}\talphax.txt\tquiet-mod\n")
+
+    assert looks_modded(quiet_known.decode()) is None
+    assert overlay_source(quiet_known, overlays) == "quiet-mod"
+
+    loud_unknown = "; Thinker mod data\n#TECHNOLOGY\n"
+    assert looks_modded(loud_unknown) == "thinker mod"
+    assert overlay_source(loud_unknown.encode(), overlays) is None
