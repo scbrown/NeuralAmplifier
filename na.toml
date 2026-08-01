@@ -60,14 +60,9 @@ otel = false
 surface_default = false
 
 [surfaces]
-# Whether the brain is *asked*. Only `base.production` currently applies the answer — the
-# adapter exports no decide entry point for the other three, so they emit a record and the
-# engine still chooses regardless of the toggle. Kept on so the decision is exercised and
-# recorded now, and so these become live the moment an apply path lands rather than needing
-# a config change nobody remembers to make.
-#
-# base.production's choice executes, validated against the engine's own availability tests so
-# an illegal order is rejected rather than applied.
+# All four apply: the brain's choice executes, validated against the engine's own availability
+# tests so an illegal order is rejected rather than applied. Switching one off is recorded at
+# `deterministic` tier — explicitly not degraded, because the brain was never asked.
 "base.production" = true
 "faction.tech" = true
 "faction.se" = true

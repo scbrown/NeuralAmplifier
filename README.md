@@ -137,9 +137,10 @@ Full design — the contract Claude speaks, the two-engine strategy, and the roa
 
 ## 📊 Coverage & Plan
 
-**2 of 77 decision surfaces the brain can actually decide**, with two more observed. A surface
-is not covered until its decision can be *applied* — observing changes what is recorded, not
-what the game does.
+**4 of 77 decision surfaces the brain can actually decide.** All four apply: the choice
+executes, validated against the engine's own availability tests first. A surface is not covered
+until its decision can be *applied* — observing changes what is recorded, not what the game
+does.
 `just surfaces` prints it. The registry is frozen at 77
 (`orchestrator/surfaces.py`) and partitioned by contract scope: `base` 25, `unit` 32, `turn` 20.
 
@@ -147,8 +148,8 @@ what the game does.
 | --- | --- | --- |
 | `base.production` | base | **Wired** · posts the world view and applies the returned build, falling back to the engine's own answer |
 | `faction.tech` | turn | **Wired** · posts the world view and applies the returned tech, falling back to the engine's own answer |
-| `faction.se` | turn | Observed · legal (field, model) pairs with effect deltas, grounded from `#SOCIO` |
-| `base.hurry` | base | Observed · credit cost and turns saved; unaffordable option omitted |
+| `faction.se` | turn | **Wired** · applies the returned social model, refusing one the faction cannot afford |
+| `base.hurry` | base | **Wired** · spends or holds, through the engine's own `hurry_item` |
 
 Every surface ships a **side-effect-free probe** (`observe`, `observe-tech`, `observe-se`,
 `observe-hurry`) because in-game input cannot be driven at all, so a decision that fires every five

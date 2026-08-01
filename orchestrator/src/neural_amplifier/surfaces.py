@@ -175,11 +175,21 @@ OBSERVED: Final[frozenset[str]] = frozenset(
 #:
 #: - `base.production` — `na_decide_base_production`, assigned at `base.cpp`.
 #: - `faction.tech` — `na_decide_faction_tech`, assigned at `tech.cpp`.
+#: - `faction.se` — `na_decide_faction_se`, in/out params read at `faction.cpp`.
+#: - `base.hurry` — `na_decide_base_hurry`, replacing the call at `build.cpp`.
 #:
-#: `faction.se` and `base.hurry` remain observation-only. Both spend something irreversibly
-#: (upheaval, energy credits), so each needs its cost debited through the engine's own routine
-#: before it can decide rather than watch.
-APPLIED: Final[frozenset[str]] = frozenset({"base.production", "faction.tech"})
+#: All four instrumented surfaces now apply, so this equals OBSERVED. That is a milestone, not
+#: a reason to relax the rule: the next surface instrumented starts observation-only and must
+#: not be added here until its own decide path lands, or this number goes back to claiming
+#: influence the brain does not have.
+APPLIED: Final[frozenset[str]] = frozenset(
+    {
+        "base.production",
+        "faction.tech",
+        "faction.se",
+        "base.hurry",
+    }
+)
 
 
 def coverage() -> dict[str, int]:
