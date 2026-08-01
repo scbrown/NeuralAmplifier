@@ -289,6 +289,7 @@ just thinker build       # Thinker adapter (needs the Thinker toolchain)
 just docs check          # Markdown lint, then build the book
 just docs serve          # The docs site at localhost, with hot reload
 
+just eval list           # Behavioural evals: what was measured, and what it found
 just coverage            # Run health: surfaces fired, fallback rate, adherence
 just replay --store …    # Re-run a recorded log against the current code — no game
 just ingest              # Your alphax.txt → the smac: RDF graph + static briefing

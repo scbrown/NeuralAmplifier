@@ -24,6 +24,7 @@ Read the design before writing code — it is source-grounded and will save you 
 | Deciding what an AI player must cover, or adding a decision hook | [docs/game-surface.md](docs/game-surface.md) |
 | Moving a surface to the LLM tier, or wondering why a decision is poor | [docs/decision-inputs.md](docs/decision-inputs.md) — the per-surface input checklist |
 | Tests, CI lanes, or fixtures | [docs/building-and-testing.md](docs/building-and-testing.md) |
+| Measuring what a decision actually does, or quoting a number | [evals/README.md](evals/README.md) |
 | Logging, metrics, tracing, or measuring coverage | [docs/observability.md](docs/observability.md) |
 | A GLSMAC mod or the GSE builtin | [docs/glsmac-integration-notes.md](docs/glsmac-integration-notes.md) |
 | Knowledge, memory, or guardrails | [docs/knowledge-architecture.md](docs/knowledge-architecture.md) |
@@ -168,6 +169,22 @@ just glsmac test          # build test lint fmt  (test = headless --gse-tests)
 just thinker build        # build test           (needs the Thinker toolchain)
 just play thinker GAIANS  # full observe→decide→act loop for an engine
 ```
+
+## Evals
+
+`just test` asserts values; **evals** ask what a decision does over many runs, which is a
+distribution rather than a value. Both live results are committed, so a number can be re-derived
+without a model, a game, or the sibling checkout.
+
+```bash
+just eval list              # what exists, what each asked, what it found
+just eval score na-373      # recompute a finding from the committed run
+just eval prompts na-373    # regenerate the inputs (needs THINKER_DIR)
+```
+
+**Do not quote a measurement that is not in `evals/runs/`.** A number in a doc that nothing can
+recompute is an assertion, and this project has already had to walk one back. If you measure
+something new, commit the run — see [evals/README.md](evals/README.md).
 
 ## Documentation Commands
 

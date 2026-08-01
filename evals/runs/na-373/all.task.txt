@@ -1,0 +1,197 @@
+You are playing a faction in Sid Meier's Alpha Centauri.
+
+You will receive a world view as JSON. Choose from `action_space` and return
+orders. Every `action_id` you return MUST appear in the world view's
+`action_space` — the engine is authoritative and an action you invent will be
+rejected. Give a short, concrete reason for each choice.
+
+If the world view carries a `fairness` block with handicaps, those are rule
+advantages you actually hold. Reason about them honestly rather than ignoring
+them.
+
+If the world view carries a `grounding` list, each entry is a retrieved fact in
+the form `<id> <text>` — for example
+`unit:colony-pod Colony Pod; founds a new base elsewhere`. These are the game's
+own rules, and a `[house-rule]` tag means the fact comes from a mod rather than
+the base game.
+
+Populate `cited` with the ids of the facts that actually influenced your
+decision. Include a fact if reading it changed your assessment of an option,
+whether it supported the option you chose OR helped you rule one out. Do not
+include a fact that made no difference, and never invent an id you were not
+given — `cited` is how we measure whether retrieval was worth its cost, so
+padding it destroys the measurement it exists for.
+
+## Standing directives
+
+`directives` is the faction's standing plan: decisions made earlier that later
+turns are supposed to serve. Each entry carries the directive, its `priority`
+(1-10, higher matters more), and `current` — what its metric actually reads
+right now — so you can see whether it is being met. `satisfied: null` means the
+metric was not reported this turn and the directive cannot be checked here;
+treat that as missing information, not as compliance.
+
+Each entry also carries `via` and `hop`, which say how it reached you. `hop: 0`
+means this decision directly moves what the directive is about. A higher hop
+means it was reached through another directive — `fund-weather-paradigm →
+fac:the-weather-paradigm` means the plan you are about to affect is itself
+serving that project. Read the chain: it is why the resource you are spending is
+not merely quantity but something already committed.
+
+`tradeoffs` tells you what each option would cost the plan: for an
+`action_id`/`directive_id` pair it gives the `delta` to the metric, the
+`projected` value after acting, whether that `would_violate` a directive
+currently being met, and `setback_turns` where a rate is known.
+
+A directive is not an order. Weigh its `priority` against how much THIS
+decision matters:
+
+- 9-10 survival; overriding needs an immediate, concrete threat.
+- 7-8 a committed plan; break it only for something urgent.
+- 4-6 a preference worth real cost.
+- 1-3 a tie-breaker.
+
+So a priority-7 directive to save energy should lose to stopping a base from
+falling, and beat finishing a Scout Patrol two turns sooner. When you do
+override one, say why in the choice's `reason` — name the directive and what you
+judged more valuable.
+
+Populate `followed` with the ids of directives that changed what you picked, and
+`overrode` with those you knowingly worked against. Overriding is allowed and
+often correct; recording it is how we learn a directive was mispriced. As with
+`cited`, never invent an id.
+
+## Issuing directives
+
+Leave `directives` in your response empty unless this decision genuinely sets
+direction for future turns — a tech path, a social model, a saving plan. Most
+decisions should not issue any.
+
+A directive must be measurable, so `metric` must be one of these names exactly.
+Anything else is discarded, because it could never be checked:
+
+Metrics you may write a directive against:
+  - base_count [bases, faction-scope, higher is better] — Bases owned. The most direct measure of expansion, which is what most long-horizon plans in this game are ultimately about.
+  - drone_total [citizens, faction-scope, lower is better] — Superdrones and drones across all bases; the constraint that usually binds an SE choice.
+  - energy_income [credits/turn, faction-scope, higher is better] — Net energy credits added per turn. Reserves without income is a stock with no flow, and the two justify completely different spending.
+  - energy_reserves [credits, faction-scope, higher is better] — Energy credits banked and spendable now.
+  - labs_output [points/turn, faction-scope, higher is better] — Research points produced per turn.
+  - military_units [units, faction-scope, no direction] — Units with a non-zero attack or defence value. Neither direction is inherently good — it trades against everything else the minerals could have been.
+  - mineral_surplus [minerals/turn, base-scope, higher is better] — Net minerals produced by this base per turn.
+  - minerals_remaining [minerals, base-scope, lower is better] — Minerals still needed to finish what this base is building.
+  - pop_size [citizens, base-scope, higher is better] — Population of this base.
+  - pop_total [citizens, faction-scope, higher is better] — Total population across all bases.
+
+Use `at_least`/`at_most` with a `target` for an absolute bound, or
+`increase`/`decrease`/`hold` to be measured against the value at the time you
+issue it. Set `horizon_turn` to the turn by which it should be achieved — a plan
+with no deadline cannot fail, and one that cannot fail teaches us nothing. Put
+the reasoning in `intent`, in one sentence, because a later decision will read
+it without the context you have now.
+
+Set `entities` to the grounding fact ids the directive is about — the same ids
+you would put in `cited`, e.g. `fac:the-planetary-transit-system` for a plan to
+fund that project. This is how the directive is found again: a game can carry
+hundreds of them, so a later decision is shown only the ones touching what it is
+deciding on. A directive with no entities is still found through its `metric`,
+which names the resource at stake, but one that is about a specific project and
+does not name it may never be shown to the decision that could serve it.
+
+---
+
+World view:
+
+{
+  "schema_version": "0.1",
+  "engine": "thinker",
+  "scope": "base",
+  "turn": 35,
+  "faction": "University",
+  "surface_id": "base.production",
+  "trace": null,
+  "year": null,
+  "fairness": null,
+  "action_space": [
+    {
+      "id": "build:0",
+      "action": "Recycling Tanks",
+      "effects": null
+    },
+    {
+      "id": "build:1",
+      "action": "Recreation Commons",
+      "effects": null
+    },
+    {
+      "id": "build:2",
+      "action": "Energy Bank",
+      "effects": null
+    },
+    {
+      "id": "build:3",
+      "action": "Network Node",
+      "effects": null
+    },
+    {
+      "id": "build:4",
+      "action": "Perimeter Defense",
+      "effects": null
+    },
+    {
+      "id": "build:5",
+      "action": "Command Center",
+      "effects": null
+    },
+    {
+      "id": "build:6",
+      "action": "Research Hospital",
+      "effects": null
+    },
+    {
+      "id": "build:7",
+      "action": "Children's Creche",
+      "effects": null
+    }
+  ],
+  "memory": null,
+  "grounding": [
+    "fac:recycling-tanks Recycling Tanks — cost 4; Bonus Resources; needs Biogenetics",
+    "fac:recreation-commons Recreation Commons — cost 4; upkeep 1/turn; Fewer Drones; needs Social Psych",
+    "fac:energy-bank Energy Bank — cost 8; upkeep 1/turn; Economy Bonus; needs Industrial Economics",
+    "fac:network-node Network Node — cost 8; upkeep 1/turn; Labs Bonus; needs Information Networks",
+    "fac:perimeter-defense Perimeter Defense — cost 5; Defense +100%; needs Doctrine: Loyalty",
+    "fac:command-center Command Center — cost 4; upkeep 1/turn; +2 Morale:Land; needs Doctrine: Mobility",
+    "fac:research-hospital Research Hospital — cost 12; upkeep 3/turn; Labs and Psych Bonus; needs Gene Splicing",
+    "fac:children-s-creche Children's Creche — cost 5; upkeep 1/turn; Growth/Effic/Morale; needs Ethical Calculus"
+  ],
+  "advisories": null,
+  "contacts": null,
+  "subjects": [
+    "University Base"
+  ],
+  "metrics": {
+    "energy_reserves": 82.0,
+    "energy_income": 14.0,
+    "labs_output": 21.0,
+    "base_count": 4.0,
+    "pop_total": 13.0,
+    "military_units": 3.0,
+    "drone_total": 2.0,
+    "pop_size": 4.0,
+    "mineral_surplus": 3.0,
+    "minerals_remaining": 26.0
+  },
+  "directives": null,
+  "tradeoffs": null,
+  "scores": null,
+  "economy": null,
+  "map": null,
+  "units": null,
+  "bases": null,
+  "deltas": null
+}
+
+---
+
+Respond with ONLY a single JSON object on one line, no prose, no code fence:
+{"choice": "<action_id you pick>", "cited": ["<grounding ids that influenced you>"]}

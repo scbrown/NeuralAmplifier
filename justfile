@@ -114,6 +114,15 @@ play engine="thinker" faction="GAIANS":
     echo "Starting orchestrator + {{engine}} adapter, faction {{faction}}..."
     bash scripts/play.sh "{{engine}}" "{{faction}}"
 
+# === Evals (behavioural, model in the loop) ===
+
+# A behavioural question about the brain, not a unit test: what a decision does over many
+# runs, which `just test` cannot assert. `score` reads a committed run and needs no model,
+# no game and no sibling checkout; `prompts` regenerates the inputs and needs the rulebook.
+# Behavioural evals: just eval list | prompts <id> | score <id>
+eval cmd="list" id="":
+    @cd orchestrator && uv run python ../evals/run.py {{cmd}} {{id}} --links ../{{thinker}}/docs/alphax.txt
+
 # === Coverage ===
 
 # Fails if the brain was largely absent or an illegal action slipped through.

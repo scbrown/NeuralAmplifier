@@ -106,6 +106,21 @@ that a captured world view is well-formed and that orders reference real `action
 against fixtures from either engine, with no game. Recording a real GLSMAC `--gse-tests` world
 view produces an orchestrator fixture *and* a contract fixture from one run.
 
+## 5b. Evals — the layer the pyramid has no room for
+
+Every level above asserts a value. A whole class of question about this system is not a value:
+whether grounding is read, whether a standing plan is followed, whether the same world view
+decides the same way twice. Those are distributions over a model's outputs, and a test that
+asserted one would either be flaky or be asserting something weaker than the question.
+
+So they live in [`evals/`](https://github.com/scbrown/NeuralAmplifier/blob/main/evals/README.md)
+and run on demand rather than in CI — they need a model, and CI never makes a paid call. What
+makes them more than anecdote is that the prompts *and* the answers are committed:
+`just eval score <id>` re-derives any published number on a fresh clone with no model, no game
+and no sibling checkout.
+
+The rule that follows: **do not quote a measurement that is not in `evals/runs/`.**
+
 ## 6. CI
 
 Default CI (`.github/workflows/ci.yml`) runs only the fast, self-contained lanes: the docs
