@@ -64,6 +64,14 @@ BASE_PRODUCTION = {
         "pop_size": 3,
         "turns_to_completion": 18,
     },
+    # na_write_history: newest first, one entry per base-turn, each attributed to the tier
+    # that settled it. Production is re-decided every turn, so without this a brain flips
+    # between two defensible options and accumulates nothing.
+    "recent_builds": [
+        {"turn": 41, "item": -4, "action": "Recycling Tanks", "tier": "llm"},
+        {"turn": 40, "item": -4, "action": "Recycling Tanks", "tier": "llm"},
+        {"turn": 39, "item": 0, "action": "Colony Pod", "tier": "deterministic"},
+    ],
     "action_space": [
         {
             "id": "unit:0",
@@ -327,3 +335,35 @@ def test_a_superseded_replay_says_what_actually_ran() -> None:
     # And it is distinguishable from the original decision, which is the whole point.
     assert record["call_seq"] > BASE_PRODUCTION["call_seq"]
     assert BASE_PRODUCTION["tier"] == "llm"
+
+
+def test_recent_builds_are_newest_first_and_attributed() -> None:
+    """History is only useful if the brain can tell *when* and *who*.
+
+    Newest first because a brain reading top-down should meet the most relevant entry first.
+    Attributed because a run that mixes the LLM and deterministic tiers is otherwise a sequence
+    of choices with no provenance, and "why did I pick that" has no answer.
+    """
+    history = BASE_PRODUCTION["recent_builds"]
+    turns = [entry["turn"] for entry in history]
+    assert turns == sorted(turns, reverse=True), "newest first"
+    assert all(entry["turn"] < BASE_PRODUCTION["turn"] for entry in history), (
+        "history is the past; the current decision is not in it"
+    )
+    assert {entry["tier"] for entry in history} <= {"llm", "deterministic", "probe"}
+    # One entry per base-turn. The engine calls mod_base_build ~2x per base per turn, so
+    # duplicates here would mean the per-turn cache stopped being the single write point.
+    assert len(turns) == len(set(turns))
+
+
+def test_history_survives_as_an_engine_dependent_passthrough() -> None:
+    """`recent_builds` is not a contract field, and does not need to be.
+
+    WorldView allows extras and the whole payload is what reaches the prompt, so an adapter can
+    add a genuinely useful block without a contract change. What it must not do is arrive in a
+    shape the orchestrator would reject.
+    """
+    world_view = WorldView.model_validate(BASE_PRODUCTION)
+    carried = world_view.model_dump()["recent_builds"]
+    assert carried[0]["action"] == "Recycling Tanks"
+    assert carried[0]["tier"] == "llm"

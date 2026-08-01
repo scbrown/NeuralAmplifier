@@ -85,6 +85,9 @@ no other source, and inventing context is how a defensible move becomes a wrong 
   `satisfied: null` means *unmeasurable*, which is not the same as failing.
 - **`tradeoffs`** say what each option would cost each directive, in numbers —
   "hurrying costs 81 credits, leaving reserves at 1 against a plan wanting 300."
+- **`recent_builds`** (on `base.production`) is what this base was told to build over the last
+  few turns, newest first, each tagged with the `tier` that decided it. `llm` is you; anything
+  else is the deterministic tier. Read it before choosing — see below.
 - **`fairness`** lists the rule asymmetries in force. If it is non-empty you are playing with
   advantages; reason about them out loud rather than quietly banking them.
 
@@ -104,8 +107,19 @@ Watch for these, all of which have actually happened:
   one only appears on the item already in production.
 - **Do not re-derive arithmetic that was given to you.** Turn counts are precomputed
   precisely because recomputing them went wrong.
-- **Prefer continuity.** Production is re-evaluated every turn. Flip-flopping between two
-  reasonable choices accumulates nothing, and each individual flip looks defensible.
+- **Prefer continuity, and check `recent_builds` before you break it.** Production is
+  re-evaluated from scratch every turn, so nothing stops you from switching — and switching
+  item category forfeits the minerals already accumulated. Half-built Recycling Tanks abandoned
+  for a Scout Patrol abandoned for Recycling Tanks is every individual choice being defensible
+  and the sequence being useless.
+
+  If `recent_builds` shows this base has been on the same item, the bar for changing it is what
+  has changed on the board, not which option looks best in isolation today. If it shows you
+  already switched last turn, switching again is the pattern to break.
+
+  Do not rely on remembering this yourself. Your session compacts and reconnects, and a
+  different harness may pick the game up entirely. The payload is the record; your recollection
+  is not.
 
 ## 5. Say what you used, not just what you chose
 
