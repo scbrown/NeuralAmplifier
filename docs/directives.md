@@ -178,10 +178,29 @@ The surface was never short of *rules*. It was short of the opportunity cost of 
 ## Known gaps
 
 - Nothing issues a directive yet (`na-43h`).
-- `faction_state` is built but unverified against a running game (`na-b4v`).
-- The vocabulary is eleven names, six of them reported. Military posture, terraforming progress
-  and diplomatic standing cannot be expressed at all yet (`na-c17`). `drone_total` is in the
-  vocabulary and *not* reported, which is exactly the mistake the vocabulary exists to prevent —
-  it needs emitting or removing.
+- The metric block is built but unverified against a running game (`na-b4v`).
+- The vocabulary is ten names and the Thinker adapter reports all ten
+  (`tests/test_metrics_vocabulary.py` fails if that stops being true). Military posture,
+  terraforming progress and diplomatic standing still cannot be expressed — those are new
+  names, and each one needs the adapter to emit it first.
 - Attention and override rates come from ten replays of one fixture. They show the mechanism
   works; they say nothing about whether directives help (`na-mmp`).
+
+### The seam that was dead
+
+Worth recording, because both sides looked correct in isolation. The adapter wrote its
+measurements under a `faction_state` key; the orchestrator reads `WorldView.metrics`. Nothing
+bridged them, so on a real world view *every* directive evaluated `unmeasurable` — not
+unsatisfied, but never checked — no matter what the adapter reported.
+
+Neither repository's tests could see it. The orchestrator's suite built its own world views
+with a `metrics` block and passed; the adapter emitted a well-formed block nobody read. What
+makes it worth a paragraph is the failure signature: an unmeasurable directive still appears in
+`in_force`, so the plan looked live in every record while steering nothing.
+
+The fix is adapter-side, because the contract says measurements are adapter-supplied — the
+orchestrator digging them out of an engine block is exactly what invariant 2 forbids. Each
+number now has one home: `metrics` carries every name the vocabulary has, and the engine's own
+blocks carry what it does not. That was not tidiness. `base.hurry` observes *after*
+`mod_base_hurry()` runs, so the faction's live `energy_credits` is the post-purchase figure
+while the hook's snapshot is the pre-decision truth, and the record used to carry both.

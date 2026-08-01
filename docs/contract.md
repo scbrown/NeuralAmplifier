@@ -137,6 +137,19 @@ Four fields carry directives across the contract. Full design in
 | `metrics` | `{name: number}` — engine-neutral named measurements, using the vocabulary in `metrics.py`. This is the one place the orchestrator reads numbers by name, and it is safe precisely because the adapter did the engine-specific work of naming them (invariant 2) |
 | `Action.effects` | `{metric: delta}` — an action's immediate, known effect on named metrics. Without it a trade-off cannot be computed and a priority number has nothing to be weighed against |
 
+**`metrics` is the only key the orchestrator reads measurements from**, and a measurement under
+any other key is invisible. Emitting the right numbers under the wrong name is not a partial
+success: every directive then evaluates `unmeasurable` — never checked, as distinct from checked
+and failing — while still appearing in the record's `in_force`, so a plan that steers nothing
+reads as a plan being served. The Thinker adapter shipped exactly that for a while, under a
+`faction_state` key.
+
+Each number belongs in exactly one place. `metrics` carries every name the vocabulary has; the
+engine's own blocks (`base_state` and friends) carry what it has no name for. Repeating one
+measurement in both is a correctness problem rather than a token cost — a hook that observes
+*after* the engine has acted holds a snapshot that its live fields no longer agree with, and a
+record carrying both cannot say which the decision was made on.
+
 **On orders**, from the model:
 
 | Field | Meaning |

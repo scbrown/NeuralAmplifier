@@ -19,7 +19,10 @@ missing measurement must never read as a satisfied one — that is the failure m
 the whole mechanism drift into decoration.
 
 Adding a name here is cheap and safe. It is a promise that some adapter reports it, so the
-honest order of work is: emit it from the adapter first, add the name second.
+honest order of work is: emit it from the adapter first, add the name second. That promise is
+enforced — ``tests/test_metrics_vocabulary.py`` holds the set the Thinker adapter emits and
+fails if the two drift, because an unkept promise here is invisible at runtime: the directive
+is accepted, then reports UNMEASURABLE forever.
 """
 
 from __future__ import annotations
@@ -123,14 +126,12 @@ VOCABULARY: Final[dict[str, Metric]] = {
             "lower",
             "Minerals still needed to finish what this base is building.",
         ),
-        _m(
-            "turns_to_completion",
-            "base",
-            "turns",
-            None,
-            "Turns until current production finishes at the current surplus. Direction "
-            "depends on what is being built, so no better-ness is claimed.",
-        ),
+        # `turns_to_completion` lived here and was removed (na-c17). No adapter ever emitted
+        # it, and the Thinker adapter declines to on purpose: a partially built item makes
+        # that arithmetic subtly wrong, and it ships accumulated and surplus separately so
+        # nothing has to guess. It is also derivable — ``RATE_OF`` turns minerals_remaining
+        # into turns via mineral_surplus already. A name nothing reports is not a harmless
+        # placeholder: it is a directive that can be written and can never be checked.
         _m("pop_size", "base", "citizens", "higher", "Population of this base."),
     )
 }
