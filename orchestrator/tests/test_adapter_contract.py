@@ -445,3 +445,62 @@ def test_per_option_tech_turns_are_omitted_when_they_cannot_differ() -> None:
     for action in FACTION_TECH["action_space"]:
         assert "turns_to_complete" not in action
         assert "cost" not in action
+
+
+# na_verify_base_production, transcribed from the emitter. Not a world view: a divergence is a
+# second event after the decision, so it carries only what identifies the decision it undid.
+DIVERGENCE = {
+    "surface_id": "base.production",
+    "engine": "thinker",
+    "scope": "base",
+    "turn": 42,
+    "base_id": 0,
+    "base": "Gaia's Landing",
+    "event": "divergence",
+    "intended_item": -4,
+    "intended_item_name": "Recycling Tanks",
+    "applied_item": 12,
+    "applied_item_name": "Scout Patrol",
+    "fallback_reason": "engine did not keep the applied item",
+}
+
+
+def test_a_divergence_names_both_items() -> None:
+    """The record has to say what was decided AND what the base is actually building.
+
+    Either one alone is useless. "The engine dropped our choice" cannot be investigated without
+    knowing what it dropped it for, and the applied item alone is indistinguishable from a
+    normal deterministic decision.
+    """
+    assert DIVERGENCE["event"] == "divergence"
+    assert DIVERGENCE["intended_item"] != DIVERGENCE["applied_item"]
+    for key in ("intended_item", "intended_item_name", "applied_item", "applied_item_name"):
+        assert DIVERGENCE[key] not in (None, ""), f"{key} is what makes this investigable"
+
+
+def test_a_divergence_is_not_mistaken_for_a_decision() -> None:
+    """It must not be counted as one, in either direction.
+
+    No `tier` and no `applied`, deliberately: a divergence is not a decision the LLM tier made
+    or declined to make, and folding it into either count would move a number that is supposed
+    to measure something else. It carries `surface_id` so it can still be attributed, and the
+    reader tells the two apart on `event`.
+    """
+    assert "tier" not in DIVERGENCE
+    assert "applied" not in DIVERGENCE
+    assert "action_space" not in DIVERGENCE, (
+        "no action space means scripts/decision_stability.py skips it, which is why adding "
+        "this record type did not break the stability harness"
+    )
+
+
+def test_a_divergence_does_not_claim_a_cause() -> None:
+    """The reason says what was observed, not why.
+
+    The whole point of reading state back is that it works without knowing why a choice was
+    dropped — it is the check that covers rules nobody has encoded yet. A record that named a
+    cause would be guessing, and a guess becomes a fact in someone's analysis three months on.
+    """
+    assert DIVERGENCE["fallback_reason"] == "engine did not keep the applied item"
+    for guess in ("retool", "illegal", "invalid", "rejected"):
+        assert guess not in DIVERGENCE["fallback_reason"]

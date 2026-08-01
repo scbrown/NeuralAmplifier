@@ -219,6 +219,48 @@ Orders referencing an `action_id` not in the world view's `action_space` should 
 **structurally impossible** — that is the anti-hallucination guarantee of VISION §4. So a
 non-zero count is not a warning, it is a broken invariant. Assert exactly zero.
 
+### 5.5.1 Divergence — the check that covers rules nobody encoded
+
+Adherence (§5.5) and the adapter's legality gates test **what we thought to check**: the id
+parses, `tech_avail` says yes, `society_avail` says yes, the faction can afford it. Every one of
+those is a rule someone wrote down. None of them can catch a rule nobody wrote down — an engine
+path that overwrites `queue_items[0]` after `mod_base_change`, a retool interaction, a later hook
+with its own opinion.
+
+That failure is silent in the worst way. The decision record says `"applied":"llm"` with the
+chosen item, the base builds something else, and **nothing anywhere disagrees** — the log is
+internally consistent and wrong.
+
+So the adapter asks a different question after the apply: not *should* the engine accept this,
+but *did* it. `na_verify_base_production` reads `queue_items[0]` back and compares it against
+what was decided. It needs no theory of why a choice was dropped, which is the entire point —
+it is the only mechanism here that covers rules we have not learned yet.
+
+A disagreement emits its own compact record into `na-observations.jsonl`:
+
+```json
+{"surface_id":"base.production","event":"divergence","turn":42,"base_id":0,
+ "intended_item":-4,"intended_item_name":"Recycling Tanks",
+ "applied_item":12,"applied_item_name":"Scout Patrol",
+ "fallback_reason":"engine did not keep the applied item"}
+```
+
+Three properties, each load-bearing and each pinned in `test_adapter_contract.py`:
+
+- **Both items, always.** "The engine dropped our choice" cannot be investigated without knowing
+  what it dropped it *for*, and the applied item alone is indistinguishable from an ordinary
+  deterministic decision.
+- **No `tier`, no `applied`.** A divergence is not a decision the LLM tier made or declined to
+  make. Folding it into either count moves a number that measures something else.
+- **No claimed cause.** The reason says what was observed. Naming a mechanism we have not
+  established is how a guess becomes a fact in someone's analysis three months later.
+
+Reported once per base-turn, not once per call: `mod_base_reset` is hooked at eleven call sites,
+so the cache is updated to what the engine actually holds and the remaining calls agree.
+
+**A non-zero divergence count is a bug in the adapter, not a bad model day.** Unlike
+`degrade_rate` there is no acceptable floor — the model was never involved.
+
 ### 5.6 Fixture harvesting
 
 Because records reference content-addressed world views, **every run automatically produces the
