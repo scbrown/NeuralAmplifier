@@ -88,23 +88,27 @@ The registry is frozen at 77 (`orchestrator/surfaces.py`), partitioned by contra
 | `faction.se` | turn | `mod_social_ai` | legal (field, model) pairs with effect deltas | `observe-se <faction_id>` |
 | `base.hurry` | base | `mod_base_hurry` (wrapped) | hurry / don't, with credit cost and turns saved; unaffordable option omitted | `observe-hurry <base_id>` |
 
-Each has an apply command, and each validates with the engine's own test rather than with a
+One has an apply command, and it validates with the engine's own test rather than with a
 reconstruction of it:
 
 | Surface | Apply | Legality test | Costs |
 | --- | --- | --- | --- |
 | `base.production` | `apply <base_id> unit:<n>\|facility:<n>` | `mod_veh_avail` + `can_build_unit` / `mod_facility_avail` + `can_build` | — |
-| `faction.tech` | `apply-tech <faction_id> tech:<n>` | `tech_avail` | — |
-| `faction.se` | `apply-se <faction_id> se:<field>:<model>\|se:none` | `society_avail` | upheaval, debited via `social_upheaval` |
-| `base.hurry` | `apply-hurry <base_id> hurry:now\|hurry:none` | `can_hurry_item` + affordable `hurry_cost` | energy credits, debited via `hurry_item` |
 
-Two of them spend something, and both debit through the engine's own routine — `hurry_item`
-does the credit debit and the mineral credit together, and reimplementing either half is how a
-faction gets free production. `base.hurry` is the one that can lose something irreversibly, so
-it refuses an unaffordable order with the numbers rather than partially applying it.
+The other three are **observation-only**: the adapter exports `na_observe_*` for them and no
+decide entry point, so they emit a record and the engine still chooses. Apply paths for them
+were built on a parallel line of work that was not the one this repo standardised on, and were
+not carried across — the design notes below are what that work established, kept because the
+constraints are what the eventual apply paths have to satisfy, not because the verbs exist.
 
-`faction.se` takes legality from `society_avail`, which is the engine's test and **not** the
-checks the observation's action space makes for itself. Those two are supposed to agree; this is
+`faction.se` and `base.hurry` would both spend something, and both must debit through the
+engine's own routine — `hurry_item` does the credit debit and the mineral credit together, and
+reimplementing either half is how a faction gets free production. `base.hurry` is the one that
+can lose something irreversibly, so it has to refuse an unaffordable order with the numbers
+rather than partially applying it.
+
+`faction.se` must take legality from `society_avail`, which is the engine's test and **not** the
+checks the observation's action space makes for itself. Those two are supposed to agree; that is
 the one that binds.
 
 **Which surfaces the brain may decide is configuration**, not code: `na.toml` carries a

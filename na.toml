@@ -60,13 +60,18 @@ otel = false
 surface_default = false
 
 [surfaces]
-# All four apply: the brain's choice executes, validated against the engine's own availability
-# tests so an illegal order is rejected rather than applied.
+# Whether the brain is *asked*. Only `base.production` currently applies the answer — the
+# adapter exports no decide entry point for the other three, so they emit a record and the
+# engine still chooses regardless of the toggle. Kept on so the decision is exercised and
+# recorded now, and so these become live the moment an apply path lands rather than needing
+# a config change nobody remembers to make.
+#
+# base.production's choice executes, validated against the engine's own availability tests so
+# an illegal order is rejected rather than applied.
 "base.production" = true
 "faction.tech" = true
 "faction.se" = true
 
-# The one that spends something irreversibly. Left on, but this is the toggle to reach for
-# first if a run starts burning reserves — `apply-hurry` refuses an unaffordable order, which
-# is not the same as it being a good one.
+# The one that would spend something irreversibly once it applies. Left on, but this is the
+# toggle to reach for first if a run starts burning reserves.
 "base.hurry" = true
