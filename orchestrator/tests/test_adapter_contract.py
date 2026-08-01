@@ -504,3 +504,67 @@ def test_a_divergence_does_not_claim_a_cause() -> None:
     assert DIVERGENCE["fallback_reason"] == "engine did not keep the applied item"
     for guess in ("retool", "illegal", "invalid", "rejected"):
         assert guess not in DIVERGENCE["fallback_reason"]
+
+
+# na_audit_faction_se, transcribed from the emitter. The audit that can actually find
+# something: this surface's action space and its apply gate use different predicates.
+SE_AUDIT = {
+    "surface_id": "faction.se",
+    "engine": "thinker",
+    "event": "audit",
+    "turn": 42,
+    "faction_id": 1,
+    "rejected_ids": [],
+    "hidden_ids": [],
+    "offered": 14,
+    "rejected": 0,
+    "hidden": 0,
+}
+
+
+def test_an_audit_separates_the_two_kinds_of_mismatch() -> None:
+    """`rejected` and `hidden` are opposite defects and must not be summed.
+
+    Offered-but-refused is an illegal move waiting to happen — the brain can pick it and the
+    engine will not take it. Refused-but-offered is a legal option the brain never sees. One is
+    a correctness bug, the other a quality gap, and a single "mismatches" number would hide
+    which one a run actually has.
+    """
+    assert "rejected" in SE_AUDIT and "hidden" in SE_AUDIT
+    assert SE_AUDIT["event"] == "audit"
+    assert "mismatches" not in SE_AUDIT, "the two must stay separately addressable"
+
+
+def test_an_audit_lists_ids_and_admits_truncation() -> None:
+    """A count alone is not actionable, and a silently capped list is worse than a count.
+
+    The emitter caps each list and emits `*_truncated` with the remainder when it bites, so a
+    reader can tell "these are all of them" from "these are the first twelve".
+    """
+    assert isinstance(SE_AUDIT["rejected_ids"], list)
+    assert isinstance(SE_AUDIT["hidden_ids"], list)
+    assert len(SE_AUDIT["rejected_ids"]) == SE_AUDIT["rejected"]
+    assert len(SE_AUDIT["hidden_ids"]) == SE_AUDIT["hidden"]
+
+
+def test_an_audit_is_not_a_decision() -> None:
+    """Same reasoning as the divergence record: no tier, no applied, no action_space.
+
+    An audit is a check that ran, not a decision anyone made. Counting it as one would inflate
+    coverage with records where no choice was ever taken.
+    """
+    for key in ("tier", "applied", "action_space", "applied_item"):
+        assert key not in SE_AUDIT
+
+
+def test_base_hurry_has_no_audit_because_it_cannot_diverge() -> None:
+    """Documents an absence on purpose, so nobody 'fixes' it by adding one back.
+
+    base.hurry's action space and its apply gate call one function (`na_hurry_terms`), so they
+    cannot disagree. An audit there compared two identical expressions and could never fail —
+    which reads as coverage while testing nothing. The audited surfaces are exactly those where
+    two pieces of code independently decide what is legal.
+    """
+    audited = {"faction.se", "faction.tech", "base.production"}
+    assert "base.hurry" not in audited
+    assert SE_AUDIT["surface_id"] in audited

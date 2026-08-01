@@ -261,6 +261,47 @@ so the cache is updated to what the engine actually holds and the remaining call
 **A non-zero divergence count is a bug in the adapter, not a bad model day.** Unlike
 `degrade_rate` there is no acceptable floor — the model was never involved.
 
+### 5.5.2 The audit — finding it before a decision rides on it
+
+§5.5.1 is reactive: it notices a dropped choice after one has already cost a decision, in a real
+game, once. The `audit <faction_id>` command is the proactive half — walk the entire action
+space and find the options that *would* be refused, before anything depends on one.
+
+It applies nothing. Attempting each option would spend credits, retarget research and hurry
+production, so the audit would cost more than the bug it was looking for — and it would still
+only ever test whichever option the engine accepted first. Every check is a predicate, which is
+what makes auditing *every* option affordable and total rather than expensive and partial.
+
+For `base.production` and `faction.tech` the action space and the apply gate call the same
+engine function, so comparing them is a tautology. What is **not** a tautology is the trip in
+between: the id is formatted into a string by the emitter and read back by the parser, and those
+are separate code. A facility negation that flips sign, an off-by-one bound, a range the parser
+rejects — all of that lives between two identical predicates and shows up in neither. The audit
+walks `emitter → string → parser → gate`, which is the path a real answer takes.
+
+**`faction.se` is the reason this exists.** Its action space hand-rolls three exclusions — the
+model in force, an unresearched prerequisite, the faction's forbidden value — while its gate
+binds on `society_avail`. §2.5 of [game-surface.md](game-surface.md) says those "are supposed to
+agree." Nothing checked it. The two directions are reported separately because they are opposite
+defects:
+
+| Field | Meaning | Severity |
+| --- | --- | --- |
+| `rejected` | offered, but the gate would refuse it | an illegal move waiting to happen |
+| `hidden` | the gate would accept it, but it was never offered | a legal option the brain cannot choose |
+
+Mismatching ids are listed, not just counted — capped, with the record stating when the cap bit,
+because a truncated list that looks complete is worse than an obviously truncated one.
+
+`base.hurry` is deliberately **not** audited, and that is the more useful lesson. The first
+version compared two identical expressions: a check that can never fail, which reads as coverage
+while testing nothing. The real defect was that what may be rushed and what it costs had been
+derived independently in three places — and not even the same way, one measuring from the
+caller's `minerals_before` and another from the live `minerals_accumulated`. Auditing for that
+drift was the wrong instinct, since a detector only fires *after* someone introduces the bug.
+Deriving it once (`na_hurry_terms`) means the two cannot disagree and there is nothing left to
+check. **Prefer the version with no failure mode over the version with a detector.**
+
 ### 5.6 Fixture harvesting
 
 Because records reference content-addressed world views, **every run automatically produces the
