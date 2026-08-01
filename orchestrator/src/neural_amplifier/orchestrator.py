@@ -27,7 +27,16 @@ from .decisions import (
 )
 from .directives import DirectiveStore, accept, evaluate, relevant, tradeoffs
 from .fog import Redaction, redact
-from .knowledge import Guard, Knowledge, Retriever, apply, retrieve, rule, summarise
+from .knowledge import (
+    Guard,
+    Knowledge,
+    Retriever,
+    apply,
+    plan_entities,
+    retrieve,
+    rule,
+    summarise,
+)
 from .telemetry import Emitter, Sink
 from .validate import validate
 
@@ -234,7 +243,13 @@ class Orchestrator:
             latency_ms=int((time.monotonic() - started) * 1000),
             unknown=violations,
             fog=fog,
-            knowledge=summarise(grounding, ruling, self.guard is not None, cited=orders.cited),
+            knowledge=summarise(
+                grounding,
+                ruling,
+                self.guard is not None,
+                cited=orders.cited,
+                shown_by_plan=plan_entities(world_view),
+            ),
             plan=self._plan_block(
                 world_view,
                 orders,

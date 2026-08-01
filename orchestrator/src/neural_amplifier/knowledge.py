@@ -80,6 +80,14 @@ class Knowledge:
     quipu_hits: int = 0
     #: Ids of the facts put in front of the model.
     quipu_facts: list[str] = field(default_factory=list)
+    #: Ids the model cited that came from a *directive's* entities rather than from retrieval.
+    #:
+    #: Kept apart from ``quipu_cited`` so neither number has to mean two things. Utilisation
+    #: asks "did retrieval earn its tokens", and folding plan entities into its denominator
+    #: would answer a different question with the same field. But they cannot simply be dropped
+    #: either: the model was legitimately shown these ids, so a discarded citation would be
+    #: invisible in both directions — not flagged as fabricated, and not counted as used.
+    plan_cited: list[str] = field(default_factory=list)
     #: Ids the model said it relied on. The gap between this and ``quipu_facts`` is the
     #: only evidence that retrieval *mattered*: a run where twelve facts were retrieved
     #: and all ignored is otherwise indistinguishable from one where they drove the
@@ -190,26 +198,52 @@ def apply(orders: Orders, ruling: Ruling) -> Orders:
     return orders.model_copy(update={"choices": kept})
 
 
+def plan_entities(world_view: WorldView) -> set[str]:
+    """Datalinks ids carried by the directives this decision was shown.
+
+    These are grounding fact ids — the identity is deliberate and is what lets a decision reach
+    a standing plan by walking out from the entity it is deciding about. So they are things the
+    model was *shown*, and both the citation guard and the record have to treat them that way.
+    """
+    return {
+        entity
+        for status in (world_view.directives or [])
+        for entity in (status.directive.entities or [])
+        if entity
+    }
+
+
 def summarise(
     grounding: Grounding,
     ruling: Ruling,
     guarded: bool,
     cited: Iterable[str] = (),
+    shown_by_plan: Iterable[str] = (),
 ) -> Knowledge:
     """Fold both results into the record's provenance block.
 
-    ``cited`` is the set of fact ids the brain said it relied on. Only ids that were
-    actually offered are recorded: a model naming a fact it was never given is a
-    hallucination, and laundering it into the provenance block would make the record
-    lie about what informed the decision.
+    ``cited`` is the set of fact ids the brain said it relied on. Only ids it was actually
+    shown are recorded: a model naming a fact it was never given is a hallucination, and
+    laundering it into the provenance block would make the record lie about what informed the
+    decision.
+
+    A citation is sorted into one of two buckets by *where it was shown*, never discarded for
+    being in the wrong one. ``quipu_cited`` is retrieval, and drives utilisation.
+    ``plan_cited`` is a directive's entities. Splitting them keeps utilisation answering one
+    question; dropping the second bucket, which is what used to happen, made a legitimate
+    citation vanish from the record entirely.
     """
     offered = list(grounding.fact_ids)
     offered_set = set(offered)
-    used = [c for c in dict.fromkeys(cited) if c in offered_set]
+    from_plan = set(shown_by_plan)
+    unique = list(dict.fromkeys(cited))
+    used = [c for c in unique if c in offered_set]
+    plan_used = [c for c in unique if c not in offered_set and c in from_plan]
     return Knowledge(
         quipu_hits=grounding.hits,
         quipu_facts=offered,
         quipu_cited=used,
+        plan_cited=plan_used,
         quipu_absent=grounding.reason == "no retriever configured",
         hank_verdict=ruling.verdict if guarded else None,
         stripped=list(ruling.stripped),

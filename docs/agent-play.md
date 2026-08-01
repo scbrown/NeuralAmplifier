@@ -117,16 +117,24 @@ seconds is the right price for not mutating the board re-entrantly.
 
 ## 5. The tool surface
 
-Three tools, because a decision has three moments.
+Four tools: the three moments of a decision, plus setting a plan that outlives the turn.
 
 | Tool | For |
 |---|---|
 | `next_decision(wait_seconds)` | Collect the decision waiting for you, with its full world view |
-| `submit_orders(decision_id, action_id, reason)` | Answer it, choosing from the action space |
+| `submit_orders(decision_id, action_id, reason, cited, followed, overrode)` | Answer it, choosing from the action space |
 | `decisions_waiting()` | What is outstanding — for re-orienting after a reconnect or compaction |
+| `issue_directive(...)` | Set a standing plan later decisions will be shown. Call before submitting |
 
 Anything more would invite the model to go looking for game state instead of reading the world
 view it was handed, and there is no other source to look in.
+
+**`cited`, `followed` and `overrode` are not optional decoration.** They are the measurement
+channels: grounding utilisation, and directive attention. The agent pivot briefly zeroed all
+three by accepting only an action id, which in a record is indistinguishable from a brain that
+read twelve facts and a standing plan and ignored every one. The explanations live in the *tool
+descriptions* rather than in a system prompt, because `Orders.cited` already records that
+explaining it in a prompt left it empty on every run.
 
 **Rejections are addressed to the model.** An id outside the action space comes back as a 422
 carrying the legal set, so the agent can correct itself in the tool result it is already

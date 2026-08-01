@@ -29,7 +29,7 @@ from __future__ import annotations
 from collections.abc import Callable, Iterable
 
 from .contract import Orders, WorldView
-from .knowledge import Ruling
+from .knowledge import Ruling, plan_entities
 
 #: Resolves a fact id to whether it exists in the datalinks graph. Injected so the policy is
 #: testable without a store, and so the same policy can run against Quipu, a local TTL, or a
@@ -96,14 +96,23 @@ class CitationGuard:
         return Ruling(verdict="warn" if advisories else "allow", advisories=tuple(advisories))
 
     def _offered(self, world_view: WorldView) -> set[str]:
-        """Fact ids the orchestrator put in front of the brain.
+        """Every fact id the brain was actually shown — from two places, not one.
 
-        Read from the world view's ``grounding`` block, which is where ``knowledge.py`` says
-        the orchestrator injects retrieved facts. A world view with no grounding yields an
-        empty set, which correctly makes every citation ``unoffered``.
+        The ``grounding`` block is the obvious source: retrieved facts, injected id-first.
+
+        The second source is less obvious and was a real bug. A directive carries ``entities``,
+        which *are* grounding fact ids — that identity is what makes the multi-hop walk work,
+        since a decision reaches a plan by matching the entity it is deciding about. Those ids
+        are printed in front of the model inside every ``DirectiveStatus``. Reading only the
+        grounding block therefore made a perfectly honest citation look fabricated: measured,
+        this fired on three to four runs in five, always on the entity of a plan the model had
+        just been shown and had correctly reasoned about.
+
+        "Offered" means shown, not retrieved. Both belong.
         """
         grounding = world_view.grounding or []
-        return {gid for gid in (self._id_of(line) for line in grounding) if gid}
+        offered = {gid for gid in (self._id_of(line) for line in grounding) if gid}
+        return offered | plan_entities(world_view)
 
     @staticmethod
     def _id_of(line: str) -> str:

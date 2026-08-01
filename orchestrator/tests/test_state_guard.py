@@ -350,3 +350,118 @@ def test_a_brain_error_is_not_repaired() -> None:
     )
     assert len(broken.calls) == 1
     assert result.record.degraded is True
+
+
+# --------------------------------------------------- citing a directive's entity
+
+
+def _view_with_plan(cited: list[str], grounding: list[str] | None = None) -> WorldView:
+    """A world view whose only fact ids come from a standing plan, not from retrieval."""
+    from neural_amplifier.contract import Directive, DirectiveStatus
+
+    return WorldView(
+        engine="thinker",
+        scope="base",
+        turn=42,
+        faction="Gaians",
+        surface_id="base.hurry",
+        action_space=[WAIT],
+        grounding=grounding,
+        directives=[
+            DirectiveStatus(
+                directive=Directive(
+                    id="fund-weather-paradigm",
+                    intent="save energy for the Weather Paradigm",
+                    metric="energy_reserves",
+                    comparator="at_least",
+                    target=300,
+                    entities=["fac:the-weather-paradigm"],
+                ),
+                current=82,
+                satisfied=False,
+            )
+        ],
+    )
+
+
+def test_citing_a_directives_entity_is_not_a_fabrication() -> None:
+    """na-zgz. The model was genuinely shown this id — inside the plan it was reasoning about.
+
+    Measured before the fix: this fired on three to four runs in five, always on the entity of
+    a directive the model had just been handed and had correctly used. The guard read the
+    offered set from the grounding block only, so an honest citation looked invented.
+    """
+    orders = Orders(choices=[Choice(action_id="hurry:none")], cited=["fac:the-weather-paradigm"])
+    ruling = CitationGuard().rule(orders, _view_with_plan([]))
+    assert not any("never offered" in a for a in ruling.advisories)
+    assert ruling.verdict == "allow"
+
+
+def test_a_genuinely_invented_id_is_still_caught() -> None:
+    """Widening "offered" must not disarm the check it exists for."""
+    orders = Orders(choices=[Choice(action_id="hurry:none")], cited=["fac:invented"])
+    ruling = CitationGuard().rule(orders, _view_with_plan([]))
+    assert any("never offered" in a and "fac:invented" in a for a in ruling.advisories)
+
+
+def test_a_plan_entity_citation_lands_on_the_record_separately() -> None:
+    """The other half of the bug: fixing only the guard would still lose the citation.
+
+    `quipu_cited` drives utilisation and must stay retrieval-only, or the number answers a
+    different question. But a citation the model was legitimately shown cannot simply vanish —
+    it would be invisible in both directions, neither flagged nor counted.
+    """
+    from neural_amplifier.knowledge import Grounding, plan_entities, summarise
+    from neural_amplifier.knowledge import Ruling as _Ruling
+
+    world_view = _view_with_plan([], grounding=["fac:recycling-tanks increases minerals"])
+    knowledge = summarise(
+        Grounding(
+            facts=("fac:recycling-tanks increases minerals",),
+            fact_ids=("fac:recycling-tanks",),
+        ),
+        _Ruling(),
+        guarded=True,
+        cited=["fac:recycling-tanks", "fac:the-weather-paradigm"],
+        shown_by_plan=plan_entities(world_view),
+    )
+    assert knowledge.quipu_cited == ["fac:recycling-tanks"]
+    assert knowledge.plan_cited == ["fac:the-weather-paradigm"]
+    # Utilisation still measures retrieval against retrieval — one fact offered, one used.
+    assert knowledge.utilisation == 1.0
+
+
+def test_an_invented_citation_reaches_neither_bucket() -> None:
+    """A hallucinated id must not be laundered into the provenance block by either route."""
+    from neural_amplifier.knowledge import Grounding, summarise
+    from neural_amplifier.knowledge import Ruling as _Ruling
+
+    knowledge = summarise(
+        Grounding(facts=("fac:recycling-tanks x",), fact_ids=("fac:recycling-tanks",)),
+        _Ruling(),
+        guarded=True,
+        cited=["fac:invented"],
+        shown_by_plan={"fac:the-weather-paradigm"},
+    )
+    assert knowledge.quipu_cited == []
+    assert knowledge.plan_cited == []
+
+
+def test_a_directive_with_no_entities_changes_nothing() -> None:
+    from neural_amplifier.contract import Directive, DirectiveStatus
+    from neural_amplifier.knowledge import plan_entities
+
+    world_view = WorldView(
+        engine="thinker",
+        scope="turn",
+        turn=1,
+        faction="Gaians",
+        directives=[
+            DirectiveStatus(
+                directive=Directive(
+                    id="d", intent="i", metric="energy_reserves", comparator="increase"
+                )
+            )
+        ],
+    )
+    assert plan_entities(world_view) == set()
