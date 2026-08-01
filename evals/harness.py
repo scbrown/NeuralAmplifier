@@ -16,6 +16,7 @@ that cannot be recomputed is an assertion rather than a measurement.
 
 from __future__ import annotations
 
+import difflib
 import hashlib
 import json
 import re
@@ -138,6 +139,58 @@ def write_prompts(out: Path, arms: dict[str, WorldView], note: str = "") -> None
     )
     manifest["answered_by"] = existing.get("answered_by", "unrecorded")
     (out / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
+
+
+def check_prompts(out: Path, arms: dict[str, WorldView], label: str = "") -> int:
+    """Do the committed answers still belong to the prompt the code produces? Returns stale count.
+
+    A prompt is not a stable thing — the system prompt has changed twice, and once an eval's
+    *arms* changed underneath it because they were derived from retriever behaviour that was
+    later reverted. Both times the committed answers stayed put and kept being scored, which is
+    the failure worth catching: a number that is merely out of date announces nothing, while
+    `score` goes on printing it with full confidence.
+
+    This does not judge whether the drift matters. It says what moved, and leaves that to a
+    person — some prompt changes cannot affect a given arm, and asserting which is a claim that
+    needs its own evidence.
+    """
+    manifest_path = out / "manifest.json"
+    if not manifest_path.exists():
+        print(f"{label}: no manifest — cannot tell whether the run matches the prompt")
+        return 1
+    manifest = json.loads(manifest_path.read_text())
+    stale = 0
+    for name, recorded in manifest.get("arms", {}).items():
+        if name not in arms:
+            print(f"{label} {name}: arm no longer exists in the eval")
+            stale += 1
+            continue
+        now = hashlib.sha256(task_text(arms[name]).encode()).hexdigest()[:12]
+        was = recorded.get("prompt_sha256")
+        if now == was:
+            print(f"{label} {name}: ok")
+            continue
+        stale += 1
+        print(
+            f"{label} {name}: STALE — measured against {was}, code now produces {now}"
+        )
+        committed = out / f"{name}.task.txt"
+        if committed.exists():
+            diff = list(
+                difflib.unified_diff(
+                    committed.read_text().splitlines(),
+                    task_text(arms[name]).splitlines(),
+                    "committed",
+                    "now",
+                    lineterm="",
+                    n=0,
+                )
+            )
+            for line in diff[:12]:
+                print(f"    {line}")
+            if len(diff) > 12:
+                print(f"    ... {len(diff) - 12} more diff lines")
+    return stale
 
 
 def load_answers(out: Path, name: str) -> list[dict[str, Any]]:

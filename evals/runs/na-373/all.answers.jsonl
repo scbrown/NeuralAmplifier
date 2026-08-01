@@ -1,20 +1,20 @@
-{"choice": "build:3", "cited": ["fac:network-node", "fac:research-hospital"]}
-{"choice": "build:3", "cited": ["fac:network-node", "fac:research-hospital"]}
-{"choice": "build:3", "cited": ["fac:network-node"]}
 {"choice": "build:3", "cited": ["fac:network-node"]}
 {"choice": "build:3", "cited": ["fac:network-node", "fac:research-hospital"]}
 {"choice": "build:3", "cited": ["fac:network-node", "fac:research-hospital"]}
-{"choice": "build:3", "cited": ["fac:network-node"]}
-{"choice": "build:3", "cited": ["fac:network-node"]}
-{"choice": "build:3", "cited": ["fac:network-node", "fac:research-hospital", "fac:recreation-commons"]}
-{"choice": "build:3", "cited": ["fac:network-node", "fac:research-hospital"]}
-{"choice": "build:3", "cited": ["fac:network-node", "fac:research-hospital"]}
-{"choice": "build:3", "cited": ["fac:network-node", "fac:research-hospital"]}
-{"choice": "build:3", "cited": ["fac:network-node", "fac:research-hospital"]}
-{"choice": "build:3", "cited": ["fac:network-node", "fac:research-hospital"]}
-{"choice": "build:3", "cited": ["fac:network-node"], "reason": "Network Node boosts labs output, aligning with University's research focus; cost 8 and upkeep 1 are sustainable with current energy reserves and income"}
-{"choice": "build:3", "cited": ["fac:network-node", "fac:research-hospital"]}
-{"choice": "build:3", "cited": ["fac:network-node"], "reason": "Network Node boosts labs output, aligning with University's research focus; cost 8 and 1/turn upkeep are sustainable with 82 reserves and 14 energy income"}
 {"choice": "build:6", "cited": ["fac:research-hospital", "fac:network-node"]}
+{"choice": "build:3", "cited": ["fac:network-node"]}
+{"choice": "build:3", "cited": ["fac:network-node", "fac:research-hospital"]}
+{"choice": "build:3", "cited": ["fac:network-node"]}
+{"choice": "build:3", "cited": ["fac:network-node"]}
+{"choice": "build:3", "cited": ["fac:network-node", "fac:research-hospital"]}
+{"choice": "build:3", "cited": ["fac:network-node"], "reason": "Network Node boosts labs output, aligning with University faction's research focus. Cost of 8 minerals fits the 3/turn surplus and single upkeep is sustainable with 14/turn energy income."}
 {"choice": "build:3", "cited": ["fac:network-node", "fac:research-hospital"]}
 {"choice": "build:3", "cited": ["fac:network-node", "fac:research-hospital"]}
+{"choice": "build:3", "cited": ["fac:network-node"]}
+{"choice": "build:3", "cited": ["fac:network-node"]}
+{"choice": "build:6", "cited": ["fac:research-hospital", "fac:network-node"]}
+{"choice": "build:3", "cited": ["fac:network-node"]}
+{"choice": "build:3", "cited": ["fac:network-node"]}
+{"choice": "build:3", "cited": ["fac:network-node", "fac:research-hospital"]}
+{"choice": "build:3", "cited": ["fac:network-node"]}
+{"choice": "build:3", "cited": ["fac:network-node"]}

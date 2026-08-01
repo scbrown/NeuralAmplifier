@@ -85,9 +85,7 @@ def test_malformed_toml_refuses_to_load(tmp_path: Path) -> None:
         load(write(tmp_path, "[brain\nkind = "))
 
 
-def test_a_non_numeric_override_is_refused(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_a_non_numeric_override_is_refused(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("NA_TOKEN_BUDGET", "lots")
     with pytest.raises(ConfigError, match="whole number"):
         load(write(tmp_path, ""))

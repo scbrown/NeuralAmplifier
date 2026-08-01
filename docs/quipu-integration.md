@@ -169,17 +169,23 @@ facility options grounded from the Thinker datalinks:
 
 | config | facts offered | mean cited | utilisation | choice |
 | --- | --- | --- | --- | --- |
-| all (action-space order) | 8 | 1.75 | 0.22 | Network Node **19/20** |
-| ranked, top 4 | 4 | 1.10 | 0.28 | Research Hospital 15/20, two others 5/20 |
+| all (action-space order) | 8 | 1.45 | 0.18 | Network Node **18/20** |
+| ranked, top 4 | 4 | 1.00 | 0.25 | Research Hospital 17/20, two others 3/20 |
 
-Utilisation rose 0.22 → 0.28, and the number is worthless: it rose because the denominator
+Utilisation rose 0.18 → 0.25, and the number is worthless: it rose because the denominator
 shrank. What the same run shows is that **truncation changed the decision and destabilised it**
-— the choice moved from Network Node to Research Hospital, and stability fell from 0.95 to 0.75.
+— the choice moved from Network Node to Research Hospital, and stability fell from 0.90 to 0.85.
 
-The rule has no predictive power. Of 35 citations across the baseline runs, 15 fell in its top
-four — **0.43, against the 0.50 that pure noise would give**. `fac:network-node` was cited in
+The rule has no predictive power. Of 29 citations across the baseline runs, 9 fell in its top
+four — **0.31, against the 0.50 that pure noise would give**. `fac:network-node` was cited in
 20 of 20 decisions and the rule ranked it fifth of eight: the first fact it discards is the only
 one every decision used.
+
+Both arms were re-measured after the system prompt gained its `history` section, so the table is
+current rather than merely once-true (`just eval check`). The first measurement, against the
+earlier prompt, gave 0.22 → 0.28 and 0.43-against-chance — the same conclusion, slightly weaker.
+Re-running moved every number a little and none of them qualitatively, which is roughly what a
+finding this size should do.
 
 **Why, and it generalises past this one rule.** Grounding is one fact per option. Dropping a
 fact does not remove *information*, it removes the *explanation of a specific option* — and an

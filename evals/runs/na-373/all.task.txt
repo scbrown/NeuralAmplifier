@@ -9,6 +9,20 @@ If the world view carries a `fairness` block with handicaps, those are rule
 advantages you actually hold. Reason about them honestly rather than ignoring
 them.
 
+If the world view carries a `history` list, those are the choices made for this
+same subject on recent turns, oldest first, each with the `tier` that made it —
+`llm` is your own earlier reasoning, `deterministic` is the engine's default.
+
+Production is re-decided every turn, so a plan only happens if you continue one.
+Treat an unfinished item you chose before as the standing answer and stay with it
+unless something in *this* world view actually changed the case — a new option,
+a changed cost, a directive, a threat. "I would rank these differently today" is
+not a change; it is the flip-flop that finishes nothing. Switching away from a
+partly built item usually forfeits the progress, so say what changed when you do.
+
+A `deterministic` entry carries no such weight. Nothing argued for it, so it is a
+default to improve on rather than a decision to respect.
+
 If the world view carries a `grounding` list, each entry is a retrieved fact in
 the form `<id> <text>` — for example
 `unit:colony-pod Colony Pod; founds a new base elsewhere`. These are the game's
@@ -154,6 +168,7 @@ World view:
     }
   ],
   "memory": null,
+  "history": null,
   "grounding": [
     "fac:recycling-tanks Recycling Tanks — cost 4; Bonus Resources; needs Biogenetics",
     "fac:recreation-commons Recreation Commons — cost 4; upkeep 1/turn; Fewer Drones; needs Social Psych",

@@ -8,6 +8,7 @@ measured, and re-measured when the prompt or the world view changes.
 ```bash
 just eval list              # what exists, what each asked, what it found
 just eval score na-373      # re-derive a finding from the committed run
+just eval check             # do the committed answers still match the current prompt?
 just eval prompts na-373    # regenerate the inputs (needs the Thinker rulebook)
 ```
 
@@ -37,9 +38,29 @@ Three steps, and the middle one is deliberately not the harness's business.
    earlier and destroys the distribution being measured.
 3. **`score`** reads `<arm>.answers.jsonl` — one `{"choice": ..., "cited": [...]}` per line.
 
-The manifest records `prompt_sha256` per arm. Answers sitting beside a prompt that has since
-changed are not evidence about the current prompt, and without the hash nobody can tell that
-they aren't.
+The manifest records `prompt_sha256` per arm, and `just eval check` compares it against what the
+code produces now. Answers sitting beside a prompt that has since changed are not evidence about
+the current prompt, and without this nobody can tell that they aren't — `score` goes on printing
+the same confident table either way.
+
+It has already happened twice, in two different ways:
+
+- **The system prompt changed.** `na-373` was measured, then `_SYSTEM` gained a section about
+  `history` for na-61c2. Ordinary drift, and the check names the added lines.
+- **An eval's own arms changed underneath it.** `na-61c2` built its contested world view from
+  `ground(view, retriever, 4)`, which at the time meant the top four by information value —
+  the retriever ranked, briefly, before na-373 refuted it. Reverting that silently turned the
+  same call into "the first four in action-space order": a different set of facts, a different
+  experiment, the same name, and the old answers still sitting beside it.
+
+The second is the worse one and the lesson is in the fix: **an eval's arms are part of the
+eval.** `build_history` now names the four facts it was measured with instead of deriving them
+from whatever a retriever currently does, so the experiment stops changing whenever the
+retriever does.
+
+`check` deliberately does not judge whether drift *matters*. It says what moved and leaves that
+to a person — some prompt changes cannot affect a given arm, and asserting which is a claim
+needing its own evidence.
 
 ## Two rules, both learned the hard way
 

@@ -32,17 +32,36 @@ from harness import base_production, ground, load_answers, spread, tally
 
 from neural_amplifier.contract import Directive, DirectiveStatus, PriorChoice
 
-#: Facts offered. Four, not eight — this eval needs the *contested* version of the decision, and
-#: eight facts makes it near-unanimous (see the retrieval_ranking run).
-KEEP = 4
+#: The four facts this eval was measured with, named rather than derived.
+#:
+#: They were originally whatever `ground(view, retriever, 4)` returned, which at the time meant
+#: the top four by information value — the retriever ranked, briefly, before na-373 refuted it.
+#: Reverting that silently changed this eval: the same call now yields the first four in
+#: action-space order, a different set of facts and so a different experiment under the same
+#: name, with the committed answers still sitting beside it.
+#:
+#: So the condition is pinned here. An eval's arms are part of the eval; deriving them from
+#: whatever a retriever currently does means the experiment changes whenever the retriever does,
+#: which is exactly what happened.
+CONTESTED = (
+    "fac:command-center",
+    "fac:research-hospital",
+    "fac:children-s-creche",
+    "fac:recreation-commons",
+)
 
 #: The option the contested arm picks least often. Continuing it is the behaviour under test.
 MINORITY = "build:7"
 
 
-def arms(links: Path, keep: int = KEEP) -> dict[str, Any]:
+def arms(links: Path, keep: int | None = None) -> dict[str, Any]:
     view, retriever = base_production(links)
-    contested = ground(view, retriever, keep)
+    grounded = ground(view, retriever)
+    by_id = {ln.split(" ", 1)[0]: ln for ln in (grounded.grounding or [])}
+    missing = [f for f in CONTESTED if f not in by_id]
+    if missing:
+        raise SystemExit(f"eval condition no longer retrievable: {', '.join(missing)}")
+    contested = grounded.model_copy(update={"grounding": [by_id[f] for f in CONTESTED]})
     item = next(a.action for a in view.action_space if a.id == MINORITY)
     turn = contested.turn
 
@@ -80,7 +99,7 @@ def arms(links: Path, keep: int = KEEP) -> dict[str, Any]:
     return {"nohistory": contested, "history": with_history, "changed": changed}
 
 
-def score(out: Path, links: Path, keep: int = KEEP) -> None:
+def score(out: Path, links: Path, keep: int | None = None) -> None:
     print(f"{'arm':12} {'n':>3}  {'continued':>9}  choices")
     for name in ("nohistory", "history", "changed"):
         rows = load_answers(out, name)

@@ -1,14 +1,14 @@
 {
   "note": "Can we offer fewer grounding facts by ranking them?",
-  "answered_by": "claude-haiku-4-5, one independent agent per decision, 2026-08-01",
   "arms": {
     "all": {
-      "prompt_sha256": "661af1d2cea6",
+      "prompt_sha256": "4648875a1a5a",
       "answers": 20
     },
     "ranked": {
-      "prompt_sha256": "89e6f8562330",
+      "prompt_sha256": "068a5740dfd2",
       "answers": 20
     }
-  }
+  },
+  "answered_by": "claude-haiku-4-5, one independent agent per decision, 2026-08-01 (re-run after _SYSTEM gained the history section)"
 }

@@ -125,7 +125,7 @@ Measured with the same model (Haiku) on two surfaces, same graph, same retrieval
 | `base.hurry` | 2 | 1 | 1 | **1.00** |
 
 `base.production` was re-measured later over twenty decisions, once citations were asked to
-include facts that helped *rule an option out*: 1.75 of 8 cited, utilisation **0.22**. Higher,
+include facts that helped *rule an option out*: 1.45 of 8 cited, utilisation **0.18**. Higher,
 and the conclusion is unchanged — see the `na-373` eval (`just eval score na-373`), which also
 records why narrowing the offered set turned out not to be the fix.
 

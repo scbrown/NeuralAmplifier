@@ -210,8 +210,12 @@ without a model, a game, or the sibling checkout.
 ```bash
 just eval list              # what exists, what each asked, what it found
 just eval score na-373      # recompute a finding from the committed run
+just eval check             # are the committed answers still about the current prompt?
 just eval prompts na-373    # regenerate the inputs (needs THINKER_DIR)
 ```
+
+Run `just eval check` after changing the system prompt, a retriever, or anything an eval's
+world view is built from. A stale run keeps scoring cleanly and says nothing about what ships.
 
 **Do not quote a measurement that is not in `evals/runs/`.** A number in a doc that nothing can
 recompute is an assertion, and this project has already had to walk one back. If you measure

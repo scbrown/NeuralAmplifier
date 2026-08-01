@@ -1,20 +1,20 @@
 {"choice": "build:6", "cited": ["fac:research-hospital"]}
 {"choice": "build:6", "cited": ["fac:research-hospital"]}
-{"choice": "build:7", "cited": ["fac:children-s-creche"], "reason": "University faction with small population needs growth to expand research capacity; Children's Creche (cost 5, upkeep 1/turn) is affordable and provides efficiency bonus alongside population scaling."}
-{"choice": "build:6", "cited": ["fac:research-hospital"]}
-{"choice": "build:1", "cited": ["fac:recreation-commons"], "reason": "Reduce unrest: 2 drones threaten faction stability; Recreation Commons directly reduces drones at low cost (4) and upkeep (1/turn). University faction needs morale/stability to maintain research advantage."}
 {"choice": "build:6", "cited": ["fac:research-hospital"]}
 {"choice": "build:6", "cited": ["fac:research-hospital"]}
 {"choice": "build:6", "cited": ["fac:research-hospital"]}
-{"choice": "build:6", "cited": ["fac:research-hospital"], "reason": "Research Hospital aligns with University faction's research focus, provides labs output bonus to improve our 21/turn production, and our energy reserves (82) and income (14/turn) can sustain the 12-mineral cost."}
+{"choice": "build:1", "cited": ["fac:recreation-commons"]}
 {"choice": "build:6", "cited": ["fac:research-hospital"]}
-{"choice": "build:6", "cited": ["fac:research-hospital"], "reason": "University faction prioritizes research output. Research Hospital adds Labs and Psych Bonus, directly amplifying our core strength. With +14 energy/turn income against 3/turn upkeep and 82 reserves, we can afford the 12-mineral cost. This maximizes our faction's advantage."}
+{"choice": "build:6", "cited": ["fac:research-hospital"]}
 {"choice": "build:6", "cited": ["fac:research-hospital"]}
 {"choice": "build:6", "cited": ["fac:research-hospital"]}
 {"choice": "build:6", "cited": ["fac:research-hospital"]}
 {"choice": "build:7", "cited": ["fac:children-s-creche"]}
 {"choice": "build:6", "cited": ["fac:research-hospital"]}
-{"choice": "build:1", "cited": ["fac:recreation-commons"]}
-{"choice": "build:7", "cited": ["fac:children-s-creche", "fac:research-hospital", "fac:recreation-commons"]}
+{"choice": "build:6", "cited": ["fac:research-hospital"]}
+{"choice": "build:7", "cited": ["fac:children-s-creche"]}
+{"choice": "build:6", "cited": ["fac:research-hospital"]}
+{"choice": "build:6", "cited": ["fac:research-hospital"]}
+{"choice": "build:6", "cited": ["fac:research-hospital"]}
 {"choice": "build:6", "cited": ["fac:research-hospital"]}
 {"choice": "build:6", "cited": ["fac:research-hospital"]}

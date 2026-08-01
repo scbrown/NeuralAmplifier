@@ -119,9 +119,15 @@ play engine="thinker" faction="GAIANS":
 # A behavioural question about the brain, not a unit test: what a decision does over many
 # runs, which `just test` cannot assert. `score` reads a committed run and needs no model,
 # no game and no sibling checkout; `prompts` regenerates the inputs and needs the rulebook.
-# Behavioural evals: just eval list | prompts <id> | score <id>
+# Behavioural evals: just eval list | prompts <id> | score <id> | check [<id>]
 eval cmd="list" id="":
-    @cd orchestrator && uv run python ../evals/run.py {{cmd}} {{id}} --links ../{{thinker}}/docs/alphax.txt
+    #!/usr/bin/env bash
+    set -euo pipefail
+    # Resolved from the repo root, not from orchestrator/, so an absolute THINKER_DIR works.
+    # The recipe used to prefix "../" unconditionally and turned /home/user/thinker into
+    # ../home/user/thinker.
+    links="$(cd "$(dirname "{{thinker}}/docs/alphax.txt")" 2>/dev/null && pwd)/alphax.txt" || links="{{thinker}}/docs/alphax.txt"
+    uv run --directory orchestrator python ../evals/run.py {{cmd}} {{id}} --links "$links"
 
 # === Coverage ===
 
