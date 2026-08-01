@@ -30,4 +30,5 @@
 # Running It
 
 - [Building & Testing](building-and-testing.md)
+- [Playing as the Brain](agent-play.md)
 - [Observability](observability.md)
