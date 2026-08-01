@@ -205,15 +205,19 @@ quipu-serve db=".quipu/na.db" bind="127.0.0.1:3030":
 
 # === Documentation ===
 
+# mdBook renders docs/ in place — see book.toml for why `src` points there
+# rather than at a copy. `check` is the docs gate: lint, then prove it builds.
 # Documentation: just docs <cmd>
-# Commands: lint fix fmt check
+# Commands: build serve lint fix fmt check
 docs cmd="check":
     #!/usr/bin/env bash
     set -euo pipefail
     case "{{cmd}}" in
+        build) mdbook build ;;
+        serve) mdbook serve --open ;;
         lint)  npx --yes {{markdownlint}} "**/*.md" ;;
         fix)   npx --yes {{markdownlint}} --fix "**/*.md" ;;
         fmt)   npx prettier --write "**/*.md" --prose-wrap preserve ;;
-        check) npx --yes {{markdownlint}} "**/*.md" ;;
-        *)     echo "Unknown: {{cmd}}. Try: lint fix fmt check" ;;
+        check) npx --yes {{markdownlint}} "**/*.md" && mdbook build ;;
+        *)     echo "Unknown: {{cmd}}. Try: build serve lint fix fmt check" ;;
     esac

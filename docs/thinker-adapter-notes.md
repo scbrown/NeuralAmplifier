@@ -2,7 +2,7 @@
 
 Source-grounded reference for the **Thinker adapter** (Track A / near-term). Verified against
 the fork at `scbrown/thinker` (paths are `src/...`; `file:line` cited). For the overall
-dual-engine design and shared contract, see [VISION.md](../VISION.md) and [contract.md](contract.md).
+dual-engine design and shared contract, see [VISION.md](https://github.com/scbrown/NeuralAmplifier/blob/main/VISION.md) and [contract.md](contract.md).
 
 > **Why this route:** Thinker patches the original, **complete** *Alpha Centauri* — production,
 > full tech tree, social engineering, diplomacy, combat, secret projects, real fog-of-war —

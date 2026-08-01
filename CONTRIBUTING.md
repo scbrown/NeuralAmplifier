@@ -60,6 +60,7 @@ touch that component.
 | [pre-commit](https://pre-commit.com/) | `pip install pre-commit` | The quality gate (`just check`) |
 | [Node](https://nodejs.org/) 22+ | your platform's installer | markdown + `.gls.js` tooling via `npx` |
 | [beads](https://github.com/steveyegge/beads) (`bd`) | `npm install -g @beads/bd` — or `brew install beads` | Task tracking (see below) |
+| [mdBook](https://rust-lang.github.io/mdBook/) | `cargo install mdbook` — or grab a [release binary](https://github.com/rust-lang/mdBook/releases) | Building the docs site (`just docs build`) |
 
 > **Install `bd` from npm or Homebrew, not `go install`.** The `go install` route documented
 > upstream builds with `CGO_ENABLED=0`, and embedded Dolt needs CGO — `bd init` then fails with

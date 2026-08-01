@@ -108,8 +108,8 @@ view produces an orchestrator fixture *and* a contract fixture from one run.
 
 ## 6. CI
 
-Default CI (`.github/workflows/ci.yml`) runs only the fast, self-contained lanes: markdown
-lint, the pre-commit gate, the orchestrator (`ruff`, `ruff format`, `mypy`, `pytest`), and the
+Default CI (`.github/workflows/ci.yml`) runs only the fast, self-contained lanes: the docs
+lane (markdown lint plus `mdbook build`), the pre-commit gate, the orchestrator (`ruff`, `ruff format`, `mypy`, `pytest`), and the
 **Thinker DLL cross-compile**, which uploads `thinker.dll` as a build artifact. None of these
 need a game, an adapter checkout of SMAC, or an API key — the scripted brain is the default, so
 CI never makes a paid call. Game-dependent lanes — the GLSMAC builtin build, GLSMAC full-game
@@ -117,6 +117,16 @@ integration (SMAC assets), and Thinker/Wine e2e — run locally via `just` and, 
 nightly runner.
 GLSMAC upstream CI compiles but runs no tests; adding a Debug `--gse-tests` step (no display,
 no assets) is the cleanest check to build on.
+
+**The docs lane builds the book, it does not merely lint it.** A chapter renamed or deleted
+without updating `docs/SUMMARY.md` satisfies every markdown rule and still breaks the site, so
+lint alone would pass a broken tree. `just docs check` is the same pair locally.
+
+markdownlint's version is pinned in three places that must agree —
+`.pre-commit-config.yaml`, the justfile's `markdownlint` variable, and the CI step. They are
+separate because the three runners install it differently, not because they may differ: an
+unpinned `npx` once floated onto a newer rule set and left `just docs check` red against a green
+`just check`, on a tree nobody had touched.
 
 ## What's testable when (maps to VISION §Roadmap)
 

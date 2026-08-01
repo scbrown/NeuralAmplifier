@@ -144,7 +144,7 @@ Conventions for this repo:
 
 Tooling you need to install first — and the two cross-compile gotchas — is in
 [CONTRIBUTING.md](CONTRIBUTING.md#tooling). Core tooling (`just`, `uv`, `pre-commit`, Node,
-`bd`) needs no game and no cross-compiler.
+`bd`, `mdbook`) needs no game and no cross-compiler.
 
 ```bash
 just --list          # Show available commands
@@ -168,6 +168,25 @@ just glsmac test          # build test lint fmt  (test = headless --gse-tests)
 just thinker build        # build test           (needs the Thinker toolchain)
 just play thinker GAIANS  # full observe→decide→act loop for an engine
 ```
+
+## Documentation Commands
+
+```bash
+just docs build      # Build the mdBook into book/ (gitignored)
+just docs serve      # Serve it locally with hot reload
+just docs lint       # Lint markdown
+just docs check      # Lint, then prove the book builds
+```
+
+**mdBook renders `docs/` in place** — `book.toml` points `src` at the real directory rather than
+a copy under a book-specific tree, so a doc has one path and one source of truth. Two
+consequences worth knowing before you move a file:
+
+- **`docs/SUMMARY.md` is the table of contents.** A new doc that is not listed there is not in
+  the book, and mdBook will not tell you — it is not an error, just an absence.
+- **Links out of `docs/` must be absolute.** mdBook rewrites `.md` to `.html` relative to the
+  source root, so a `../VISION.md` resolves outside the book and 404s. Use the full GitHub URL;
+  sibling links inside `docs/` stay relative and work in both renderers.
 
 ## Quality Requirements
 
@@ -194,6 +213,9 @@ merge-conflict detection, markdown linting, and Ruff (once Python code exists).
 - User-facing changes MUST include documentation updates.
 - Update `README.md` if the change affects quick-start or usage.
 - Update `docs/building-and-testing.md` if the build or test flow changes.
+- If you touched `docs/`, run `just docs check` — `just check` lints markdown but does not build
+  the book, and a chapter renamed without updating `docs/SUMMARY.md` passes every markdown rule.
+- A new doc goes in `docs/SUMMARY.md` in the same change, or it ships invisible.
 
 ## Landing the Plane (Session Completion)
 

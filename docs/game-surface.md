@@ -338,7 +338,7 @@ Three of these favour the *human* — the ledger is not uniformly tilted, which 
 to record rather than hand-wave.
 
 > **This table is an index, not the source of truth.** Building
-> [`fairness.py`](../orchestrator/src/neural_amplifier/fairness.py) against the fork showed a
+> [`fairness.py`](https://github.com/scbrown/NeuralAmplifier/blob/main/orchestrator/src/neural_amplifier/fairness.py) against the fork showed a
 > static `favours` column cannot be right: `tech_cost_factor` is `{124,116,108,100,84,76}`
 > (`main.h:327`), so the AI pays *more* below Thinker and the entry flips sides at Librarian
 > where the factor is exactly 100. `content_pop` flips at the same level for the same reason

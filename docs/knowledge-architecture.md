@@ -9,7 +9,7 @@
 
 ## Why this exists
 
-Today [VISION.md](../VISION.md) §2 says *"We feed state, not the rules — Claude already knows
+Today [VISION.md](https://github.com/scbrown/NeuralAmplifier/blob/main/VISION.md) §2 says *"We feed state, not the rules — Claude already knows
 SMAC."* This architecture **evolves** that stance. Claude knows *Sid Meier's Alpha Centauri*
 broadly from training, but that is not enough to play *well* over a long horizon: it doesn't
 distinguish canonical SMAC from a Thinker house-rule or a GLSMAC deviation, it can't cite how a

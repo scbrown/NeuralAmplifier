@@ -1,13 +1,13 @@
 # GLSMAC Integration Notes
 
 Source-grounded reference for the **GLSMAC adapter** (Track B / long-term). For the overall
-dual-engine design and the shared contract, see [VISION.md](../VISION.md) and
+dual-engine design and the shared contract, see [VISION.md](https://github.com/scbrown/NeuralAmplifier/blob/main/VISION.md) and
 [contract.md](contract.md); for the near-term engine, [thinker-adapter-notes.md](thinker-adapter-notes.md).
 
 The turnkey, source-grounded reference for building Neural Amplifier against GLSMAC.
 Everything here was verified by reading the fork at `scbrown/glsmac` (paths are
 `src/...` in that tree); `file:line` citations point at the evidence. Treat this as the
-"what's actually true today" companion to the aspirational [VISION.md](../VISION.md).
+"what's actually true today" companion to the aspirational [VISION.md](https://github.com/scbrown/NeuralAmplifier/blob/main/VISION.md).
 
 > **Headline:** GLSMAC is early. The scripting engine, event system, and a handful of
 > managers are real, but most of the *game* — production, research, diplomacy, combat

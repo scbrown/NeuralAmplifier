@@ -630,7 +630,7 @@ The resulting cadence:
 ## 6. Proposed sequencing
 
 Ordered so each step is verifiable **without the next one existing**, and the slow lane is
-built last. Maps onto [VISION.md](../VISION.md) §7.
+built last. Maps onto [VISION.md](https://github.com/scbrown/NeuralAmplifier/blob/main/VISION.md) §7.
 
 | Step | What | Game needed? | Roadmap |
 | --- | --- | --- | :---: |

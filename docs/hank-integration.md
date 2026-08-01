@@ -22,7 +22,7 @@ Both reuse Hank's shipped machinery. The honest blockers are collected at the en
 
 ## Role (a): Engine-mechanics grounding
 
-[VISION.md](../VISION.md) says we feed state, not rules — Claude already knows SMAC. But Claude
+[VISION.md](https://github.com/scbrown/NeuralAmplifier/blob/main/VISION.md) says we feed state, not rules — Claude already knows SMAC. But Claude
 knows *stock* SMAC broadly; it cannot cite how a *specific engine* scores a specific decision, and
 it cannot tell a Thinker house-rule from canonical behavior. Role (a) closes that gap by treating
 the engine's C++ scoring functions as ground truth and promoting them into the knowledge graph.

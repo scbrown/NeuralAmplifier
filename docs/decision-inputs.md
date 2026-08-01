@@ -122,7 +122,7 @@ terseness is a design goal.
 to matter on a decision re-evaluated every turn and high enough that the earlier alarm about
 oscillation was overstated: an uncontrolled pair of disagreeing runs turned out to be this same
 one-in-five, not evidence of a coin flip. Run it with
-[`scripts/decision_stability.py`](../scripts/decision_stability.py).
+[`scripts/decision_stability.py`](https://github.com/scbrown/NeuralAmplifier/blob/main/scripts/decision_stability.py).
 
 **Why category 5 is on this list.** Production decisions are re-evaluated constantly, and a
 stateless brain will happily flip between two options every turn, accumulating nothing. Recent

@@ -1,0 +1,30 @@
+# mdBook renders `docs/` in place — `src` points at the real directory rather
+# than a `book/src/` copy underneath it.
+#
+# That is the whole reason this file sits at the repo root. Every doc already
+# links to its siblings by bare filename (`[the contract](contract.md)`) and is
+# linked to from README.md and AGENTS.md as `docs/<name>.md`. Moving the files
+# under a book-specific source tree would render identically and break both:
+# every GitHub deep link anyone holds, and the ~40 cross-references between the
+# docs themselves. One source of truth, two renderers.
+[book]
+title = "Neural Amplifier"
+authors = ["Steve Brown"]
+description = "An LLM brain for Sid Meier's Alpha Centauri"
+src = "docs"
+language = "en"
+
+[build]
+# Outside `src`, so a build cannot pick up its own output as a chapter on the
+# next run. Gitignored.
+build-dir = "book"
+
+[output.html]
+default-theme = "coal"
+preferred-dark-theme = "coal"
+git-repository-url = "https://github.com/scbrown/NeuralAmplifier"
+edit-url-template = "https://github.com/scbrown/NeuralAmplifier/edit/main/{path}"
+site-url = "/NeuralAmplifier/"
+
+[output.html.search]
+enable = true

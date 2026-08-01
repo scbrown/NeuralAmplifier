@@ -69,3 +69,6 @@ CLAUDE.local.md
 
 # Beads local working state (the tracked artifact is .beads/issues.jsonl)
 .beads/.auto-import-issues.jsonl
+
+# mdBook output — rebuildable with `just docs build`. The sources are docs/.
+/book/

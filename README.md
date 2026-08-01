@@ -286,7 +286,8 @@ just check               # Full quality gate (pre-commit hooks)
 just orchestrator test   # Component-scoped recipes: <component> <cmd>
 just glsmac test         # GLSMAC adapter (headless --gse-tests)
 just thinker build       # Thinker adapter (needs the Thinker toolchain)
-just docs check          # Markdown lint
+just docs check          # Markdown lint, then build the book
+just docs serve          # The docs site at localhost, with hot reload
 
 just coverage            # Run health: surfaces fired, fallback rate, adherence
 just replay --store …    # Re-run a recorded log against the current code — no game
