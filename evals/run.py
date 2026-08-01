@@ -34,12 +34,13 @@ EVALS = {
     "na-373": (
         retrieval_ranking,
         "Can we offer fewer grounding facts by ranking them?",
-        "No — truncation changed the decision, and the rule predicts citation worse than chance.",
+        "WITHDRAWN — the refutation was fixture-bound; one near-unanimous world view cannot\n"
+        " measure a ranking rule at all. Ranking stays out: unmeasured, not refuted (na-htm).",
     ),
     "na-61c2": (
         build_history,
         "Does recent build history stop a base flip-flopping?",
-        "Yes — 0.30 to 1.00 continued, and still 0.10 when the case actually changed.",
+        "Yes — 0.10 to 1.00 continued, and 0.00 when the case actually changed.",
     ),
     "na-vbe": (
         grounding_compaction,

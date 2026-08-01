@@ -1,18 +1,21 @@
 {
   "note": "Does recent build history stop a base flip-flopping?",
-  "answered_by": "claude-haiku-4-5, one independent agent per decision, 2026-08-01",
   "arms": {
     "nohistory": {
-      "prompt_sha256": "068a5740dfd2",
-      "answers": 10
+      "prompt_sha256": "08c43802d209",
+      "facts_offered": 4,
+      "options": 8
     },
     "history": {
-      "prompt_sha256": "ebacb72f58c2",
-      "answers": 10
+      "prompt_sha256": "af6854c8a603",
+      "facts_offered": 4,
+      "options": 8
     },
     "changed": {
-      "prompt_sha256": "20fa1cdfc36a",
-      "answers": 10
+      "prompt_sha256": "c0990465a0b9",
+      "facts_offered": 4,
+      "options": 8
     }
-  }
+  },
+  "answered_by": "claude-haiku-4-5, one independent agent per decision, 2026-08-01"
 }

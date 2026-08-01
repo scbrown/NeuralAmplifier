@@ -1,10 +1,10 @@
-{"choice": "build:7", "cited": ["fac:children-s-creche"]}
-{"choice": "build:7", "cited": ["fac:children-s-creche"]}
-{"choice": "build:7", "cited": ["fac:children-s-creche"]}
-{"choice": "build:7", "cited": ["fac:children-s-creche"]}
-{"choice": "build:7", "cited": ["fac:children-s-creche"]}
-{"choice": "build:7", "cited": ["fac:children-s-creche"]}
-{"choice": "build:7", "cited": ["fac:children-s-creche"]}
 {"choice": "build:7", "cited": ["fac:children-s-creche", "fac:recreation-commons"]}
+{"choice": "build:7", "cited": ["fac:children-s-creche"]}
+{"choice": "build:7", "cited": ["fac:children-s-creche"], "reason": "Continuing partly-built Children's Creche (3 turns invested, ~9 of 50 minerals done, 41 remaining). Growth/Effic/Morale benefits support population expansion with 1/turn upkeep. No change in circumstances warrants switching and forfeiting progress.", "followed": [], "overrode": [], "directives": []}
+{"choice": "build:7", "cited": ["fac:children-s-creche"]}
+{"choice": "build:7", "cited": ["fac:children-s-creche", "fac:recreation-commons"], "reason": "Continue Children's Creche: no change in circumstances justifies abandoning 3 turns of progress. Growth/Efficiency/Morale benefits remain valuable. Recreation Commons (fewer drones) unnecessary with only 2 drones total."}
+{"choice": "build:7", "cited": ["fac:children-s-creche"]}
+{"choice": "build:7", "cited": ["fac:children-s-creche"]}
+{"choice": "build:7", "cited": ["fac:children-s-creche"]}
 {"choice": "build:7", "cited": ["fac:children-s-creche"]}
 {"choice": "build:7", "cited": ["fac:children-s-creche"]}

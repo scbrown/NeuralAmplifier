@@ -129,55 +129,79 @@ World view:
     {
       "id": "build:0",
       "action": "Recycling Tanks",
-      "effects": null
+      "effects": null,
+      "cost": 40,
+      "category": "facility",
+      "turns_if_switched": 14
     },
     {
       "id": "build:1",
       "action": "Recreation Commons",
-      "effects": null
+      "effects": null,
+      "cost": 40,
+      "category": "facility",
+      "turns_if_switched": 14
     },
     {
       "id": "build:2",
       "action": "Energy Bank",
-      "effects": null
+      "effects": null,
+      "cost": 80,
+      "category": "facility",
+      "turns_if_switched": 27
     },
     {
       "id": "build:3",
       "action": "Network Node",
-      "effects": null
+      "effects": null,
+      "cost": 80,
+      "category": "facility",
+      "turns_if_switched": 27
     },
     {
       "id": "build:4",
       "action": "Perimeter Defense",
-      "effects": null
+      "effects": null,
+      "cost": 50,
+      "category": "facility",
+      "turns_if_switched": 17
     },
     {
       "id": "build:5",
       "action": "Command Center",
-      "effects": null
+      "effects": null,
+      "cost": 40,
+      "category": "facility",
+      "turns_if_switched": 14
     },
     {
       "id": "build:6",
       "action": "Research Hospital",
-      "effects": null
+      "effects": null,
+      "cost": 120,
+      "category": "facility",
+      "turns_if_switched": 40
     },
     {
       "id": "build:7",
       "action": "Children's Creche",
-      "effects": null
+      "effects": null,
+      "cost": 50,
+      "category": "facility",
+      "turns_if_switched": 17
     }
   ],
   "memory": null,
   "history": null,
   "grounding": [
-    "fac:recycling-tanks Recycling Tanks — cost 4; Bonus Resources; needs Biogenetics",
-    "fac:recreation-commons Recreation Commons — cost 4; upkeep 1/turn; Fewer Drones; needs Social Psych",
-    "fac:energy-bank Energy Bank — cost 8; upkeep 1/turn; Economy Bonus; needs Industrial Economics",
-    "fac:network-node Network Node — cost 8; upkeep 1/turn; Labs Bonus; needs Information Networks",
-    "fac:perimeter-defense Perimeter Defense — cost 5; Defense +100%; needs Doctrine: Loyalty",
-    "fac:command-center Command Center — cost 4; upkeep 1/turn; +2 Morale:Land; needs Doctrine: Mobility",
-    "fac:research-hospital Research Hospital — cost 12; upkeep 3/turn; Labs and Psych Bonus; needs Gene Splicing",
-    "fac:children-s-creche Children's Creche — cost 5; upkeep 1/turn; Growth/Effic/Morale; needs Ethical Calculus"
+    "fac:recycling-tanks Recycling Tanks; Bonus Resources",
+    "fac:recreation-commons Recreation Commons; upkeep 1/turn; Fewer Drones",
+    "fac:energy-bank Energy Bank; upkeep 1/turn; Economy Bonus",
+    "fac:network-node Network Node; upkeep 1/turn; Labs Bonus",
+    "fac:perimeter-defense Perimeter Defense; Defense +100%",
+    "fac:command-center Command Center; upkeep 1/turn; +2 Morale:Land",
+    "fac:research-hospital Research Hospital; upkeep 3/turn; Labs and Psych Bonus",
+    "fac:children-s-creche Children's Creche; upkeep 1/turn; Growth/Effic/Morale"
   ],
   "advisories": null,
   "contacts": null,

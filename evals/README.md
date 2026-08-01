@@ -20,8 +20,8 @@ clone by whoever doubts it. `prompts` is the only command that needs `THINKER_DI
 
 | id | Asks | Found |
 | --- | --- | --- |
-| `na-373` | Can we offer fewer grounding facts by ranking them? | **No.** Truncation changed the decision, and the ranking rule predicts citation worse than chance. |
-| `na-61c2` | Does recent build history stop a base flip-flopping? | **Yes**, 0.30 → 1.00 continued — and still 0.10 when the case actually changed, so it is not an anchor. |
+| `na-373` | Can we offer fewer grounding facts by ranking them? | **Withdrawn.** The refutation was fixture-bound, and the reversal is no better — both numbers are one fact's rank. Ranking stays out as *unmeasured*. See its `NOTES.md`. |
+| `na-61c2` | Does recent build history stop a base flip-flopping? | **Yes**, 0.10 → 1.00 continued — and 0.00 when the case actually changed, so it is not an anchor. |
 | `na-vbe` | Can grounding drop what the action space already carries? | **Yes.** Grounding 43% smaller, choice held 20/20 vs 19/20 (Fisher p=1.0). The first run measured a fixture bug — see its `NOTES.md`. |
 
 Write-ups: [quipu-integration.md](../docs/quipu-integration.md) and
