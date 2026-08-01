@@ -25,6 +25,7 @@ from .decisions import (
     world_view_hash,
 )
 from .directives import DirectiveStore, accept, entities_shown, evaluate, relevant, tradeoffs
+from .fairness import profile as fairness_profile
 from .fog import Redaction, redact
 from .knowledge import (
     Grounding,
@@ -364,7 +365,27 @@ class Orchestrator:
         plan: PlanBlock,
         tier: str = "llm",
     ) -> DecisionRecord:
+        # Derive the ledger when the adapter stamped the *inputs* but not the entries.
+        #
+        # An empty `fairness_profile` is documented as the claim "won under unmodified rules"
+        # (docs/observability.md), so an AI-slot decision recorded with no handicaps asserts
+        # fair play on a game that had none. An adapter that knows only what the engine tells
+        # it — which slot, which difficulty — would produce exactly that.
+        #
+        # Deriving here rather than in the adapter is also what `fairness.py` is for: three
+        # entries change which side they favour as difficulty moves and two are inert under the
+        # fork's defaults, so a static list stamped in C++ would declare handicaps that are not
+        # in force and mislabel ones that are. The adapter reports the inputs; the rules live
+        # in one place. An adapter that stamps entries itself is left alone and checked by
+        # `fairness.drift` instead.
         fairness = world_view.fairness
+        if (
+            fairness is not None
+            and fairness.slot
+            and fairness.difficulty
+            and not fairness.handicaps
+        ):
+            fairness = fairness_profile(fairness.slot, fairness.difficulty)
         return DecisionRecord(
             trace_id=world_view.traceparent(),
             game_id=self.game_id,

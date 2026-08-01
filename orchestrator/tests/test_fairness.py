@@ -223,3 +223,67 @@ def test_a_mode_b_plus_run_claims_it_cleanly(thinker_base: WorldView, tmp_path: 
     result = report(log.read())
     assert result.fair_play is True
     assert result.summary()["structural_handicaps"] == []
+
+
+# --- the adapter reports inputs; the ledger is derived (na-04z) ---------------
+
+
+def test_an_ai_slot_never_records_an_empty_ledger(thinker_base: WorldView) -> None:
+    """An empty `fairness_profile` is the claim "won under unmodified rules".
+
+    An adapter knows only what the engine tells it — which slot, which difficulty. If that were
+    recorded as-is, every AI-slot decision would assert fair play on a game that had none, and
+    the assertion would be invisible: nothing distinguishes "no handicaps in force" from "nobody
+    filled the list in".
+    """
+    from neural_amplifier.brain import ScriptedBrain
+    from neural_amplifier.contract import Fairness
+    from neural_amplifier.orchestrator import Orchestrator
+
+    stamped_inputs_only = thinker_base.model_copy(
+        update={"fairness": Fairness(slot="ai", difficulty="transcend")}
+    )
+    record = Orchestrator(ScriptedBrain()).decide(stamped_inputs_only).record
+
+    assert record.fairness_profile, "an AI slot at transcend has handicaps; none were recorded"
+    assert "tech_cost_factor" in record.fairness_profile
+
+
+def test_a_human_slot_derives_an_empty_ledger_and_that_is_the_point(
+    thinker_base: WorldView,
+) -> None:
+    """Mode B+. Every asymmetry in the fork is an `is_human` branch, so a human slot genuinely
+    has none — and that emptiness is what backs an unqualified fair-play claim."""
+    from neural_amplifier.brain import ScriptedBrain
+    from neural_amplifier.contract import Fairness
+    from neural_amplifier.orchestrator import Orchestrator
+
+    human = thinker_base.model_copy(
+        update={"fairness": Fairness(slot="human", difficulty="transcend")}
+    )
+    assert Orchestrator(ScriptedBrain()).decide(human).record.fairness_profile == []
+
+
+def test_an_adapter_that_stamps_its_own_entries_is_left_alone(thinker_base: WorldView) -> None:
+    """Derivation fills a gap; it does not overrule an adapter that has an opinion.
+
+    A different engine may know asymmetries this ledger does not model, and silently replacing
+    them with the Thinker-derived set would be worse than the empty list it is fixing.
+    `fairness.drift` is what checks a stamped block, not this.
+    """
+    from neural_amplifier.brain import ScriptedBrain
+    from neural_amplifier.contract import Fairness, Handicap
+    from neural_amplifier.orchestrator import Orchestrator
+
+    own = thinker_base.model_copy(
+        update={
+            "fairness": Fairness(
+                slot="ai",
+                difficulty="transcend",
+                handicaps=[Handicap(id="engine_specific_thing", favours="self")],
+            )
+        }
+    )
+    assert Orchestrator(ScriptedBrain()).decide(own).record.fairness_profile == [
+        "engine_specific_thing"
+    ]
