@@ -51,7 +51,7 @@ def test_every_name_in_the_vocabulary_is_one_an_adapter_emits() -> None:
     not grow ahead of the adapter. If this fails, the fix is to emit the metric, or to drop the
     name; adding it to the sets above without touching `neural.cpp` is how the guarantee dies.
     """
-    assert THINKER_FACTION | THINKER_BASE == set(VOCABULARY)
+    assert set(VOCABULARY) == THINKER_FACTION | THINKER_BASE
 
 
 def test_the_scopes_agree_with_the_vocabulary() -> None:

@@ -412,3 +412,30 @@ def test_unrecognised_social_effect_is_dropped_not_guessed() -> None:
     assert social_effect("++NOTATHING") is None
     assert social_effect("POLICE") is None  # no sign, so no magnitude
     assert social_effect("") is None
+
+
+def test_grounding_carries_citable_ids(links) -> None:  # type: ignore[no-untyped-def]
+    """Without ids the brain cannot cite, so `cited` is empty by construction.
+
+    This retriever returned facts and no `fact_ids` for as long as it existed, which made three
+    things silently impossible on the K1 path: a citation (the model has no id to name), the
+    citation guard's offered set (empty, so every citation reads fabricated), and utilisation
+    (unmeasurable rather than low — `Grounding.fact_ids` empty is the documented "retriever does
+    not label its facts" case).
+
+    The ids are the ones `rdf.py` mints for the same node, so a citation made here resolves in
+    the graph the Quipu path serves rather than merely looking like an identifier.
+    """
+    view = WorldView(
+        engine="thinker",
+        scope="base",
+        turn=1,
+        faction="GAIANS",
+        action_space=[Action(id="a1", action="Sample Tanks")],
+    )
+    grounding = DatalinksRetriever(links).retrieve(view)
+
+    assert grounding.fact_ids == ("fac:sample-tanks",)
+    # Positionally aligned with `facts` — the orchestrator zips them into "<id> <text>" lines
+    # and a misalignment would attach every citation to the wrong node.
+    assert len(grounding.fact_ids) == len(grounding.facts)

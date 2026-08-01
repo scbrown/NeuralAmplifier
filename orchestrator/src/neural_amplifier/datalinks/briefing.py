@@ -25,6 +25,7 @@ from __future__ import annotations
 from ..contract import WorldView
 from ..knowledge import Grounding
 from .parse import Datalinks, Facility
+from .rdf import slug
 
 #: Only rules true for the engine in play may surface. A GLSMAC-only or
 #: Thinker-deviating rule presented as canonical SMAC is the exact failure the
@@ -90,6 +91,7 @@ class DatalinksRetriever:
 
     def retrieve(self, world_view: WorldView) -> Grounding:
         facts: list[str] = []
+        ids: list[str] = []
         seen: set[str] = set()
         for action in world_view.action_space:
             item = self._match(action.action)
@@ -97,9 +99,14 @@ class DatalinksRetriever:
                 continue
             seen.add(item.name)
             facts.append(describe(item, self.links))
+            # `fac:<slug>` — the same id `rdf.py` mints for this facility, so a citation made
+            # against this retriever resolves in the graph the Quipu path serves. Without ids
+            # the model has nothing to cite, `cited` is empty on every run by construction,
+            # and utilisation reads unmeasurable rather than low.
+            ids.append(f"fac:{slug(item.name)}")
             if len(facts) >= self.limit:
                 break
-        return Grounding(facts=tuple(facts))
+        return Grounding(facts=tuple(facts), fact_ids=tuple(ids))
 
     def _match(self, action: str) -> Facility | None:
         """Resolve an action to a rule.
