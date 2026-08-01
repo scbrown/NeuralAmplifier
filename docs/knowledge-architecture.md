@@ -339,6 +339,11 @@ offered: a model naming a fact nobody gave it is a hallucination, and laundering
 provenance block would make the record assert that something informed a decision when nothing
 did.
 
+Grounding is not the only route an id takes to the brain — a directive's `entities` are ids in
+this same space, shown through the `directives` block. Both count as **offered**, so a citation
+of one is not fabricated; only grounding counts as **retrieved**, so `utilisation` keeps meaning
+"was retrieval read". See [directives.md](directives.md#two-id-spaces-that-are-deliberately-the-same).
+
 First measured utilisation, Haiku on a real turn-35 base-production decision: **1 of 7 facts
 cited**. Six were paid for and unread — which is a retrieval-tuning signal that did not exist
 before the instrumentation.

@@ -190,6 +190,28 @@ def apply(orders: Orders, ruling: Ruling) -> Orders:
     return orders.model_copy(update={"choices": kept})
 
 
+def grounded_ids(world_view: WorldView) -> set[str]:
+    """Fact ids retrieval put in front of the brain, read back off the world view.
+
+    Facts are injected id-first — ``"unit:formers Formers; terraforms terrain"`` — so the id is
+    the first token. That encoding is written in one place (``orchestrator.decide``) and has
+    three readers: the citation guard's offered set, the plan block's "which citations did
+    grounding *not* offer", and this. Kept here so the split lives once; a second copy is how a
+    richer encoding would silently start reading wrong.
+
+    Deliberately not the same thing as ``Grounding.fact_ids``: that is what retrieval returned,
+    this is what the stored world view actually shows. They agree on the live path, and only
+    this one is available to a replay reading a record back.
+    """
+    return {gid for gid in (_id_of(line) for line in (world_view.grounding or [])) if gid}
+
+
+def _id_of(line: str) -> str:
+    """Kept deliberately dumb. A richer encoding would need the contract to carry structured
+    grounding, and that is a contract change rather than a reader's business."""
+    return line.split(" ", 1)[0].strip() if line else ""
+
+
 def summarise(
     grounding: Grounding,
     ruling: Ruling,

@@ -24,9 +24,18 @@ from .decisions import (
     PlanBlock,
     world_view_hash,
 )
-from .directives import DirectiveStore, accept, evaluate, relevant, tradeoffs
+from .directives import DirectiveStore, accept, entities_shown, evaluate, relevant, tradeoffs
 from .fog import Redaction, redact
-from .knowledge import Guard, Knowledge, Retriever, apply, retrieve, rule, summarise
+from .knowledge import (
+    Guard,
+    Knowledge,
+    Retriever,
+    apply,
+    grounded_ids,
+    retrieve,
+    rule,
+    summarise,
+)
 from .telemetry import Emitter, Sink
 from .validate import validate
 
@@ -247,12 +256,19 @@ class Orchestrator:
         statuses = world_view.directives or []
         in_force = [s.directive.id for s in statuses]
         offered = set(in_force)
+        # A directive's entities are grounding ids, but they reach the brain through the
+        # directives block. ``summarise`` filters ``cited`` against grounding alone — correctly,
+        # or utilisation would stop measuring retrieval — so a citation of one of these would
+        # otherwise vanish from the record entirely. Grounding wins where both offered the id;
+        # there it is already counted as retrieval doing its job.
+        via_plan = entities_shown(world_view) - grounded_ids(world_view)
         return PlanBlock(
             in_force=in_force,
             # Filtered against what was actually in force, exactly as ``cited`` is filtered
             # against the offered facts: an id the model invented must not inflate attention.
             followed=[d for d in dict.fromkeys(orders.followed) if d in offered],
             overrode=[d for d in dict.fromkeys(orders.overrode) if d in offered],
+            entities_cited=[c for c in dict.fromkeys(orders.cited) if c in via_plan],
             unmeasurable=[s.directive.id for s in statuses if s.satisfied is None],
             unsatisfied=[s.directive.id for s in statuses if s.satisfied is False],
             issued=issued,

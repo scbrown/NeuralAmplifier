@@ -301,6 +301,29 @@ def evaluate(
     return statuses
 
 
+def entities_shown(world_view: WorldView) -> set[str]:
+    """Datalinks ids this world view put in front of the brain *via a directive*.
+
+    A directive's ``entities`` are grounding fact ids — that shared id space is exactly what
+    makes the multi-hop walk in :func:`relevant` work. But they arrive through the directives
+    block, not the grounding block, so anything that reads "what was offered" out of grounding
+    alone sees them as ids the model invented. Measured: three to four runs in five carried
+    ``cited facts that were never offered: fac:the-weather-paradigm`` for an id the world view
+    had genuinely shown (na-zgz).
+
+    So the two readers of the offered set share this. What it deliberately does **not** do is
+    make these ids part of grounding: they were not retrieved, nothing paid for them, and
+    folding them into the utilisation denominator would move a retrieval metric every time the
+    plan changed shape.
+    """
+    return {
+        entity
+        for status in (world_view.directives or [])
+        for entity in status.directive.entities
+        if entity
+    }
+
+
 def _expired(directive: Directive, turn: int) -> bool:
     return directive.horizon_turn is not None and turn > directive.horizon_turn
 

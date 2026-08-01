@@ -73,7 +73,7 @@ A priority number alone is unusable. Telling a base "there is a priority-7 plan 
 asks it to guess the cost of ignoring one. So the orchestrator computes the trade-off from
 `Action.effects` and the directive's metric — arithmetic on declared numbers, not an opinion:
 
-```
+```text
 hurry:now → fund-weather-paradigm [p7]: energy_reserves -81 → 1, setback 5.8 turns
 ```
 
@@ -94,7 +94,7 @@ The walk starts from what the decision actually does:
 - **Hop 1+ — what those directives are for.** Each directive reached contributes its own
   `entities`, which pull the directives about *them*.
 
-```
+```text
 hurry:now changes energy_reserves by -81
   └─ hop 0  [p7] fund-weather-paradigm
        └─ fac:the-weather-paradigm
@@ -133,6 +133,26 @@ Two rules keep the block honest:
 | `unsatisfied` | Checked and failing, which is a different problem |
 | `not_shown` | Did relevance selection hide it? |
 | `conflicts` | Actions that would break a currently satisfied directive |
+| `entities_cited` | Did the decision reason from an entity only the plan showed it? |
+
+### Two id spaces that are deliberately the same
+
+A directive's `entities` **are** grounding fact ids — that is what makes the walk above work at
+all. But they reach the brain through the `directives` block, not the `grounding` block, and the
+two readers of "what was offered" originally disagreed about that:
+
+- The **citation guard** (`hank.py`) read the offered set from `grounding` alone, so citing an
+  entity a directive had shown looked like a fabricated citation. Measured at three to four runs
+  in five carrying `cited facts that were never offered: fac:the-weather-paradigm` for an id the
+  world view had genuinely put in front of the model.
+- **`summarise`** filters citations to grounding before recording them, so the same citation was
+  dropped from `quipu_cited` — the plan's contribution was invisible in both directions at once.
+
+The rule now: both sources count as **offered**, and only grounding counts as **retrieved**.
+`utilisation` stays a statement about retrieval — folding entities into it would push it above
+1.0 the moment a decision cited one, and make a retrieval metric drift whenever the plan changed
+shape — and a citation the plan alone offered lands in `entities_cited` instead of vanishing.
+Where both offered an id, grounding wins; there it is already counted as retrieval doing its job.
 
 ## What this bought
 

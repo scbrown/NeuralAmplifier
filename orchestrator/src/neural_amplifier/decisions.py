@@ -94,6 +94,7 @@ class PlanBlock(BaseModel):
       decision was mispriced; one never overridden may be costing more than it admits.
     * ``unmeasurable`` counts directives whose metric this world view did not report. Non-zero
       is an adapter gap, and it must not be confused with a directive that is merely unsatisfied.
+    * ``entities_cited`` catches the citations grounding utilisation deliberately cannot see.
     """
 
     model_config = ConfigDict(extra="allow")
@@ -106,6 +107,16 @@ class PlanBlock(BaseModel):
     unmeasurable: list[str] = Field(default_factory=list)
     #: Directives in force that this world view says are not satisfied.
     unsatisfied: list[str] = Field(default_factory=list)
+    #: Datalinks ids this decision cited that only a directive had shown it — offered through
+    #: ``directives[].directive.entities``, absent from ``grounding``.
+    #:
+    #: These are recorded here rather than folded into ``quipu_cited`` because they are not
+    #: evidence about retrieval: nothing was retrieved for them, so counting them would push
+    #: ``utilisation`` above 1.0 and make a retrieval metric move whenever the plan changed
+    #: shape. But dropping them silently is how the plan's own contribution stayed invisible
+    #: — a decision reasoning from an entity the plan surfaced looked identical to one that
+    #: read nothing (na-zgz).
+    entities_cited: list[str] = Field(default_factory=list)
     #: Ids this decision issued, and why any were refused.
     issued: list[str] = Field(default_factory=list)
     rejected: list[str] = Field(default_factory=list)
