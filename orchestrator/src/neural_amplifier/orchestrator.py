@@ -85,7 +85,7 @@ class Orchestrator:
         # The standing plan. Absent means every decision is made on its own, which is where
         # this project started and is still a legitimate way to run.
         self.plan = plan
-        # Which surfaces the LLM tier owns (``surfaces.toml``). Absent means nobody has
+        # Which surfaces the LLM tier owns (``na.toml``). Absent means nobody has
         # expressed an opinion, which is how this behaved before the file existed.
         self.policy = policy or SurfacePolicy()
 

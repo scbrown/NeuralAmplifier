@@ -1,4 +1,4 @@
-"""Per-surface tier policy — `surfaces.toml`, `policy.py`.
+"""Per-surface tier policy — `na.toml` `[surfaces]`, `policy.py`.
 
 Two properties, and the second is the one that would rot quietly.
 
@@ -18,14 +18,20 @@ from pathlib import Path
 import pytest
 
 from neural_amplifier.brain import ScriptedBrain
+from neural_amplifier.config import load as load_config
 from neural_amplifier.contract import Choice, Orders, WorldView
 from neural_amplifier.coverage import report
 from neural_amplifier.orchestrator import Orchestrator
-from neural_amplifier.policy import PolicyError, SurfacePolicy, load
+from neural_amplifier.policy import PolicyError, SurfacePolicy
+
+
+def load(path: Path):  # type: ignore[no-untyped-def]
+    """The surface half of the general config — `na.toml`, `[surfaces]`."""
+    return load_config(path).surfaces
 
 
 def write(tmp_path: Path, body: str) -> Path:
-    path = tmp_path / "surfaces.toml"
+    path = tmp_path / "na.toml"
     path.write_text(body)
     return path
 
@@ -45,7 +51,9 @@ def test_a_non_boolean_toggle_is_refused(tmp_path: Path) -> None:
 def test_an_explicit_false_survives_a_permissive_default(tmp_path: Path) -> None:
     """The bug this nearly shipped with: storing only the enabled ids meant a `default = true`
     policy silently re-enabled everything anyone had deliberately switched off."""
-    policy = load(write(tmp_path, 'default = true\n[surfaces]\n"base.production" = false\n'))
+    policy = load(
+        write(tmp_path, 'surface_default = true\n[surfaces]\n"base.production" = false\n')
+    )
     assert policy.allows("base.production") is False
     assert policy.allows("faction.tech") is True
 
@@ -55,12 +63,12 @@ def test_no_file_means_no_opinion(tmp_path: Path) -> None:
     orchestrator behaved before this file existed; an empty table with `default = false` is
     someone deliberately turning everything off, and must be honoured."""
     assert load(tmp_path / "missing.toml").allows("base.production") is True
-    assert load(write(tmp_path, "default = false\n")).allows("base.production") is False
+    assert load(write(tmp_path, "surface_default = false\n")).allows("base.production") is False
 
 
 def test_a_disabled_surface_is_recorded_but_never_asked(thinker_base: WorldView) -> None:
     brain = ScriptedBrain([Orders(choices=[Choice(action_id="a1")])])
-    policy = SurfacePolicy(toggles={}, default=False, source=Path("surfaces.toml"))
+    policy = SurfacePolicy(toggles={}, default=False, source=Path("na.toml"))
 
     result = Orchestrator(brain, policy=policy).decide(thinker_base)
 
@@ -72,7 +80,7 @@ def test_a_disabled_surface_is_recorded_but_never_asked(thinker_base: WorldView)
 
 def test_a_disabled_surface_is_not_degraded(thinker_base: WorldView) -> None:
     """The distinction the whole module exists for."""
-    policy = SurfacePolicy(toggles={}, default=False, source=Path("surfaces.toml"))
+    policy = SurfacePolicy(toggles={}, default=False, source=Path("na.toml"))
     record = Orchestrator(ScriptedBrain(), policy=policy).decide(thinker_base).record
 
     assert record.degraded is False
@@ -88,8 +96,8 @@ def test_configuration_cannot_flatter_the_degrade_rate(thinker_base: WorldView) 
     """
     from neural_amplifier.brain import BrainError
 
-    off = SurfacePolicy(toggles={}, default=False, source=Path("surfaces.toml"))
-    on = SurfacePolicy(toggles={}, default=True, source=Path("surfaces.toml"))
+    off = SurfacePolicy(toggles={}, default=False, source=Path("na.toml"))
+    on = SurfacePolicy(toggles={}, default=True, source=Path("na.toml"))
 
     broken = Orchestrator(ScriptedBrain(raises=BrainError("timeout")), policy=on)
     quiet = Orchestrator(ScriptedBrain(), policy=off)
@@ -122,7 +130,7 @@ def test_a_surface_without_an_id_is_still_decided() -> None:
         faction="Gaians",
         action_space=[Action(id="a1", action="Recycling Tanks")],
     )
-    policy = SurfacePolicy(toggles={}, default=False, source=Path("surfaces.toml"))
+    policy = SurfacePolicy(toggles={}, default=False, source=Path("na.toml"))
     assert policy.allows(None) is True
 
     brain = ScriptedBrain([Orders(choices=[Choice(action_id="a1")])])

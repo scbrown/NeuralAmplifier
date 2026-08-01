@@ -145,7 +145,7 @@ to ten turns is otherwise unverifiable without playing until it happens.
 
 Each was **observed before it was applied** — deliberately, because that makes a surface
 falsifiable on its own before anything depends on it. Which surfaces the brain may decide is set
-per surface in [`surfaces.toml`](surfaces.toml), so the sequence is: instrument, watch it
+per surface in the `[surfaces]` section of [`na.toml`](na.toml), so the sequence is: instrument, watch it
 observe, then let it decide.
 
 ### The plan, in dependency order

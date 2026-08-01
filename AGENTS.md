@@ -87,7 +87,8 @@ changing the module — most of these look like ordinary plumbing and are not.
 | `decisions.py` | The record + JSONL log | The record of truth, written before any exporter |
 | `telemetry.py` | Sink fan-out + OTel | The record is assembled **once**; layers are projections of one object |
 | `coverage.py` | Run health | `degrade_rate` and `fair_play` are measured, not asserted |
-| `policy.py` | `surfaces.toml` — which surfaces the LLM owns | Off is **deterministic**, never *degraded* |
+| `config.py` | `na.toml` — the whole run's configuration | env > file > default, always |
+| `policy.py` | `[surfaces]` — which surfaces the LLM owns | Off is **deterministic**, never *degraded* |
 | `replay.py` | World-view store + diffing | A log alone can't be replayed — something must keep the bytes |
 | `datalinks/` | SMAC's own rules → Quipu | Provenance on every fact, and **filtered on read** or the tag is decoration |
 | `brain.py` | Claude / scripted brains | CI never makes a paid call |
@@ -171,6 +172,18 @@ just thinker build        # build test           (needs the Thinker toolchain)
 just play thinker GAIANS  # full observe→decide→act loop for an engine
 ```
 
+## Configuration
+
+One file: [`na.toml`](na.toml) at the repo root, or wherever `NA_CONFIG` points. Brain, the
+Quipu/Hank seam, where a run's evidence goes, and which surfaces the LLM owns.
+
+**Precedence is env > file > default**, deliberately. The file is what a run *is*; a variable is
+how you override one thing for one run without editing the tree, which is what CI and the cloud
+setup script do. The other order would let a checked-in file silently override the harness.
+
+A malformed file refuses to start the service rather than failing one turn at a time in a
+running game.
+
 ## Surface coverage
 
 ```bash
@@ -181,7 +194,8 @@ just surfaces        # what the brain can decide, what it only watches, what is 
 recorded, not what the game does, so counting it as coverage claims influence the brain does not
 have — today that is 1 applied against 4 observed.
 
-Which surfaces the brain may decide lives in [`surfaces.toml`](surfaces.toml), one toggle each.
+Which surfaces the brain may decide lives in the `[surfaces]` section of
+[`na.toml`](na.toml), one toggle each.
 A surface switched off is recorded at `deterministic` tier and is **not** degraded: degraded
 means the brain was asked and could not answer, and `degrade_rate` — measured over LLM-tier
 decisions only — is the number that catches a run where the brain was silently absent. Never let

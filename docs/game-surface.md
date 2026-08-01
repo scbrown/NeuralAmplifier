@@ -105,7 +105,7 @@ it refuses an unaffordable order with the numbers rather than partially applying
 checks the observation's action space makes for itself. Those two are supposed to agree; this is
 the one that binds.
 
-**Which surfaces the brain may decide is configuration**, not code: `surfaces.toml` carries a
+**Which surfaces the brain may decide is configuration**, not code: `na.toml` carries a
 toggle per surface, and one switched off is recorded at `deterministic` tier — explicitly not
 degraded, because the brain was never asked. That is how a surface gets rolled out one step at a
 time: instrument it, watch it observe, then let it decide.

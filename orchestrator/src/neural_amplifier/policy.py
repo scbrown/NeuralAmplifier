@@ -1,7 +1,7 @@
 """Per-surface tier policy — which surfaces the LLM is allowed to decide.
 
-Read from ``surfaces.toml`` (or ``NA_SURFACES_CONFIG``). One toggle per surface id, plus a
-``default`` for everything unlisted.
+The ``[surfaces]`` section of ``na.toml`` (see :mod:`.config`). One toggle per surface id, plus
+``surface_default`` for everything unlisted.
 
 The reason this is a file and not a constant: turning a surface off is an *operational* choice
 that has to be reversible without a deploy, and it is how a surface gets rolled out one at a
@@ -20,18 +20,10 @@ brain still deciding that".
 
 from __future__ import annotations
 
-import os
-import tomllib
 from dataclasses import dataclass, field
 from pathlib import Path
 
 from .surfaces import ALL
-
-#: Where to look when nothing is passed. Repo root, beside the justfile.
-DEFAULT_PATH = Path(__file__).resolve().parents[3] / "surfaces.toml"
-
-#: Environment override, so a run can point at a different policy without editing the tree.
-ENV_VAR = "NA_SURFACES_CONFIG"
 
 
 class PolicyError(ValueError):
@@ -68,41 +60,29 @@ class SurfacePolicy:
         return self.toggles.get(surface_id, self.default)
 
 
-def load(path: Path | None = None) -> SurfacePolicy:
-    """Read the policy, or return the no-opinion default when there is no file.
+def parse_surfaces(
+    table: dict[str, object], default: object = None, source: Path | None = None
+) -> SurfacePolicy:
+    """Build a policy from the ``[surfaces]`` table of an already-parsed config.
 
-    Absent is not empty: a missing file means nothing has been configured, and everything is
-    allowed. An empty ``[surfaces]`` table with ``default = false`` means someone deliberately
-    turned everything off, and that must be honoured.
+    ``source`` is what tells :meth:`SurfacePolicy.allows` that somebody has an opinion at all.
+    Absent is not empty: no config file means nothing is configured and everything is decided,
+    which is how the orchestrator behaved before any of this existed. A file that exists and
+    lists nothing, with ``surface_default = false``, is someone deliberately turning everything
+    off and must be honoured.
     """
-    if path is None:
-        override = os.environ.get(ENV_VAR)
-        path = Path(override) if override else DEFAULT_PATH
-    if not path.exists():
-        return SurfacePolicy()
-
-    try:
-        data = tomllib.loads(path.read_text())
-    except tomllib.TOMLDecodeError as exc:
-        raise PolicyError(f"{path} is not valid TOML: {exc}") from exc
-
-    table = data.get("surfaces", {})
-    if not isinstance(table, dict):
-        raise PolicyError(f"{path}: [surfaces] must be a table of id = true/false")
-
     unknown = sorted(set(table) - ALL)
     if unknown:
         raise PolicyError(
-            f"{path}: not in the frozen surface registry: {', '.join(unknown)}. "
+            f"[surfaces]: not in the frozen surface registry: {', '.join(unknown)}. "
             "A toggle on an id nothing emits is a setting that appears to work and does not."
         )
-
     bad = sorted(k for k, v in table.items() if not isinstance(v, bool))
     if bad:
-        raise PolicyError(f"{path}: these must be true or false: {', '.join(bad)}")
+        raise PolicyError(f"[surfaces]: these must be true or false: {', '.join(bad)}")
 
     return SurfacePolicy(
-        toggles=dict(table),
-        default=bool(data.get("default", False)),
-        source=path,
+        toggles={k: bool(v) for k, v in table.items()},
+        default=bool(default) if default is not None else False,
+        source=source,
     )

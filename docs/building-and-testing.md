@@ -106,6 +106,24 @@ that a captured world view is well-formed and that orders reference real `action
 against fixtures from either engine, with no game. Recording a real GLSMAC `--gse-tests` world
 view produces an orchestrator fixture *and* a contract fixture from one run.
 
+## 5a. Configuring a run
+
+Everything is in [`na.toml`](https://github.com/scbrown/NeuralAmplifier/blob/main/na.toml) at
+the repo root, or wherever `NA_CONFIG` points. The `NA_*` variables all still work and **take
+precedence over the file** — the file is what a run *is*, and a variable is how you override one
+thing for one run without editing the tree, which is what CI and the cloud setup script do.
+
+| Variable | `na.toml` |
+| --- | --- |
+| `NA_BRAIN`, `NA_BRAIN_MODEL`, `NA_BRAIN_EFFORT` | `[brain] kind`, `model`, `effort` |
+| `NA_QUIPU_URL`, `NA_ENGINE`, `NA_TOKEN_BUDGET`, `NA_HANK_GUARD` | `[knowledge]` |
+| `NA_DECISION_LOG`, `NA_WORLD_VIEW_STORE`, `NA_PLAN`, `NA_OTEL` | `[run]` |
+| — | `[surfaces]` + `surface_default` — which surfaces the LLM tier decides |
+
+A malformed file refuses to start the service rather than failing one turn at a time in a
+running game, and an unknown surface id is an error rather than a toggle that appears set and
+does nothing.
+
 ## 5b. Evals — the layer the pyramid has no room for
 
 Every level above asserts a value. A whole class of question about this system is not a value:

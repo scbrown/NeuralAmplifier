@@ -26,7 +26,7 @@ class Report:
     unknown_surface_ids: set[str] = field(default_factory=set)
     missing_surface_id: int = 0
     #: Decisions the brain was actually asked to make. `total` minus the surfaces
-    #: `surfaces.toml` hands to the engine.
+    #: `na.toml` hands to the engine.
     llm_decisions: int = 0
     #: Decisions handed to the engine by configuration — not failures, and reported separately
     #: so a deliberately narrow run is legible rather than looking like an absent brain.
@@ -43,7 +43,7 @@ class Report:
         Assert a ceiling in the harness.
 
         The denominator is `llm_decisions`, not `total`, and that is load-bearing now that
-        surfaces can be switched off in `surfaces.toml`. A deterministic-tier decision is one
+        surfaces can be switched off in `na.toml`. A deterministic-tier decision is one
         the brain was never asked for; counting it here would dilute the rate and let a run
         where the brain failed on every surface it *did* own read as healthy, simply because
         most surfaces were configured off.

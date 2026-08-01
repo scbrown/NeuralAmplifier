@@ -55,7 +55,7 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     if args.command == "surfaces":
-        from .policy import load as load_policy
+        from .config import load as load_config
         from .surfaces import coverage
 
         c = coverage()
@@ -76,14 +76,17 @@ def main(argv: list[str] | None = None) -> int:
             " deterministic on volume grounds"
         )
         print(f"  {c['ready']:>3}    have a native path and a safe fallback — instrumentable now")
-        policy = load_policy()
-        if policy.source is None:
-            print("\nNo surfaces.toml — every surface the adapter emits is decided.")
+        config = load_config()
+        if config.source is None:
+            print("\nNo na.toml — every surface the adapter emits is decided.")
         else:
             from .surfaces import OBSERVED
 
-            off = sorted(s for s in OBSERVED if not policy.allows(s))
-            print(f"\nPolicy ({policy.source.name}): default={str(policy.default).lower()}")
+            off = sorted(s for s in OBSERVED if not config.surfaces.allows(s))
+            print(
+                f"\nPolicy ({config.source.name}): "
+                f"surface_default={str(config.surfaces.default).lower()}"
+            )
             print(f"  instrumented but switched off: {', '.join(off) if off else 'none'}")
         print("\nSee docs/game-surface.md §2.5 for the per-surface matrix.")
         return 0
