@@ -10,8 +10,9 @@ repos:
       - id: check-merge-conflict
       - id: check-added-large-files
 
+  # Must match `markdownlint` in the justfile — see the note there.
   - repo: https://github.com/DavidAnson/markdownlint-cli2
-    rev: v0.17.2
+    rev: v0.23.2
     hooks:
       - id: markdownlint-cli2
         args: []

@@ -50,8 +50,8 @@ copilot**.
 
 ## 🤔 Why Neural Amplifier?
 
-|  | **Built-in 4X AI** | **Scripted bots** | **Neural Amplifier** |
-|--|:-----------------:|:-----------------:|:--------------------:|
+| | **Built-in 4X AI** | **Scripted bots** | **Neural Amplifier** |
+| -- | :-----------------: | :-----------------: | :--------------------: |
 | Reasons about long-horizon tradeoffs | ❌ | ❌ | ✅ |
 | Explains *why* it made a move | ❌ | ❌ | ✅ |
 | Every input fully inspectable | ❌ | ⚠️ | ✅ |
@@ -131,7 +131,7 @@ Full design — the contract Claude speaks, the two-engine strategy, and the roa
 (`orchestrator/surfaces.py`) and partitioned by contract scope: `base` 25, `unit` 32, `turn` 20.
 
 | Surface | Scope | Status |
-|---|---|---|
+| --- | --- | --- |
 | `base.production` | base | Observed · action space costed in minerals, with unit roles and facility effects. `apply` closes the loop |
 | `faction.tech` | turn | Observed · researchable techs with the engine's own AI valuation weights |
 | `faction.se` | turn | Observed · legal (field, model) pairs with effect deltas, grounded from `#SOCIO` |

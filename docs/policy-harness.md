@@ -41,7 +41,7 @@ What is **net-new** and does not exist in Hank today:
 ### What lives where (copied from [knowledge-architecture.md](knowledge-architecture.md))
 
 | Concern | Hank (hot / ephemeral) | Quipu (persisted / durable) |
-|---|---|---|
+| --- | --- | --- |
 | Live board graph (units/bases/tiles) | ✅ per-turn COW overlay | end-of-game snapshots only |
 | Per-turn policy-guard + what-if | ✅ `hank_guard` / `hank_whatif` | authors/stores the policies |
 | Static datalinks KB | read-cache (projected) | ✅ canonical store |
@@ -62,7 +62,7 @@ the selector language.
 (see [quipu/shapes/policies/treesitter.ttl](https://github.com/scbrown/quipu)):
 
 | Governance field | Role (b) code meaning | Role (c) game-state meaning |
-|---|---|---|
+| --- | --- | --- |
 | `Predicate.matchType` | must-match / must-not-match over text | must-match / must-not-match over a graph binding |
 | `Predicate.gate` | which captures the predicate applies to | which bindings the predicate applies to |
 | `Policy.effect` | `warn` \| `deny` on an edit | `warn` (advisory) \| `deny` (strip the order) |
@@ -143,7 +143,7 @@ state graph:
 **Hank what-if vs. `quipu_impact remove=true`** — different tools for different questions:
 
 | | Hank what-if (role e) | Quipu `quipu_impact remove=true` |
-|---|---|---|
+| --- | --- | --- |
 | Domain | ephemeral live board | persisted knowledge graph |
 | Question | "if I issue these orders this turn…" | "if this tech / fact were removed…" |
 | Speed / scope | fast, in-memory, this-turn, tactical | durable, cross-game, counterfactual |

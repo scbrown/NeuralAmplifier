@@ -15,7 +15,7 @@ the harness (the *game fixture*) and driving it with no human at the keyboard.
 ## The pieces
 
 | Component | Build | Test | In default CI? |
-|-----------|-------|------|:--------------:|
+| ----------- | ------- | ------ | :--------------: |
 | `orchestrator/` (Python) | `uv sync` | `pytest` + `ruff`/`mypy` on fixtures, fake Claude | ✅ |
 | `orchestrator/datalinks` | none | parses a synthetic `alphax.txt`; Turtle round-trips through rdflib | ✅ |
 | Quipu-backed retrieval | none | mocked by default; live tests skip unless `NA_QUIPU_URL` is set | ⚠️ live lane opt-in |

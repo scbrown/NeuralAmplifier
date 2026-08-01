@@ -13,6 +13,13 @@ smac := env_var_or_default("SMAC_DIR", "../smac")
 # Path to a local Thinker checkout (source of the committed house-rule graph)
 thinker := env_var_or_default("THINKER_DIR", "../thinker")
 
+# Pinned, and it must match the rev in .pre-commit-config.yaml. `just docs` and the
+# pre-commit hook lint the same files with the same config, so a version skew between
+# them means one gate passes and the other fails on a tree nobody changed — which is
+# exactly what an unpinned `npx` did here: it floated to 0.23.2, picked up the new
+# MD060, and left `just docs check` red against a green `just check` (na-hn6).
+markdownlint := "markdownlint-cli2@0.23.2"
+
 # Default recipe - show available commands
 default:
     @just --list
@@ -204,9 +211,9 @@ docs cmd="check":
     #!/usr/bin/env bash
     set -euo pipefail
     case "{{cmd}}" in
-        lint)  npx markdownlint-cli2 "**/*.md" ;;
-        fix)   npx markdownlint-cli2 --fix "**/*.md" ;;
+        lint)  npx --yes {{markdownlint}} "**/*.md" ;;
+        fix)   npx --yes {{markdownlint}} --fix "**/*.md" ;;
         fmt)   npx prettier --write "**/*.md" --prose-wrap preserve ;;
-        check) npx markdownlint-cli2 "**/*.md" ;;
+        check) npx --yes {{markdownlint}} "**/*.md" ;;
         *)     echo "Unknown: {{cmd}}. Try: lint fix fmt check" ;;
     esac

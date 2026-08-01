@@ -40,7 +40,7 @@ Each of these is a decision function returning a value — the natural place to 
 Claude's choice. Map them directly to the [contract](contract.md)'s `scope`:
 
 | Contract scope | Thinker hook | Returns | file:line | Cleanliness |
-|---|---|---|---|---|
+| --- | --- | --- | --- | --- |
 | **turn** (whole faction) | `mod_faction_upkeep(faction_id)` | — (runs the faction's whole turn) | `game.cpp:1557` (hook `patch.cpp:511`) | ★ cleanest handoff |
 | **base** (production) | `mod_base_build(base_id, has_gov)` | build item id (facility / unit / special) | `base.cpp:1145` (picker `select_build` `build.cpp:810`) | ★ clean, self-contained |
 | **unit** (orders) | `mod_enemy_move(veh_id)` | order/sync code | `veh_turn.cpp:137` (hook `patch.cpp:669`) | ★ clean (dispatches by type) |
@@ -67,7 +67,7 @@ Engine globals (`extern` in `engine.h:474-481`): `Factions`, `MFactions`, `Bases
 Key structs (packed):
 
 | Struct | World-view fields | file:line |
-|--------|-------------------|-----------|
+| -------- | ------------------- | ----------- |
 | `MAP` (tile) | `climate`, `contour`, `owner`, `items`/`landmarks` bitmasks, `region`, **`visibility`** (per-faction) | `engine_types.h:6` |
 | `VEH` (unit) | `x,y`, `unit_id`, `faction_id`, `state`, `order`, `morale`, `moves_spent`, `damage_taken`, `home_base_id`; helpers `triad()`, `is_colony()`, `is_former()` | `engine_veh.h:482` |
 | `BASE` | `x,y`, `faction_id`, `pop_size`, `name`, `queue_items[10]`, `facilities_built[12]`, worked tiles, `nutrient/mineral/energy_intake/_surplus` | `engine_base.h:148` |
@@ -100,7 +100,7 @@ Everything below depends on one bit: `is_human(faction_id)` — `FactionStatus[0
 Three viable configurations:
 
 | | **Mode A — AI slot** | **Mode B — human slot** | **Mode B+ — human slot, managed** |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | `is_human` | false | true | true |
 | Dialogs | none fire | all fire and block | all fire and block |
 | Deterministic tier | full (Thinker AI) | **none** | bases + units (see below) |

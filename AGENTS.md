@@ -17,7 +17,7 @@ Read the design before writing code — it is source-grounded and will save you 
 ## Before You Implement
 
 | If you're working on… | Read first |
-|---|---|
+| --- | --- |
 | Anything at all | [VISION.md](VISION.md), [docs/contract.md](docs/contract.md) |
 | A Thinker hook, or choosing which faction slot Claude drives | [docs/thinker-adapter-notes.md](docs/thinker-adapter-notes.md) — esp. §5.0 slot modes |
 | Running the game unattended, dialogs, or the SMAC game fixture | [docs/headless-harness.md](docs/headless-harness.md) |
@@ -75,7 +75,7 @@ Every module owns one invariant. The invariant is why the module exists, so chec
 changing the module — most of these look like ordinary plumbing and are not.
 
 | Module | Owns | The invariant it protects |
-|---|---|---|
+| --- | --- | --- |
 | `contract.py` | The wire types (`docs/contract.md`) | A field an engine lacks is *omitted*, never faked |
 | `surfaces.py` | The frozen 77-surface registry | A renamed surface invalidates every recorded run |
 | `orchestrator.py` | `decide()` — the whole loop | **Exactly one decision record per decision**, on every path |

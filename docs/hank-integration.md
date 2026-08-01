@@ -49,7 +49,7 @@ The scoring functions worth grounding, from the Thinker fork (paths verified in
 [thinker-adapter-notes.md](thinker-adapter-notes.md)); GLSMAC has no equivalents yet (see blockers):
 
 | Hank tool | Engine source (symbol) | Grounds which `smac:` fact | Promoted as |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | `hank_analyze` / `hank_symbols` | `plan.cpp` `facility_score`, `psi_score`, `design_units` | how a facility / psi unit / unit design is valued | `bobbin:CodeSymbol` |
 | `hank_symbols` / `hank_callers` | `build.cpp` `select_build`, `unit_score` | production pick & per-unit build weighting | `bobbin:CodeSymbol` |
 | `hank_symbols` | `tech.cpp` `mod_tech_val` | research valuation (tech AI weights) | `bobbin:CodeSymbol` |

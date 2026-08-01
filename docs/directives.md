@@ -57,7 +57,7 @@ A directive that can never be broken is a plan that loses games. The number exis
 decision can weigh its own action against a standing plan:
 
 | Priority | Meaning |
-|---|---|
+| --- | --- |
 | 9–10 | Survival. The game is lost otherwise. |
 | 7–8 | A committed plan. Break it only for something urgent. |
 | 4–6 | A preference worth real cost. |
@@ -126,7 +126,7 @@ Two rules keep the block honest:
 `PlanBlock` on every decision record, mirroring `KnowledgeBlock`:
 
 | Field | Question it answers |
-|---|---|
+| --- | --- |
 | `in_force` vs `followed` | Attention rate — is the plan read at all? |
 | `overrode` | Was this directive mispriced? |
 | `unmeasurable` | Adapter gap — a metric nobody reports |
@@ -160,7 +160,7 @@ On the turn-35 `base.hurry` observation (University Base, Colony Pod, 81 credits
 turns, 82 in reserve), Haiku 4.5, ten runs each:
 
 | Plan | runs | stability | plan attention |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | none | 10 | **0.60** (6/4 split) | — |
 | one priority-7 saving directive (`at_least 300`) | 10 | **1.00** (unanimous `hurry:none`) | 0.90 |
 | two directives, the second reached at hop 1 | 5 | **0.80** | 0.60 |

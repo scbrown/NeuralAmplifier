@@ -48,7 +48,7 @@ There are two ways to get a controllable Alpha Centauri, with opposite tradeoffs
 target **both**, behind one shared contract.
 
 | | **Original `terranx.exe` (via Thinker)** | **GLSMAC** |
-|---|---|---|
+| --- | --- | --- |
 | The game | **Complete & balanced** — production, full tech tree, SE, diplomacy, combat, secret projects, all factions | **Early** — units, bases, tiles, turns exist; production/tech/diplomacy/fog **not built yet** |
 | Attach point | Fork [Thinker](https://github.com/induktio/thinker) (**MIT, C++**); bridge its AI decision hooks | Add a GSE `http` builtin + a `.gls.js` mod (AGPL boundary) |
 | Payoff | **Fast** — a real, deep game to control immediately | Slow — must build game systems first |

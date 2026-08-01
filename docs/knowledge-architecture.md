@@ -51,7 +51,7 @@ different domain than *code structure*. The two planes join deliberately at one 
 Core classes, and the `alphax.txt` section each is parsed from:
 
 | Class | Key predicates | `alphax.txt` section |
-|---|---|---|
+| --- | --- | --- |
 | `smac:Technology` | `abbrev`, `aiWeight{Growth,Tech,Wealth,Power}`, `requiresTech` (0..2 → **the tech graph**), `flags` | `#TECHNOLOGY` |
 | `smac:Chassis`/`Reactor`/`Weapon`/`Armor`/`Ability` | component stats, `cost`, `requiresTech` | `#CHASSIS`…`#ABILITIES` |
 | `smac:UnitProto` | `hasChassis`/`hasReactor`/`hasWeapon`/`hasArmor`/`hasAbility`, `isPredefined` | `#UNITS` |
@@ -185,7 +185,7 @@ live board:
 ## Hot (Hank) vs persisted (Quipu) split
 
 | Concern | Hank (hot / ephemeral) | Quipu (persisted / durable) |
-|---|---|---|
+| --- | --- | --- |
 | Live board graph (units/bases/tiles) | ✅ per-turn COW overlay | end-of-game snapshots only |
 | Per-turn policy-guard + what-if | ✅ `hank_guard`/`hank_whatif` | authors/stores the policies |
 | Static datalinks KB | read-cache (projected) | ✅ canonical store |
@@ -314,7 +314,7 @@ Steps 1, 3 (action-space grounding only), 6 (one policy) and 7 run. Steps 2, 5 a
 yet.
 
 | Step | State |
-|---|---|
+| --- | --- |
 | Quipu action-space grounding | **Working.** One batched query over exactly this turn's `action_space` |
 | Static briefing, `quipu_context`, hybrid tactics | Not wired. `quipu_context` additionally needs an embedding model |
 | Hank ingest / what-if | Not built (roles d, e) |

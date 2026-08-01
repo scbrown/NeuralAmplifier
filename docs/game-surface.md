@@ -75,7 +75,7 @@ Per-unit orders fire separately as the engine iterates units (`mod_enemy_turn`
 (`orchestrator/surfaces.py`), partitioned by contract scope: `base` 25, `unit` 32, `turn` 20.
 
 | Surface | Scope | Seam | Action space | Probe |
-|---|---|---|---|---|
+| --- | --- | --- | --- | --- |
 | `base.production` | base | `mod_base_build` | engine-authoritative, costed in minerals, roles + effects | `observe <base_id>` |
 | `faction.tech` | turn | `mod_tech_selection` | `tech_avail`, with the AI's own valuation weights | `observe-tech <faction_id>` |
 | `faction.se` | turn | `mod_social_ai` | legal (field, model) pairs with effect deltas | `observe-se <faction_id>` |
@@ -95,7 +95,7 @@ and never the decision function.
 Measured with the same model (Haiku) on two surfaces, same graph, same retrieval path:
 
 | Surface | Options | Facts offered | Cited | Utilisation |
-|---|---|---|---|---|
+| --- | --- | --- | --- | --- |
 | `base.production` | 8 | 7 | 1 | **0.14** |
 | `base.hurry` | 2 | 1 | 1 | **1.00** |
 
@@ -138,7 +138,7 @@ LLM drills down.
 ### 3.1 Base & economy — scope `base`
 
 | Surface | AI | Path | Tier |
-|---|:--:|---|:--:|
+| --- | :--: | --- | :--: |
 | `base.production` | ✅ | `mod_base_build` base.cpp:1145 → `select_build` build.cpp:810 | D+L |
 | `base.queue` | ✅ | `base_queue` base.cpp:1276 | D |
 | `base.hurry` | ✅ | `mod_base_hurry` build.cpp:40 → `hurry_item` :214 | D+L |
@@ -168,7 +168,7 @@ LLM drills down.
 ### 3.2 Units, military, terraforming — scope `unit`
 
 | Surface | AI | Path | Tier |
-|---|:--:|---|:--:|
+| --- | :--: | --- | :--: |
 | `unit.turn_order` | ✅ | `mod_enemy_turn` veh_turn.cpp:4 (10-pass priority loop :6-67) | D |
 | `unit.dispatch` | ✅ | `mod_enemy_move` veh_turn.cpp:137; table :164-190 | D+L |
 | `unit.move` | ✅ | `action_go_to` veh_action.cpp:449; `TileSearch` path.cpp:5-232 | D |
@@ -204,7 +204,7 @@ LLM drills down.
 ### 3.3 Faction level — scope `turn`
 
 | Surface | AI | Path | Tier |
-|---|:--:|---|:--:|
+| --- | :--: | --- | :--: |
 | `faction.tech` | ✅ | `mod_tech_ai` tech.cpp:613; scoring `mod_tech_val` :366 | **L** |
 | `faction.tech_steal` | ✅ | `steal_tech` faction.cpp:744 | L |
 | `faction.se` | ⚠️ | `mod_social_ai` faction.cpp:1458 — **hard-returns for humans** :1463 | **L** |
@@ -312,7 +312,7 @@ they stay on this side of the line.
 **Difficulty-selected** — scale with `*DiffLevel`; a user choice:
 
 | Asymmetry | Where | In force when | Favours |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | Unit support bonus | base.cpp:1645 (`unit_support_bonus[*DiffLevel]`) | configured non-zero — **never, by default** | AI |
 | Facility maintenance discount | game.cpp:1846-1859 (`*DiffLevel >= DIFF_THINKER`) | Thinker+ | AI |
 | Tech cost factor | tech.cpp:1155 (`tech_cost_factor[*DiffLevel]`) | any level except Librarian | **human** below Librarian, AI above |
@@ -323,7 +323,7 @@ they stay on this side of the line.
 **Structural** — flat `is_human` or separate config; present at every difficulty:
 
 | Asymmetry | Where | In force when | Favours |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | **Retool penalty — AI pays none, ever** | base.cpp:1045, build.cpp:11 | `retool_penalty_prod_change != 0` | AI |
 | **Global warming — AI exempt below difficulty 4** | base.cpp:3205 | below Thinker | AI |
 | Mineral carry-over cap | base.cpp:3382, 3655 | always | AI |
@@ -357,7 +357,7 @@ to record rather than hand-wave.
 Which side owns a decision is partly configurable (`struct Config`, `main.h:205+`):
 
 | Option | Line | Effect |
-|---|---|---|
+| --- | --- | --- |
 | `manage_player_bases` | main.h:225 | Thinker drives **human** bases (base.cpp:991, build.cpp:55) |
 | `manage_player_units` | main.h:225 | Thinker drives **human** units set to automated (move.cpp:2074) |
 | `factions_enabled` | thinker.ini:90 | Which factions get Thinker's AI at all |

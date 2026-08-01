@@ -162,7 +162,7 @@ Quipu `group_id` **organizes facts within a store**; it is **not** a security
 boundary (see below and [tenancy-and-isolation.md](tenancy-and-isolation.md)).
 
 | `group_id` | Plane | Contents |
-|---|---|---|
+| --- | --- | --- |
 | `datalinks:smac` | Datalinks | Canonical stock `alphax.txt` rules |
 | `datalinks:thinker` | Datalinks | Thinker house-rule overrides |
 | `datalinks:glsmac` | Datalinks | GLSMAC deviations (all `aspirational`) |

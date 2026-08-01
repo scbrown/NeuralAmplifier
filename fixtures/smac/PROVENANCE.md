@@ -7,7 +7,7 @@ the tree.
 ## Sources
 
 | Provenance | Manifest | Status |
-|---|---|---|
+| --- | --- | --- |
 | Steam — Planetary Pack, app 2204130 | `steam-2204130.manifest` | **Primary, working.** 1 624 files recorded; 17 unresolved (see below). |
 | Physical media + Alien Crossfire v2.0 patch | *(not yet built)* | Optional validator. Proves the fixture is reconstructible without a storefront account. Nothing blocks on it. |
 
@@ -16,7 +16,7 @@ the tree.
 Thinker requires Alien Crossfire **v2.0**. Two known-good binaries:
 
 | Build | Bytes | SHA-1 |
-|---|---|---|
+| --- | --- | --- |
 | GOG (cited in `thinker/Technical.md:193-195`) | 3 084 288 | `4b19c1fe3266b5ebc4305cd182ed6e864e3a1c4a` |
 | **Steam, app 2204130** | **3 094 576** | **`7bbcc54e64760c11a24f48862f15dbaaeab61435`** |
 

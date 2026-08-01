@@ -28,7 +28,7 @@ is "a principal cannot even *observe* what a sibling knows," matching fog-of-war
 Different concerns key on different identities:
 
 | Concern | Tenant key | Lifetime |
-|---|---|---|
+| --- | --- | --- |
 | Hot board state (role d) + per-game memory | `(game_id, faction_id)` | one game |
 | Durable cross-game learned memory | a persistent `player_identity` ("an NA-Gaians book") | across all games |
 | Datalinks + canonical policies | **global, read-only, shared by all** | permanent |
