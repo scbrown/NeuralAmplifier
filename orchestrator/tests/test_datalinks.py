@@ -501,3 +501,75 @@ def test_the_two_checks_are_independent(tmp_path: Path) -> None:
     loud_unknown = "; Thinker mod data\n#TECHNOLOGY\n"
     assert looks_modded(loud_unknown) == "thinker mod"
     assert overlay_source(loud_unknown.encode(), overlays) is None
+
+
+# --- #TERRAIN and #RESOURCEINFO (na-3qy) --------------------------------------
+
+
+def test_two_terraform_rows_share_a_name_and_must_not_collide() -> None:
+    """`#TERRAIN` has two rows called "Fungus": one removes it, one plants it.
+
+    Keyed by name alone one silently wins, and the brain loses a core former order. The verb is
+    what separates them, which is why these are a list rather than a dict.
+    """
+    from neural_amplifier.datalinks.parse import parse
+
+    text = (
+        "#TERRAIN\n"
+        "Fungus, None, Sea Fungus, None, 6, Remove $STR0, F, F\n"
+        "Fungus, EcoEng, Sea Fungus, EcoEng, 6, Plant $STR0, F, Ctrl+F\n"
+    )
+    actions = parse(text).terraform
+
+    assert [a.name for a in actions] == ["Remove Fungus", "Plant Fungus"]
+    assert actions[1].requires == ("EcoEng",)
+
+
+def test_no_sea_variant_is_not_the_same_as_disabled() -> None:
+    """The file writes "no sea form" as the literal `Disable` in the sea prerequisite — the
+    same token that means "switched off" in the land column.
+
+    Reading Forest's sea column as a disable would delete a core terraform from the picture.
+    """
+    from neural_amplifier.datalinks.parse import parse
+
+    text = (
+        "#TERRAIN\n"
+        "Forest, None, ..., Disable, 4, Plant $STR0, F, Shift+F\n"
+        "Monolith, Disable, Monolith, Disable, 8, Place Monolith, ?, ?\n"
+    )
+    forest, monolith = parse(text).terraform
+
+    assert forest.land_only is True and forest.disabled is False
+    assert monolith.disabled is True
+
+
+def test_a_star_yield_is_absent_not_zero() -> None:
+    """The file's own comment says `*` columns are "ignored entirely" — the engine derives
+    them from the tile's temperature, rainfall and rockiness.
+
+    Parsing one as 0 would tell the brain Improved Land produces no minerals, which is
+    confidently wrong rather than merely missing. An absent predicate is a gap a reader can
+    see; a zero is an answer.
+    """
+    from neural_amplifier.datalinks.parse import parse
+
+    text = "#RESOURCEINFO\nImproved Land, 1, *, *, 0,\nBorehole Square, 0, 6, 6, 0,\n"
+    res = parse(text).resources
+
+    assert res["Improved Land"].nutrients == 1
+    assert res["Improved Land"].minerals is None
+    assert res["Borehole Square"].minerals == 6
+    # And a real zero survives as a zero.
+    assert res["Borehole Square"].nutrients == 0
+
+
+def test_a_star_yield_is_omitted_from_the_graph() -> None:
+    """Same rule at the RDF boundary: no predicate rather than a zero one."""
+    from neural_amplifier.datalinks import Provenance, turtle
+    from neural_amplifier.datalinks.parse import parse
+
+    graph = turtle(parse("#RESOURCEINFO\nImproved Land, 1, *, *, 0,\n"), Provenance())
+
+    assert "smac:yieldNutrients 1" in graph
+    assert "yieldMinerals" not in graph

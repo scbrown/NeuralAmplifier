@@ -7,6 +7,8 @@
 @prefix abil: <http://neuralamplifier.local/ontology/smac/ability/> .
 @prefix comp: <http://neuralamplifier.local/ontology/smac/component/> .
 @prefix soc:  <http://neuralamplifier.local/ontology/smac/social/> .
+@prefix terra: <http://neuralamplifier.local/ontology/smac/terraform/> .
+@prefix res:  <http://neuralamplifier.local/ontology/smac/resource/> .
 @prefix src:  <http://neuralamplifier.local/ontology/smac/source/> .
 @prefix xsd:  <http://www.w3.org/2001/XMLSchema#> .
 @prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
@@ -4094,6 +4096,280 @@ soc:future-society-thought-control a smac:SocialModel ;
     smac:effectProbe 2 ;
     smac:effectSupport -3 ;
     smac:requiresTech tech:willpow ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+terra:cultivate-farm a smac:TerraformAction ;
+    rdfs:label "Cultivate Farm" ;
+    smac:terraformVerb "Cultivate $STR0" ;
+    smac:baseRate 4 ;
+    smac:seaVariant "Kelp Farm" ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+terra:construct-soil-enricher a smac:TerraformAction ;
+    rdfs:label "Construct Soil Enricher" ;
+    smac:terraformVerb "Construct $STR0" ;
+    smac:baseRate 8 ;
+    smac:landOnly true ;
+    smac:requiresTech tech:ecoeng2 ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+terra:construct-mine a smac:TerraformAction ;
+    rdfs:label "Construct Mine" ;
+    smac:terraformVerb "Construct $STR0" ;
+    smac:baseRate 8 ;
+    smac:seaVariant "Mining Platform" ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+terra:construct-solar-collector a smac:TerraformAction ;
+    rdfs:label "Construct Solar Collector" ;
+    smac:terraformVerb "Construct $STR0" ;
+    smac:baseRate 4 ;
+    smac:seaVariant "Tidal Harness" ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+terra:plant-forest a smac:TerraformAction ;
+    rdfs:label "Plant Forest" ;
+    smac:terraformVerb "Plant $STR0" ;
+    smac:baseRate 4 ;
+    smac:landOnly true ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+terra:build-road a smac:TerraformAction ;
+    rdfs:label "Build Road" ;
+    smac:terraformVerb "Build $STR0" ;
+    smac:baseRate 1 ;
+    smac:landOnly true ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+terra:build-mag-tube a smac:TerraformAction ;
+    rdfs:label "Build Mag Tube" ;
+    smac:terraformVerb "Build $STR0" ;
+    smac:baseRate 3 ;
+    smac:landOnly true ;
+    smac:requiresTech tech:magnets ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+terra:construct-bunker a smac:TerraformAction ;
+    rdfs:label "Construct Bunker" ;
+    smac:terraformVerb "Construct $STR0" ;
+    smac:baseRate 5 ;
+    smac:landOnly true ;
+    smac:requiresTech tech:milalg ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+terra:construct-airbase a smac:TerraformAction ;
+    rdfs:label "Construct Airbase" ;
+    smac:terraformVerb "Construct $STR0" ;
+    smac:baseRate 10 ;
+    smac:landOnly true ;
+    smac:requiresTech tech:docair ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+terra:construct-sensor-array a smac:TerraformAction ;
+    rdfs:label "Construct Sensor Array" ;
+    smac:terraformVerb "Construct $STR0" ;
+    smac:baseRate 4 ;
+    smac:landOnly true ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+terra:remove-fungus a smac:TerraformAction ;
+    rdfs:label "Remove Fungus" ;
+    smac:terraformVerb "Remove $STR0" ;
+    smac:baseRate 6 ;
+    smac:seaVariant "Sea Fungus" ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+terra:plant-fungus a smac:TerraformAction ;
+    rdfs:label "Plant Fungus" ;
+    smac:terraformVerb "Plant $STR0" ;
+    smac:baseRate 6 ;
+    smac:seaVariant "Sea Fungus" ;
+    smac:seaRequiresTech tech:ecoeng ;
+    smac:requiresTech tech:ecoeng ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+terra:construct-condenser a smac:TerraformAction ;
+    rdfs:label "Construct Condenser" ;
+    smac:terraformVerb "Construct $STR0" ;
+    smac:baseRate 12 ;
+    smac:landOnly true ;
+    smac:requiresTech tech:ecoeng ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+terra:construct-echelon-mirror a smac:TerraformAction ;
+    rdfs:label "Construct Echelon Mirror" ;
+    smac:terraformVerb "Construct $STR0" ;
+    smac:baseRate 12 ;
+    smac:landOnly true ;
+    smac:requiresTech tech:ecoeng ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+terra:construct-thermal-borehole a smac:TerraformAction ;
+    rdfs:label "Construct Thermal Borehole" ;
+    smac:terraformVerb "Construct $STR0" ;
+    smac:baseRate 24 ;
+    smac:landOnly true ;
+    smac:requiresTech tech:ecoeng ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+terra:drill-to-aquifer a smac:TerraformAction ;
+    rdfs:label "Drill to Aquifer" ;
+    smac:terraformVerb "Drill to $STR0" ;
+    smac:baseRate 18 ;
+    smac:landOnly true ;
+    smac:requiresTech tech:ecoeng ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+terra:terraform-up-raise-land a smac:TerraformAction ;
+    rdfs:label "Terraform UP Raise Land" ;
+    smac:terraformVerb "Terraform UP" ;
+    smac:baseRate 12 ;
+    smac:seaVariant "Raise Sea Floor" ;
+    smac:seaRequiresTech tech:envecon ;
+    smac:requiresTech tech:envecon ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+terra:terraform-down-lower-land a smac:TerraformAction ;
+    rdfs:label "Terraform DOWN Lower Land" ;
+    smac:terraformVerb "Terraform DOWN" ;
+    smac:baseRate 12 ;
+    smac:seaVariant "Lower Sea Floor" ;
+    smac:seaRequiresTech tech:envecon ;
+    smac:requiresTech tech:envecon ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+terra:terraform-level-level-terrain a smac:TerraformAction ;
+    rdfs:label "Terraform LEVEL Level Terrain" ;
+    smac:terraformVerb "Terraform LEVEL" ;
+    smac:baseRate 8 ;
+    smac:landOnly true ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+terra:place-monolith-monolith a smac:TerraformAction ;
+    rdfs:label "Place Monolith Monolith" ;
+    smac:terraformVerb "Place Monolith" ;
+    smac:baseRate 8 ;
+    smac:landOnly true ;
+    smac:disabled true ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+res:ocean-square a smac:ResourceYield ;
+    rdfs:label "Ocean Square" ;
+    smac:yieldNutrients 1 ;
+    smac:yieldMinerals 0 ;
+    smac:yieldEnergy 0 ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+res:base-square a smac:ResourceYield ;
+    rdfs:label "Base Square" ;
+    smac:yieldNutrients 2 ;
+    smac:yieldMinerals 1 ;
+    smac:yieldEnergy 1 ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+res:bonus-square a smac:ResourceYield ;
+    rdfs:label "Bonus Square" ;
+    smac:yieldNutrients 2 ;
+    smac:yieldMinerals 2 ;
+    smac:yieldEnergy 2 ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+res:forest-square a smac:ResourceYield ;
+    rdfs:label "Forest Square" ;
+    smac:yieldNutrients 1 ;
+    smac:yieldMinerals 2 ;
+    smac:yieldEnergy 1 ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+res:recycling-tanks a smac:ResourceYield ;
+    rdfs:label "Recycling Tanks" ;
+    smac:yieldNutrients 1 ;
+    smac:yieldMinerals 1 ;
+    smac:yieldEnergy 1 ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+res:improved-land a smac:ResourceYield ;
+    rdfs:label "Improved Land" ;
+    smac:yieldNutrients 1 ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+res:improved-sea a smac:ResourceYield ;
+    rdfs:label "Improved Sea" ;
+    smac:yieldNutrients 2 ;
+    smac:yieldMinerals 1 ;
+    smac:yieldEnergy 3 ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+res:monolith a smac:ResourceYield ;
+    rdfs:label "Monolith" ;
+    smac:yieldNutrients 2 ;
+    smac:yieldMinerals 2 ;
+    smac:yieldEnergy 2 ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "house-rule" ;
+    smac:sourcedFrom src:alphax-txt .
+
+res:borehole-square a smac:ResourceYield ;
+    rdfs:label "Borehole Square" ;
+    smac:yieldNutrients 0 ;
+    smac:yieldMinerals 6 ;
+    smac:yieldEnergy 6 ;
     smac:appliesToEngine "thinker" ;
     smac:ruleTier "house-rule" ;
     smac:sourcedFrom src:alphax-txt .

@@ -24,8 +24,10 @@ from .parse import (
     Datalinks,
     Facility,
     Reactor,
+    ResourceYield,
     SocialModel,
     Technology,
+    TerraformAction,
     Unit,
 )
 
@@ -44,6 +46,8 @@ PREFIXES = (
     f"@prefix abil: <{NAMESPACE}ability/> .",
     f"@prefix comp: <{NAMESPACE}component/> .",
     f"@prefix soc:  <{NAMESPACE}social/> .",
+    f"@prefix terra: <{NAMESPACE}terraform/> .",
+    f"@prefix res:  <{NAMESPACE}resource/> .",
     f"@prefix src:  <{NAMESPACE}source/> .",
     "@prefix xsd:  <http://www.w3.org/2001/XMLSchema#> .",
     "@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .",
@@ -279,6 +283,53 @@ def social_model(item: SocialModel, prov: Provenance) -> str:
     return _node(f"soc:{slug(item.category)}-{slug(item.name)}", "smac:SocialModel", props, prov)
 
 
+def terraform(item: TerraformAction, prov: Provenance) -> str:
+    """A former order, with its sea variant on the same node.
+
+    One node rather than two because they are one order: "Farm" and "Kelp Farm" are the same
+    key press on different terrain, and splitting them would make a brain choosing a former
+    action compare two entries that can never both apply.
+
+    ``smac:landOnly`` is stated rather than left to the absence of ``smac:seaVariant``, because
+    the file writes "no sea form" as the literal string ``Disable`` in the prerequisite column —
+    the same token that means "switched off" elsewhere in the file. An absent predicate would
+    read as unparsed; this reads as a fact.
+    """
+    props: list[tuple[str, str]] = [
+        ("rdfs:label", literal(item.name)),
+        ("smac:terraformVerb", literal(item.verb)),
+        ("smac:baseRate", str(item.rate)),
+    ]
+    if item.land_only:
+        props.append(("smac:landOnly", "true"))
+    else:
+        props.append(("smac:seaVariant", literal(item.sea)))
+        props += [("smac:seaRequiresTech", f"tech:{slug(a)}") for a in item.sea_requires]
+    if item.disabled:
+        props.append(("smac:disabled", "true"))
+    props += [("smac:requiresTech", f"tech:{slug(a)}") for a in item.requires]
+    return _node(f"terra:{slug(item.name)}", "smac:TerraformAction", props, prov)
+
+
+def resource(item: ResourceYield, prov: Provenance) -> str:
+    """What a special square yields.
+
+    A ``*`` column is **omitted**, not zeroed. The file's own comment says those values are
+    "ignored entirely" — the engine derives them from the tile's temperature, rainfall and
+    rockiness — so emitting 0 would assert that Improved Land produces no minerals. An absent
+    predicate is a gap the reader can see; a zero is a confident wrong answer.
+    """
+    props: list[tuple[str, str]] = [("rdfs:label", literal(item.name))]
+    for name, value in (
+        ("Nutrients", item.nutrients),
+        ("Minerals", item.minerals),
+        ("Energy", item.energy),
+    ):
+        if value is not None:
+            props.append((f"smac:yield{name}", str(value)))
+    return _node(f"res:{slug(item.name)}", "smac:ResourceYield", props, prov)
+
+
 def statements(links: Datalinks, prov: Provenance | None = None) -> Iterator[str]:
     provenance = prov or Provenance()
     for tech in links.technologies.values():
@@ -299,6 +350,10 @@ def statements(links: Datalinks, prov: Provenance | None = None) -> Iterator[str
         yield unit(design, provenance)
     for model in links.social_models:
         yield social_model(model, provenance)
+    for order in links.terraform:
+        yield terraform(order, provenance)
+    for square in links.resources.values():
+        yield resource(square, provenance)
 
 
 def turtle(links: Datalinks, prov: Provenance | None = None) -> str:

@@ -142,15 +142,34 @@ The social-engineering model. Predicates: `inCategory`, `requiresTech`,
   `effectText`. ECONOMY `level 5` → `"+1 energy/sq; +4 energy/base; +3
   commerce!!!!"`; EFFIC `level −4` → `"ECONOMIC PARALYSIS"`.
 
-### `smac:Terrain` / `TerraformAction` — `#RESOURCEINFO`, `#TERRAIN`
+### `smac:ResourceYield` / `TerraformAction` — `#RESOURCEINFO`, `#TERRAIN` — **parsed**
 
-- **`Terrain`** (`#RESOURCEINFO`): `baseYields` (nutrient/mineral/energy),
-  `altitudeBand`. `Borehole Square` → yields 0/6/6; `Forest Square` → 1/2/1;
-  `Ocean Square` → 1/0/0.
-- **`TerraformAction`** (`#TERRAIN`): `actionYieldDelta`, `requiresTech`,
-  build rate. `Thermal Borehole` (`requiresTech "EcoEng"`, rate 24);
-  `Mag Tube` (`requiresTech "Magnets"`, rate 3); `Soil Enricher`
-  (`requiresTech "EcoEng2"`, rate 8).
+Both ship: 9 yield rows and 20 terraform orders, every node carrying `sourcedFrom`.
+
+- **`ResourceYield`** (`#RESOURCEINFO`): `yieldNutrients` / `yieldMinerals` /
+  `yieldEnergy`. `Borehole Square` → 0/6/6; `Forest Square` → 1/2/1; `Ocean
+  Square` → 1/0/0.
+
+  A `*` column is **omitted rather than zeroed**. The file's own comment says those
+  values are "ignored entirely" — the engine derives them from the tile's temperature,
+  rainfall and rockiness — so `Improved Land` carries `yieldNutrients 1` and no mineral
+  or energy predicate at all. Emitting `0` would assert that improving land produces no
+  minerals, which is confidently wrong where an absent predicate is merely a gap.
+
+- **`TerraformAction`** (`#TERRAIN`): `terraformVerb`, `baseRate`, `requiresTech`,
+  and either `seaVariant` + `seaRequiresTech` or `landOnly`. `Thermal Borehole`
+  (`EcoEng`, rate 24); `Mag Tube` (`Magnets`, rate 3); `Soil Enricher` (`EcoEng2`,
+  rate 8, `landOnly`).
+
+  Two rows are named **Fungus** — one removes it, one plants it — so the node id is
+  built from the verb as well: `terra:remove-fungus`, `terra:plant-fungus`. Keyed on the
+  name alone they collide and one silently wins.
+
+  `landOnly` is stated rather than inferred from a missing `seaVariant`, because the
+  file writes "has no sea form" as the literal string `Disable` in the sea prerequisite
+  column — the same token that means "switched off" in the land column. Forest is
+  land-only; Monolith is genuinely disabled. One predicate each, so the two can never be
+  read as the same thing.
 
 ### `smac:Faction` — `#FACTIONS` / `#NEWFACTIONS`
 

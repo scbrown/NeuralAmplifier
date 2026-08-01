@@ -58,6 +58,8 @@ _IRI_PREFIXES: Final[dict[str, str]] = {
     "ability": "abil",
     "chassis": "chas",
     "social": "soc",
+    "terraform": "terra",
+    "resource": "res",
 }
 
 
