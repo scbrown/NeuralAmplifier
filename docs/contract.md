@@ -134,8 +134,20 @@ Four fields carry directives across the contract. Full design in
 
 | Field | Meaning |
 | --- | --- |
+| `subjects` | `string[]` — the datalinks entities this decision is **about**, as distinct from the ones it chooses *between*. Required on any surface whose action labels are not themselves entities |
 | `metrics` | `{name: number}` — engine-neutral named measurements, using the vocabulary in `metrics.py`. This is the one place the orchestrator reads numbers by name, and it is safe precisely because the adapter did the engine-specific work of naming them (invariant 2) |
 | `Action.effects` | `{metric: delta}` — an action's immediate, known effect on named metrics. Without it a trade-off cannot be computed and a priority number has nothing to be weighed against |
+
+**`subjects` is what makes a surface groundable when its options are not entities.** Retrieval
+keys off action labels, which is right for a surface that picks among named things —
+`base.production` offers "Colony Pod" and the graph has a node called "Colony Pod". `base.hurry`
+offers "Hurry production" and "Do not hurry"; neither is in any datalinks, so without `subjects`
+the surface retrieves **nothing** and the brain decides it on state alone. Measured at 0.60
+stability, the least stable surface there is.
+
+Naming a subject cannot bias the choice the way grounding one *option* would, and that is the
+whole reason it is a separate field: every option on such a surface concerns the same entity, so
+explaining it explains all of them equally.
 
 **`metrics` is the only key the orchestrator reads measurements from**, and a measurement under
 any other key is invisible. Emitting the right numbers under the wrong name is not a partial

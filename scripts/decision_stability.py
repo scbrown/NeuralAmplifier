@@ -89,9 +89,14 @@ def to_world_view(record: dict[str, Any]) -> WorldView:
     # to rush ``item``, and without this the surface retrieves nothing at all — none of its
     # action labels ("Hurry production") exist in any datalinks.
     #
-    # Knowing that this adapter calls it ``item`` is exactly the adapter-shaped knowledge this
-    # bridge exists to hold, and exactly what the orchestrator must not contain.
-    subjects = [str(record["item"])] if record.get("item") else None
+    # The adapter emits ``subjects`` itself now (na-jbu), so prefer it: the contract field is
+    # the adapter's to fill, and a bridge that overrode it would hide a real adapter gap behind
+    # a harness that quietly worked. The ``item`` fallback stays for observations recorded
+    # before that landed — a stored run is evidence, and re-scoring it should not need the
+    # adapter version that produced it.
+    subjects = record.get("subjects") or (
+        [str(record["item"])] if record.get("item") else None
+    )
     passthrough = {
         k: v
         for k, v in record.items()
