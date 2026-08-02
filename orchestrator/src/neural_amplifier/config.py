@@ -55,7 +55,18 @@ def _number(env: str | None, toml: object, default: int) -> int:
             return int(env)
         except ValueError as exc:
             raise ConfigError(f"expected a whole number, got {env!r}") from exc
-    return int(toml) if toml is not None else default  # type: ignore[arg-type]
+    if toml is None:
+        return default
+    # Narrowed rather than ignored. `toml` is whatever the file held, so int() on it can raise
+    # TypeError as easily as ValueError — and the env branch above already turns a bad value
+    # into a ConfigError naming it. A silent TypeError from the file branch would have been the
+    # same mistake with worse wording.
+    if isinstance(toml, int | float | str):
+        try:
+            return int(toml)
+        except ValueError as exc:
+            raise ConfigError(f"expected a whole number, got {toml!r}") from exc
+    raise ConfigError(f"expected a whole number, got {toml!r}")
 
 
 @dataclass(frozen=True)

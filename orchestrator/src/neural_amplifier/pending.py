@@ -32,7 +32,7 @@ import time
 from dataclasses import dataclass, field
 from typing import Literal
 
-from .contract import Orders, WorldView
+from .contract import Directive, Orders, WorldView
 
 #: A pending decision's lifecycle. ``claimed`` exists so two attached agents cannot both answer
 #: the same decision — the second one is told it was taken rather than silently losing the race.
@@ -93,7 +93,7 @@ class Pending:
     #: rather than passed with the order because they are validated at *issue* time, while the
     #: model that wrote one is still in the loop and can fix it — discovering on every later
     #: turn that a plan was never expressible is far more expensive than one refusal now.
-    proposed_directives: list[object] = field(default_factory=list)
+    proposed_directives: list[Directive] = field(default_factory=list)
     _done: threading.Event = field(default_factory=threading.Event, repr=False)
     _settled: threading.Event = field(default_factory=threading.Event, repr=False)
 

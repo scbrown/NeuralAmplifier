@@ -126,8 +126,10 @@ def main() -> int:
     if args.require:
         print()
         for field in args.require:
-            print(f"required       {field}: {'PRESENT' if counts[field] else 'ABSENT'}"
-                  f"  ({counts[field]}/{len(parsed)} rows)")
+            print(
+                f"required       {field}: {'PRESENT' if counts[field] else 'ABSENT'}"
+                f"  ({counts[field]}/{len(parsed)} rows)"
+            )
     if rejected:
         return 1
     return 1 if missing else 0

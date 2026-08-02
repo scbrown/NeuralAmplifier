@@ -55,7 +55,11 @@ class OrchestratorClient:
         )
         try:
             with request.urlopen(req, timeout=HTTP_TIMEOUT) as response:
-                return json.loads(response.read() or b"{}")
+                # json.loads is Any-typed, and every caller here treats the result as a
+                # mapping. Asserting the shape at the boundary keeps that assumption in one
+                # place instead of letting Any leak into every tool method's return.
+                decoded = json.loads(response.read() or b"{}")
+                return decoded if isinstance(decoded, dict) else {"result": decoded}
         except error.HTTPError as exc:
             # The orchestrator's rejections are the useful ones — "already answered", "not a
             # legal action" — and they have to reach the model as text it can act on rather

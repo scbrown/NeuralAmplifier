@@ -53,7 +53,7 @@ def build_brain(config: Config | None = None) -> Brain:
         kwargs["model"] = cfg.model
     if cfg.effort:
         kwargs["effort"] = cfg.effort
-    return ClaudeBrain(**kwargs)  # type: ignore[arg-type]
+    return ClaudeBrain(**kwargs)
 
 
 def _build_retriever(config: Config) -> object | None:
@@ -242,7 +242,12 @@ def create_app(
             trade-offs already injected — because that assembly happens before the brain is
             called and this *is* the brain.
             """
-            wait = float((body or {}).get("wait", 0) or 0)
+            # A JSON body is `object`-valued, so `wait` is whatever the caller sent. A
+            # non-numeric one means "do not block" rather than a 500: this endpoint is the
+            # agent's only way to collect work, and failing it over a malformed optional
+            # costs more than ignoring the field.
+            raw_wait = (body or {}).get("wait", 0) or 0
+            wait = float(raw_wait) if isinstance(raw_wait, int | float | str) else 0.0
             pending = queue.claim(wait=min(wait, 110.0))
             if pending is None:
                 return {"decision_id": None, "waiting": 0}
@@ -344,7 +349,8 @@ def create_app(
                     "submitted": action_id,
                     "status": "submitted; the outcome did not arrive in time to report",
                 }
-            applied = outcome.get("applied") or []
+            raw_applied = outcome.get("applied") or []
+            applied = [str(item) for item in raw_applied] if isinstance(raw_applied, list) else []
             # A status set by the publisher wins. It knows things this handler cannot infer
             # from `applied` alone — chiefly that a repair is on its way, which looks identical
             # to a terminal failure if you only read an empty list.
