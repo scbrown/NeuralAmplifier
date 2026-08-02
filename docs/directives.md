@@ -81,6 +81,28 @@ hurry:now → fund-weather-paradigm [p7]: energy_reserves -81 → 1, setback 5.8
 than invented** when no rate is reported — a setback figure with a made-up denominator is worse
 than none, because it looks like the one piece of hard arithmetic in the block.
 
+### The same rule applied to `effects` itself, and what it currently costs
+
+An action that declares no `effects` produces no trade-off and seeds no hop-0 hit. That is a real
+loss and it is the right one: the arithmetic here is only as good as the declaration it runs on,
+and a wrong `effects` is not a weaker version of a missing one — it is a number the block
+presents as fact.
+
+**`base.production` declares none.** A build order in this engine spends nothing on the turn it is
+given; minerals are paid over turns out of `mineral_surplus`. It used to declare the item's price
+against `minerals_remaining`, which is a *shortfall* — minerals still owed — and the resulting
+"unaffordable" verdict denied every option on every base mid-build (na-co2). Nor is there a
+better number: switching retargets the shortfall by an amount set by the engine's retool rules,
+and even exact, that delta is not a cost — abandoning a 220-mineral project for a Scout Patrol
+reads as `minerals_remaining -209`, an *improvement*, because lower is better on a debt.
+
+So this surface has an **empty `tradeoffs` block by construction**, and standing plans reach it
+only through `subjects` and the survival-priority floor. Closing that gap is a vocabulary
+question, not a trade-off one: there is no per-base mineral **pool** in `metrics.py` to declare a
+build's cost against (`minerals_accumulated` is base state, not a measurement). Until one exists,
+the price of a build is something the brain reads off `cost` rather than something the
+orchestrator can weigh for it.
+
 ## Retrieval: the multi-hop walk
 
 A game can accumulate hundreds of directives. Injecting all of them into every world view would

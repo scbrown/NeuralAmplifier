@@ -65,6 +65,42 @@ def test_the_scopes_agree_with_the_vocabulary() -> None:
     assert {n for n in VOCABULARY if VOCABULARY[n].scope == "base"} == THINKER_BASE
 
 
+#: Every name the vocabulary declares to be a spendable pool. Hand-maintained for the same
+#: reason as the sets above: this is the whole content of a promise, so it should cost a
+#: deliberate edit to change.
+POOLS = {"energy_reserves"}
+
+
+def test_only_a_declared_pool_can_be_overdrawn() -> None:
+    """The na-co2 field, pinned — because the whole value of it is that it is small.
+
+    ``Metric.pool`` is what ``StateGuard`` reads before deciding an order is unaffordable, and
+    the criterion is narrow: the reported number *is* the balance available, spending draws it
+    down, and zero is a floor the engine enforces. A bank, not a debt and not a rate.
+
+    Nothing else in the vocabulary meets that today. ``minerals_remaining`` is the counter-case
+    and the reason the flag exists — it is minerals still *owed*, so reading it as a budget
+    denied every build option on every base mid-build. ``mineral_surplus`` and ``energy_income``
+    are rates; ``base_count`` and the population counts are censuses. Marking any of them here
+    would make this guard deny legal moves, so if this test fails, the question to answer first
+    is not "update the set" but "is the new name really a balance something spends".
+    """
+    assert {n for n in VOCABULARY if VOCABULARY[n].pool} == POOLS
+
+
+def test_the_pool_flag_defaults_to_the_safe_answer() -> None:
+    """A metric added without thinking about this is not a pool.
+
+    The two mistakes are not symmetric. Forgetting to flag a real pool costs an affordability
+    check that never runs — the guard stays silent, exactly as it already does for a metric the
+    world view omits. Flagging a non-pool denies legal moves and can deny an entire action
+    space. So the default has to be the direction that fails quietly.
+    """
+    from neural_amplifier.metrics import Metric
+
+    assert Metric(name="x", scope="base", unit="things", better=None, description="").pool is False
+
+
 def _fixture() -> WorldView:
     path = Path(__file__).parent / "fixtures" / "thinker_base_production.json"
     return WorldView.model_validate(json.loads(path.read_text()))

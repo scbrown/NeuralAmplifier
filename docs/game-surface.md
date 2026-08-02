@@ -96,7 +96,7 @@ not worth changing.
 
 | Surface | Scope | Seam | Action space | Probe |
 | --- | --- | --- | --- | --- |
-| `base.production` | base | `mod_base_build` | engine-authoritative, costed in minerals, roles + effects | `observe <base_id>` |
+| `base.production` | base | `mod_base_build` | engine-authoritative, costed in minerals, unit roles + facility effect text (no `Action.effects` — see contract.md) | `observe <base_id>` |
 | `faction.tech` | turn | `mod_tech_selection` | `tech_avail`, with the AI's own valuation weights | `observe-tech <faction_id>` |
 | `faction.se` | turn | `mod_social_ai` | legal (field, model) pairs with effect deltas | `observe-se <faction_id>` |
 | `base.hurry` | base | `mod_base_hurry` (wrapped) | hurry / don't, with credit cost and turns saved; unaffordable option omitted | `observe-hurry <base_id>` |

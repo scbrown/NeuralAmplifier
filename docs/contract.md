@@ -141,6 +141,20 @@ Four fields carry directives across the contract. Full design in
 | `metrics` | `{name: number}` — engine-neutral named measurements, using the vocabulary in `metrics.py`. This is the one place the orchestrator reads numbers by name, and it is safe precisely because the adapter did the engine-specific work of naming them (invariant 2) |
 | `Action.effects` | `{metric: delta}` — an action's immediate, known effect on named metrics. Without it a trade-off cannot be computed and a priority number has nothing to be weighed against |
 
+**`effects` means *immediate*, and an absent one beats a plausible one.** `base.hurry` declares
+both of its legs and means them: hurrying spends `energy_reserves` now and takes
+`minerals_remaining` to zero now. `base.production` declares **nothing**, because a build order
+in this engine spends nothing on the turn it is given — minerals are paid over turns out of
+`mineral_surplus`, so choosing an item is a commitment, not a purchase.
+
+It used to declare `{"minerals_remaining": -cost}`, and that single wrong field took a whole
+surface off the llm tier (na-co2). `minerals_remaining` is a **shortfall** — minerals still owed
+— so the item's price was declared as a withdrawal from a debt, and `StateGuard` denied every
+option on every base mid-build. Note that the loss is real and is not hidden: `base.production`
+seeds no hop-0 directive retrieval and produces no `Tradeoff` rows until the vocabulary gains a
+per-base mineral **pool** to declare cost against. The brain can still weigh price — `cost`,
+`turns_if_switched` and `turns_if_continued` are all on the action.
+
 **`subjects` is what makes a surface groundable when its options are not entities.** Retrieval
 keys off action labels, which is right for a surface that picks among named things —
 `base.production` offers "Colony Pod" and the graph has a node called "Colony Pod". `base.hurry`

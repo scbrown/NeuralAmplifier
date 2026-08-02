@@ -31,6 +31,7 @@ from collections.abc import Callable, Iterable
 from .contract import Orders, WorldView
 from .directives import entities_shown
 from .knowledge import Ruling, grounded_ids
+from .metrics import is_pool
 
 #: Resolves a fact id to whether it exists in the datalinks graph. Injected so the policy is
 #: testable without a store, and so the same policy can run against Quipu, a local TTL, or a
@@ -150,6 +151,21 @@ class StateGuard:
     is less than Hank will do and it is not nothing — every check here is arithmetic on figures
     the adapter published, so a failure is a fact rather than a guess.
 
+    The affordability check is narrower still, and deliberately so. It runs only against metrics
+    the vocabulary **declares** to be pools (:func:`metrics.is_pool`) — today that is
+    ``energy_reserves`` alone. It used to run against any metric whose value went negative,
+    which is where na-co2 came from: ``minerals_remaining`` is a *shortfall*, so every build
+    option "cost" more than it, and this guard denied the entire action space of every base
+    that had accumulated a single mineral. base.production could not land an LLM-tier decision
+    at all.
+
+    The lesson is narrower than "the guard had a bug". The guard was reading a property out of
+    metadata that never carried it: "lower is better" says which way to want the number to
+    move, not that the number is a balance. So the property is declared beside the metric now,
+    and the same trap cannot be re-set by the next metric that happens to count downwards. What
+    it must *not* become is a list of metric names here — a special case living apart from the
+    thing it is about rots the moment someone adds a metric and reads only ``metrics.py``.
+
     Precedence is unchanged. ``action_space`` is the legality gate and runs first; this only
     subtracts from what is already legal, and it never adds.
     """
@@ -169,8 +185,19 @@ class StateGuard:
                 # disagree. Not this guard's job to fix, and not its job to hide either.
                 continue
             for metric, delta in (action.effects or {}).items():
+                if delta >= 0:
+                    continue
+                if not is_pool(metric):
+                    # A negative delta is only *unaffordable* against a metric that is a pool
+                    # to begin with. Against anything else it is a number going down, which is
+                    # frequently the whole point — a shortfall shrinking, a drone count
+                    # falling. The vocabulary says which is which (metrics.Metric.pool); this
+                    # guard is not entitled to an opinion, because the opinion it formed last
+                    # time ("lower is better, so it must be a budget") denied every legal
+                    # build in the game (na-co2).
+                    continue
                 current = metrics.get(metric)
-                if current is None or delta >= 0:
+                if current is None:
                     # An unreported metric must read as *uncheckable*, never as satisfied.
                     # Silence here is the honest outcome: the alternative is inventing a
                     # baseline and denying a legal move on the strength of it.
@@ -178,9 +205,19 @@ class StateGuard:
                 projected = current + delta
                 if projected < 0:
                     stripped.append(choice.action_id)
+                    # States the arithmetic and stops. It used to end "— the state moved since
+                    # this was offered", which named a *cause* the guard cannot see: it
+                    # compares a declared effect against a reported metric, and a disagreement
+                    # between those two is equally consistent with a board that moved, a brain
+                    # reasoning from a stale belief, and an adapter declaring an effect it did
+                    # not mean. It was the third one every time (na-co2), and the sentence sent
+                    # readers hunting a concurrency bug that did not exist. An advisory that
+                    # guesses at a cause is worse than one that reports only what it measured,
+                    # because this text lands on the record and in the repair prompt, where it
+                    # is read as a finding.
                     advisories.append(
                         f"{choice.action_id} spends {abs(delta):g} {metric} but only "
-                        f"{current:g} is available — the state moved since this was offered"
+                        f"{current:g} is available"
                     )
 
         # Directives are weighed, never obeyed. A standing plan losing to an urgent move is the

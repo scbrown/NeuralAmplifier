@@ -86,7 +86,6 @@ BASE_PRODUCTION = {
             "action": "Colony Pod",
             "cost": 30,
             "category": "unit",
-            "effects": {"minerals_remaining": -30},
             "role": "FOUNDS A NEW BASE elsewhere - does not grow this base",
             "triad": "land",
             "turns_if_switched": 15,
@@ -98,7 +97,6 @@ BASE_PRODUCTION = {
             "cost": 40,
             "maint": 0,
             "category": "facility",
-            "effects": {"minerals_remaining": -40},
             "turns_if_switched": 20,
             "turns_if_continued": 18,
         },
@@ -283,6 +281,55 @@ def test_declared_effects_use_the_vocabulary(record: dict) -> None:
     for action in world_view.action_space:
         for name in action.effects or {}:
             assert name in VOCABULARY, f"{action.id} declares an effect on unknown metric {name}"
+
+
+def test_a_build_option_declares_no_effects() -> None:
+    """na-co2, pinned at the adapter end. The absence is the fix, so something has to hold it.
+
+    Each of these used to carry `{"minerals_remaining": -cost}` — the item's whole price as a
+    withdrawal from a shortfall. It is a category error in both directions: `minerals_remaining`
+    is what the base still *owes*, and a build order in this engine spends nothing on the turn
+    it is given. Minerals are paid over turns out of `mineral_surplus`, so choosing an item is a
+    commitment, not a purchase.
+
+    Continuing the current item moves the shortfall by exactly zero. Switching retargets it by
+    an amount that depends on the engine's retool rules, and even computed exactly that number
+    is not a cost — abandoning a 220-mineral project for a Scout Patrol would read as
+    `minerals_remaining -209`, an improvement. So there is nothing honest to declare, and this
+    codebase would rather have an absent field than a wrong one.
+
+    What that costs is real and is recorded rather than hidden: no hop-0 directive retrieval and
+    no `Tradeoff` rows on this surface, until the vocabulary gains a metric that is a per-base
+    mineral *pool* (na-co2 (c) — `minerals_accumulated` is base state, not a measurement). The
+    brain can still weigh price, because every option carries `cost` and both turn estimates.
+    """
+    world_view = WorldView.model_validate(BASE_PRODUCTION)
+    for action in world_view.action_space:
+        assert not action.effects, (
+            f"{action.id} declares {action.effects}; a build order has no immediate effect to "
+            "declare, and -cost against a shortfall is what denied the whole action space"
+        )
+    assert all(getattr(a, "cost", None) for a in world_view.action_space), (
+        "dropping `effects` must not drop the price — `cost` is what the brain compares"
+    )
+
+
+def test_hurry_still_declares_both_of_its_effects() -> None:
+    """The contrast that keeps the fix from being read as "effects were a mistake".
+
+    Hurrying spends `energy_reserves` *now* and drives `minerals_remaining` to zero *now*, so
+    both deltas are immediate and known — which is what the field is for. Note the mineral leg
+    is `-remaining`, the debt itself, and not the item's price: that is the difference between
+    declaring an effect you mean and one you don't.
+    """
+    world_view = WorldView.model_validate(BASE_HURRY)
+    hurry = next(a for a in world_view.action_space if a.id == "hurry:now")
+    assert hurry.effects == {"energy_reserves": -81, "minerals_remaining": -26}
+    state = BASE_HURRY["base_state"]
+    assert hurry.effects["minerals_remaining"] == -state["minerals_remaining"], (
+        "the mineral leg is the shortfall going to zero, not the item's cost"
+    )
+    assert hurry.effects["energy_reserves"] == -hurry.cost
 
 
 def test_hurry_names_its_subject() -> None:

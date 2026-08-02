@@ -34,6 +34,19 @@ to appear in the metrics block of every pinned adapter record, and every base-sc
 every base-scope record. The first catches a name added ahead of its adapter; the second
 catches a name the adapter stopped reporting.
 
+**The metadata is a contract, not a comment.** ``scope`` and ``better`` are read by code, and
+na-co2 is what happens when a consumer reads *more* out of them than they say. ``StateGuard``
+inferred from "lower is better" that ``minerals_remaining`` was a budget an order could
+overdraw. It is a **shortfall** — minerals still owed — so every build option cost more than it
+by construction, and the guard denied the entire action space of every base mid-build, most
+sharply the one choice the project most wants right (continuing a nearly-finished item). The
+fix is the ``pool`` flag below: the thing the guard needs is now *declared* here, next to the
+metric it is about, rather than deduced in ``hank.py`` from a direction that never meant it.
+
+Which is the shape any future consumer of this metadata should copy. A property a metric either
+has or has not is a field here; a list of special-cased names living in the module that happens
+to care is how the same bug comes back under a different name.
+
 """
 
 from __future__ import annotations
@@ -60,10 +73,37 @@ class Metric:
     unit: str
     better: Better
     description: str
+    #: Whether the value reported for this name is a **pool**: a stock of something spendable,
+    #: where the number *is* the amount available and zero is a floor the game enforces. Only
+    #: then does ``current + delta < 0`` describe a move the state cannot support, rather than
+    #: arithmetic that merely happens to go negative.
+    #:
+    #: Nothing else in this dataclass implies it, which is the point (na-co2). ``better`` is
+    #: about which way to want the number to move; ``unit`` is what it is counted in. Neither
+    #: says whether the number is a balance you draw down — ``energy_reserves`` and
+    #: ``minerals_remaining`` are both quantities of a resource, and one is a bank while the
+    #: other is a debt.
+    #:
+    #: Default ``False`` on purpose, and the default is the safe one. A pool nobody flagged
+    #: costs an affordability check that never runs — the guard is silent, which is what it
+    #: already does for any metric the world view omits. A non-pool flagged by mistake denies
+    #: legal moves. So this is opt-in, and adding one is a deliberate edit with
+    #: ``test_metrics_vocabulary.py`` asking you to mean it.
+    pool: bool = False
 
 
-def _m(name: str, scope: MetricScope, unit: str, better: Better, description: str) -> Metric:
-    return Metric(name=name, scope=scope, unit=unit, better=better, description=description)
+def _m(
+    name: str,
+    scope: MetricScope,
+    unit: str,
+    better: Better,
+    description: str,
+    *,
+    pool: bool = False,
+) -> Metric:
+    return Metric(
+        name=name, scope=scope, unit=unit, better=better, description=description, pool=pool
+    )
 
 
 #: The vocabulary. Deliberately small: every name is one an adapter actually emits, so a
@@ -81,6 +121,11 @@ VOCABULARY: Final[dict[str, Metric]] = {
             "credits",
             "higher",
             "Energy credits banked and spendable now.",
+            # The one pool in the vocabulary today, and the only name an affordability check
+            # means anything against: the number is the balance, spending draws it down, and
+            # the engine will not let it go below zero. base.hurry is the surface that spends
+            # it, which is why that surface is the one StateGuard was built for.
+            pool=True,
         ),
         _m(
             "energy_income",
@@ -130,6 +175,13 @@ VOCABULARY: Final[dict[str, Metric]] = {
             "higher",
             "Net minerals produced by this base per turn.",
         ),
+        # Emphatically NOT a pool, and the metric that taught us the field has to exist. This
+        # is a debt, not a balance: it is what the base still owes on its current item, so
+        # "spending" it is meaningless and it is *smaller* the better the base is doing. A
+        # guard that read it as a budget denied every option on every base mid-build, because
+        # the shortfall is by construction no larger than the item already being paid for
+        # (na-co2, measured turn 42: banked 27 of 33, shortfall 6, and all nine options
+        # denied).
         _m(
             "minerals_remaining",
             "base",
@@ -162,6 +214,21 @@ VOCABULARY: Final[dict[str, Metric]] = {
 def known(name: str) -> bool:
     """Whether ``name`` is a metric a directive may reference."""
     return name in VOCABULARY
+
+
+def is_pool(name: str) -> bool:
+    """Whether ``name`` reports a spendable pool — see :attr:`Metric.pool`.
+
+    The question ``StateGuard`` has to ask before deciding an order is unaffordable, asked of
+    the vocabulary rather than answered from the metric's own name or direction.
+
+    An unknown name is not a pool. Effects are declared by the adapter and the adapter can name
+    anything (``faction.se`` declares its social-engineering deltas under the engine's own
+    effect names, which are not measurements at all), so the closed vocabulary is the only thing
+    standing between an arbitrary key and an affordability denial.
+    """
+    metric = VOCABULARY.get(name)
+    return metric is not None and metric.pool
 
 
 def describe(name: str) -> str:

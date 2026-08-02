@@ -252,6 +252,36 @@ decision reached the *game* is an adapter-side fact (`tier` in `na-observations.
 claim about it made from inside the orchestrator is inference. `/agent/submit` no longer says
 "applied to the game" for that reason — it says what this process did and stops there.
 
+#### Read `degrade.rate` per surface, or a dead surface hides in a live average (na-co2)
+
+A third shape, and the one the ceiling in §5.4 is weakest against. `StateGuard` read
+`minerals_remaining` — a **shortfall**, minerals still owed — as if it were a spendable budget,
+and every build option costs more than the shortfall *by construction*. So on any base that had
+banked a single mineral, the guard denied the **entire** action space, the repair ask had nothing
+legal left to return, and the decision fell to the deterministic tier:
+
+```text
+degraded=true  degrade_reason="guard denied every choice (1 stripped); 1 repair attempt(s) also failed"
+```
+
+Why the usual checks did not fire:
+
+- **Nothing looks broken.** The deterministic fallback returns a legal item — in the measured
+  case the *same* item the agent had chosen. The game plays on; the run has simply stopped being
+  an llm-tier run.
+- **A fleet-wide ceiling absorbs it.** `base.production` was degrading at near 1.0 on every
+  developed base while `faction.se` and `faction.tech` were fine. Averaged across surfaces the
+  number stays under a 5% ceiling for a long time.
+- **It is worst on the decision most worth having.** The textbook case is continuing a
+  nearly-finished item — 27 of 33 minerals banked, one turn to go — which is exactly what the
+  history work and the "prefer continuity" guidance exist to get right.
+
+So: **break `degrade.rate` out by `surface_id`, and alert on a surface at a floor of zero
+llm-tier decisions rather than on the aggregate.** The measurable tell that named this bug was
+not a rate at all — it was that `base.production` had no `tier=llm` / `applied=llm` row in
+`na-observations.jsonl` after 42 turns while `faction.se` had four. A surface that has *never*
+landed a brain decision is a stronger signal than any average, and it is free to compute.
+
 #### The half a deadline cannot reach: the game process that is gone (na-bzd)
 
 `decision_deadline_ms` fixes the case above by making the orchestrator race a clock the engine

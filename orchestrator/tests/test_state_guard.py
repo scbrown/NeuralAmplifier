@@ -121,6 +121,164 @@ def test_gains_are_never_denied() -> None:
     )
 
 
+# ------------------------------------------------- a shortfall is not a budget (na-co2)
+
+
+#: The live action space, turn 42, Morgan Solutions — Colony Pod already in production with 27
+#: of its 33 minerals banked and one turn to go, so the reported shortfall is 6. The three
+#: cheapest of the nine options the base actually had.
+#:
+#: The costs are here and the effects are not, which is the fix as the adapter now emits it: a
+#: build order spends nothing on the turn it is given, so there is no immediate delta to declare
+#: (thinker `na_write_action_space`).
+CONTINUE = Action(
+    id="unit:0", action="Colony Pod", cost=33, turns_if_switched=5, turns_if_continued=1
+)
+SWITCH_FORMERS = Action(id="unit:1", action="Formers", cost=22, turns_if_switched=4)
+SWITCH_SCOUT = Action(id="unit:2", action="Scout Patrol", cost=11, turns_if_switched=2)
+MID_BUILD = {"minerals_remaining": 6, "mineral_surplus": 7, "pop_size": 4}
+
+
+def test_continuing_the_item_already_in_production_is_applied() -> None:
+    """na-co2's acceptance criterion, at the shape it was measured.
+
+    The agent chose the item the base was one turn from finishing. The guard denied it — and
+    with it every other option — because it read `minerals_remaining` 6 as a budget and the
+    item's 33-mineral cost as a withdrawal from it. `base.production` therefore had no
+    llm-tier decision to its name while `faction.se` had four: the surface was not failing
+    visibly, it was silently degrading to the deterministic tier on every developed base.
+    """
+    orders = Orders(choices=[Choice(action_id="unit:0")])
+    ruling = StateGuard().rule(orders, view([CONTINUE, SWITCH_FORMERS, SWITCH_SCOUT], MID_BUILD))
+
+    assert ruling.verdict == "allow"
+    assert ruling.stripped == ()
+    assert apply(orders, ruling).choices[0].action_id == "unit:0"
+
+
+def test_the_whole_decision_lands_rather_than_degrading() -> None:
+    """The measured symptom was not "an advisory fired" — it was `degraded=true`.
+
+    Every option in the space cost more than the shortfall, so the guard stripped all of them,
+    the repair ask could only be answered with another denied option, and the decision fell to
+    the deterministic tier. The game still got a legal item, which is why this was invisible as
+    a quality problem: the run just quietly stopped being an llm-tier run. Asserting at the
+    orchestrator is what distinguishes "the guard allows" from "the decision survives".
+    """
+    from neural_amplifier.brain import ScriptedBrain
+    from neural_amplifier.orchestrator import Orchestrator
+
+    brain = ScriptedBrain(chooser=lambda _: Orders(choices=[Choice(action_id="unit:0")]))
+    result = Orchestrator(brain=brain, guard=StateGuard(), repair_attempts=1).decide(
+        view([CONTINUE, SWITCH_FORMERS, SWITCH_SCOUT], MID_BUILD)
+    )
+
+    assert result.record.degraded is False
+    assert result.record.degrade_reason is None
+    assert result.orders.choices[0].action_id == "unit:0"
+    assert len(brain.calls) == 1, "an allowed decision must not be re-asked"
+
+
+def test_no_advisory_claims_the_state_moved() -> None:
+    """The other half of the acceptance criterion, and worth its own test.
+
+    Nothing raced here. The advisory used to end "the state moved since this was offered",
+    asserting a cause the guard cannot observe — it compares a declared effect against a
+    reported metric and cannot tell a moved board from a stale belief from an adapter
+    declaring an effect it did not mean. It was always the third. A wrong cause on the record
+    costs a reader an afternoon hunting a concurrency bug that does not exist.
+    """
+    ruling = StateGuard().rule(
+        Orders(choices=[Choice(action_id="unit:0")]),
+        view([CONTINUE, SWITCH_FORMERS, SWITCH_SCOUT], MID_BUILD),
+    )
+    assert ruling.advisories == ()
+
+    # And not merely because this ruling is silent — the phrase is gone from the denial that
+    # does fire, which is where it used to appear.
+    denied = StateGuard().rule(
+        Orders(choices=[Choice(action_id="hurry:now")]), view([HURRY], {"energy_reserves": 40})
+    )
+    assert denied.verdict == "deny"
+    assert not any("state moved" in a for a in denied.advisories)
+    assert "only 40 is available" in denied.advisories[0]
+
+
+def test_a_shortfall_declared_as_an_effect_is_never_an_affordability_failure() -> None:
+    """The general fix (na-co2 (b)), tested at the guard rather than at the adapter.
+
+    Fixing only the adapter would leave the trap armed for the next metric that counts
+    downwards. `minerals_remaining` is "lower is better" and a negative delta against it is an
+    *improvement* — a debt shrinking — so it can never make an order unaffordable however large
+    it is. Here it is larger than the reported value, which is the exact arithmetic that used to
+    deny.
+    """
+    liar = Action(id="unit:0", action="Colony Pod", effects={"minerals_remaining": -33})
+    ruling = StateGuard().rule(
+        Orders(choices=[Choice(action_id="unit:0")]), view([liar], MID_BUILD)
+    )
+    assert ruling.verdict == "allow"
+    assert ruling.advisories == ()
+
+
+def test_a_declared_pool_is_still_checked() -> None:
+    """Narrowing the check must not disarm it.
+
+    `energy_reserves` is the one metric the vocabulary declares a pool, and base.hurry is the
+    surface that spends it. If this passes and the test above also passes, the guard is
+    discriminating on the declaration rather than having simply stopped working.
+    """
+    both = Action(
+        id="hurry:now",
+        action="Hurry production",
+        effects={"energy_reserves": -81, "minerals_remaining": -26},
+    )
+    ruling = StateGuard().rule(
+        Orders(choices=[Choice(action_id="hurry:now")]),
+        view([both], {"energy_reserves": 40, "minerals_remaining": 26}),
+    )
+    assert ruling.verdict == "deny"
+    assert ruling.stripped == ("hurry:now",)
+    # One advisory, not two: the shortfall leg contributed nothing.
+    assert len(ruling.advisories) == 1
+    assert "energy_reserves" in ruling.advisories[0]
+
+
+def test_an_effect_on_a_name_outside_the_vocabulary_is_not_a_budget() -> None:
+    """`faction.se` declares its deltas under the engine's own effect names — "economy",
+    "efficiency", "support" — which are not measurements at all. An unknown name has no
+    declaration to read, so it cannot be a pool, and a negative one must not deny."""
+    se = Action(id="se:1:2", action="Planned", effects={"economy": -1, "growth": +2})
+    ruling = StateGuard().rule(
+        Orders(choices=[Choice(action_id="se:1:2")]), view([se], {"economy": 0})
+    )
+    assert ruling.verdict == "allow"
+
+
+def test_a_directive_on_a_shortfall_is_still_weighed() -> None:
+    """Not checking affordability is not the same as ignoring the metric.
+
+    The trade-off path is untouched: a directive about `minerals_remaining` still lands as an
+    advisory when the chosen action would violate it. Denial and weighing are separate
+    mechanisms, and only the first one was wrong.
+    """
+    tradeoff = Tradeoff(
+        action_id="unit:0",
+        directive_id="finish-what-we-start",
+        metric="minerals_remaining",
+        delta=27,
+        projected=33,
+        would_violate=True,
+        directive_priority=6,
+    )
+    ruling = StateGuard().rule(
+        Orders(choices=[Choice(action_id="unit:0")]),
+        view([CONTINUE], MID_BUILD, tradeoffs=[tradeoff]),
+    )
+    assert ruling.verdict == "allow"
+    assert any("finish-what-we-start" in a for a in ruling.advisories)
+
+
 def test_a_violated_directive_warns_but_never_denies() -> None:
     """Priorities exist so a decision can *outrank* a plan.
 

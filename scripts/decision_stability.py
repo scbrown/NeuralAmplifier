@@ -83,6 +83,15 @@ def to_world_view(record: dict[str, Any]) -> WorldView:
     A record from before that change will fail here, which is correct — it is a different wire
     format, and quietly coercing it would make a stability number incomparable with the run
     beside it.
+
+    **A record can be the right shape and still carry a wrong number, and that one does not
+    fail.** `base.production` rows captured before na-co2 declare `{"minerals_remaining":
+    -cost}` on every option — the item's price as a withdrawal from a shortfall. They parse,
+    they replay, and `StateGuard` strips the whole action space, so the run measures the
+    stability of the deterministic fallback rather than of the brain. The harness does say so
+    (`!! DEGRADED n of n runs`, and it refuses to let the stability line stand unqualified when
+    every run degraded) — but only if you read that line before the one below it. When
+    replaying an archived observation file, check the capture date against the adapter fix.
     """
     return WorldView.model_validate(record)
 
@@ -264,7 +273,12 @@ def main() -> int:
 
     if advisories:
         print()
-        print("guard          citation advisories (runs affected)")
+        # "guard advisories", not "citation advisories". Both guards in the chain land here,
+        # and the old heading named only one of them — so a StateGuard denial printed under a
+        # label that told the reader it was about citations. That is a bad place to be
+        # imprecise: a strip is the loudest thing this harness can observe short of a degrade
+        # (na-co2).
+        print("guard          advisories (runs affected)")
         for advisory, count in advisories.most_common():
             print(f"  {count}/{args.runs}  {advisory}")
     return 0

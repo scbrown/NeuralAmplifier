@@ -7,6 +7,26 @@
 > verdict shape and the decision record do not change when Hank's `POST /guard` replaces it. See
 > [agent-play.md](agent-play.md) §7 for why the agent-brain pivot made it urgent.
 >
+> **The affordability check runs only against metrics declared to be pools**
+> (`metrics.Metric.pool` — today `energy_reserves` alone). A negative delta is *unaffordable*
+> only if the number it moves is a balance something spends; against anything else it is a
+> quantity going down, which is frequently the point. The guard does not deduce this. It asks the
+> vocabulary, because the last time it deduced it — from "lower is better" — it read
+> `minerals_remaining` (a **shortfall**, minerals still *owed*) as a budget, and since every
+> build option costs more than the shortfall by construction, it denied the **entire action
+> space** of every base mid-build and took `base.production` off the llm tier altogether
+> (na-co2). Two rules fall out of that, and both are load-bearing:
+>
+> - **A property the guard needs is declared next to the metric, never listed here.** A set of
+>   special-cased metric names in `hank.py` is the same bug with a longer fuse: the next person
+>   to add a metric reads `metrics.py` and never learns this file has an opinion about it.
+> - **A denial states its arithmetic and no cause.** The advisory used to end "the state moved
+>   since this was offered". The guard cannot see that: a declared effect disagreeing with a
+>   reported metric is equally consistent with a moved board, a brain reasoning from a stale
+>   belief, and an adapter declaring an effect it did not mean. It was the third one every time,
+>   and the sentence sent readers hunting a concurrency bug that did not exist. Guard text lands
+>   on the record *and* in the repair prompt, where a guess is read as a finding.
+>
 > **Status: design / architecture (pre-alpha), and net-new engineering.** These three roles
 > generalize Hank from a code-structure engine into a general in-memory fact graph + policy /
 > what-if harness over the live board. **Nothing here is built**, and it is gated twice: by Hank
