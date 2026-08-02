@@ -32,6 +32,7 @@ omitted (the orchestrator treats missing sections as "not available on this engi
   "trace": { "traceparent": "00-4bf92f35…-00f067aa…-01" },  // optional: W3C trace context
   "decision_deadline_ms": 2500,     // optional: how long the engine will wait before
                                     // applying its own answer (see "Telemetry fields")
+  "run_id": "68ad1e40-0004e1c8-1a2c",  // optional: which run of the game process is asking
   "turn": 42,
   "year": 2142,
   "faction": "GAIANS",
@@ -182,6 +183,7 @@ Three optional, additive fields carry observability without changing the shape o
 | `surface_id` | adapter → orchestrator | Which decision this is, from [game-surface.md](game-surface.md). Drives coverage measurement. |
 | `trace.traceparent` | adapter → orchestrator | W3C trace context. The **adapter is the root** — the game is the root of the causality — and the orchestrator continues it across Quipu/Hank. |
 | `decision_deadline_ms` | adapter → orchestrator | How long the engine will wait before applying its own answer. See below. |
+| `run_id` | adapter → orchestrator | Which run of the game process is asking. Lets the orchestrator notice a restart. See below. |
 | `degraded` | orchestrator → adapter | This response is the safe fallback, not a decision. |
 
 ### `decision_deadline_ms` — the adapter's own clock
@@ -212,6 +214,56 @@ degrades honestly and a late `/agent/submit` is refused with 409.
 
 An adapter that can state this **should**. It is the only thing that lets the orchestrator tell a
 slow answer from a useless one.
+
+### `run_id` — which run of the process is asking
+
+An opaque string, fixed for the life of the game process and different in any two processes. The
+orchestrator never parses it and never orders it; it asks one question — *is this the same string
+as last time* — and when the answer is no it retires every decision left over from the run before.
+
+- **Absent** means the adapter did not say, and that reads as **cannot tell**, never as *a new
+  run*. Every adapter is absent here until it is upgraded, and treating absence as a change would
+  retire the outstanding decisions of an adapter that is behaving perfectly. Cannot-tell must not
+  be destructive.
+- **The first `run_id` an orchestrator ever sees is adopted, not acted on.** There is no evidence
+  of a restart in a first sighting — the decisions being held may belong to that very process —
+  so nothing is dropped. Only a *change* is evidence.
+- **A change retires every live decision**, including ones that carried no `run_id`: one
+  orchestrator serves one game, so a run that has ended takes everything older with it. Each
+  retired decision releases its blocked `POST /decide` worker with a degraded record naming the
+  restart, stops appearing in `/agent/waiting` and `/agent/next`, and refuses `/agent/submit`
+  with a 409 that says the game that raised it is gone.
+
+**Why it exists (na-bzd).** `decision_deadline_ms` covers the engine that is *alive and has
+stopped waiting*. It cannot cover the engine that no longer *exists*: nothing on the orchestrator
+side counts down once a decision loop is blocked, so a dead process's deadline is never reached
+by anything. Measured 2026-08-02 — a game was killed mid-decision and relaunched, and the
+still-running orchestrator offered four decisions at turn 40, status `pending`, ages 600–1275 s,
+every one raised by a process dead for twenty minutes. Claiming and answering one returned the
+ordinary success response. An agent had no way to tell them from live work, so it could spend
+real reasoning on a decision that cannot land — and the queue could not answer "is the game
+waiting on me?" at all.
+
+Two weaker designs were considered and rejected. An **absolute age cap** cannot distinguish a
+dead game from an agent that is legitimately thinking for minutes, which this project deliberately
+supports. **Client-disconnect detection** is not reliably observable from inside the synchronous
+FastAPI handlers this uses. Process identity needs no liveness probing and no timer: the restart
+announces itself.
+
+The limit that follows from having no timer is worth stating rather than discovering: a game
+killed and **never restarted** leaves its decisions in the queue, because the evidence is the next
+run arriving and there is no next run. What this guarantees is that a dead run's work can never be
+mistaken for the current game's — which is the failure that cost the time. A queue with nothing
+posting to it at all is a state an operator can already see.
+
+**Generating one.** It must be stable for the life of the process and different in any two
+processes the orchestrator could see in sequence — nothing more. The thinker adapter composes
+three components at first use, each covering what the others cannot: the process id (separates
+runs that overlap — two live processes never share one), the tick count since boot (separates
+sequential runs where a pid may have been recycled; it is monotonic, so the later process reads a
+strictly larger value), and wall-clock seconds (separates runs across a reboot, which resets the
+tick count). Deliberately no RNG, and emphatically not the engine's: `rand()` in a game DLL shares
+the game's seed, and perturbing map generation to obtain a correlation id is a bad trade.
 
 ## Fairness
 

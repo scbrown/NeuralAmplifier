@@ -258,6 +258,34 @@ class WorldView(_Model):
     #: nothing reports that it did not.
     decision_deadline_ms: int | None = None
 
+    #: Which *run of the game process* raised this decision. Opaque to the orchestrator, which
+    #: only ever asks whether it equals the last one it saw — never parses it, never orders it.
+    #:
+    #: The companion to ``decision_deadline_ms`` and the half it cannot cover (na-bzd).
+    #: A deadline only helps while the engine is alive to reach it: nothing on the orchestrator
+    #: side counts down, so the abandon path fires when a *live* adapter's socket read gives up.
+    #: Kill the game mid-decision and there is no such moment. Measured 2026-08-02: the game was
+    #: killed and relaunched, and the still-running orchestrator's ``/agent/waiting`` offered four
+    #: decisions at turn 40, status ``pending``, ages 600-1275s, every one raised by a process
+    #: that had been dead for twenty minutes. Claiming and answering one returned the ordinary
+    #: success response. Nothing anywhere distinguished them from live work.
+    #:
+    #: The orchestrator's own ``game_id`` cannot answer this. It is minted per *orchestrator*
+    #: instance, so it is stable across exactly the event that matters and changes on the one
+    #: that does not — backwards for this question, and load-bearing for trace correlation, so it
+    #: is not repurposed. Only the adapter knows which process it is.
+    #:
+    #: ``None`` means the adapter did not say, and that reading has to stay **"cannot tell"**
+    #: rather than "a new run": every adapter is absent here until it is upgraded, and treating
+    #: absence as a change would drop the pendings of an adapter that is behaving correctly.
+    #: Cannot-tell must not be destructive. See ``DecisionQueue.post``.
+    #:
+    #: Typed rather than a passthrough extra for the third time in three fields, and for the
+    #: reason na-wzw paid for: the orchestrator reads this **by name**, and a name it reads that
+    #: is not on the contract arrives as an extra the parser drops — the attribute reads ``None``
+    #: forever and nothing reports that it never came.
+    run_id: str | None = None
+
     year: int | None = None
     fairness: Fairness | None = None
     action_space: list[Action] = Field(default_factory=list)

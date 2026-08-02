@@ -204,6 +204,15 @@ surface consequences in [game-surface.md](game-surface.md); dialog handling in
   as `0` when `llm_timeout_ms <= 0`, since that configuration means wait-indefinitely and a
   literal `0` invites the opposite reading.
 
+  It is not configurable, but the companion field is worth knowing about here: `na_run_id`
+  composes a per-process id from `GetCurrentProcessId`, `GetTickCount` and `time(NULL)` at first
+  use, and `na_write_head` stamps it on **every** world view as `run_id`. Unlike the deadline it
+  rides on observation records too — it names the process rather than asserting a wait, and
+  `na-observations.jsonl` is one file appended across every run of the game with nothing else in
+  it to mark where one run ended. The orchestrator uses it to retire the decisions of a game that
+  has been killed, which a deadline cannot do because a dead process never reaches one (na-bzd;
+  [contract.md](contract.md)).
+
 ## 6.1 The transport
 
 `src/na_http.cpp` — raw Winsock, ~300 lines, no engine headers.

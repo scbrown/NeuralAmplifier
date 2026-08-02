@@ -119,6 +119,19 @@ with 409 instead of being recorded as applied. Setting `llm_timeout_ms` generous
 right configuration for an agent-driven run; the coupling only makes the failure legible when it
 is not.
 
+**A deadline only binds a game that is still running.** Kill the game — crash, restart, or a
+deliberate relaunch — and nothing counts down on the orchestrator side, because the expiry lives
+in the adapter's socket read and there is no adapter any more. Measured 2026-08-02: after a game
+was killed and relaunched, `decisions_waiting()` offered four decisions at turn 40 with ages of
+600–1275 s, every one from a process dead for twenty minutes, and answering one returned the
+ordinary success response. So the adapter also states a `run_id` (contract.md) — an opaque string
+fixed per game process — and a decision arriving from a *different* run retires everything left
+over from the one before. You will see it as a decision that vanishes from
+`decisions_waiting()` and a `submit_orders` refused with "the game process that raised it is
+gone". That refusal is terminal: do not retry it, collect a decision from the current run
+instead. **You no longer need to restart the orchestrator when you restart the game** — that was
+the standing workaround, and it cost real time twice in one run.
+
 **On the adapter side the wait is sliced, and it deliberately does not pump.** The obvious way
 to keep a window alive while blocking is `PeekMessage(PM_REMOVE)` + `DispatchMessage`, and that
 is wrong here: the DLL is inside `mod_base_build`, inside the engine's own base-processing

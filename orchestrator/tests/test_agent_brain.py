@@ -24,13 +24,16 @@ from neural_amplifier.pending import (
 )
 
 
-def world_view(surface: str = "base.production", turn: int = 1) -> WorldView:
+def world_view(
+    surface: str = "base.production", turn: int = 1, run: str | None = None
+) -> WorldView:
     return WorldView(
         engine="thinker",
         scope="base",
         turn=turn,
         faction="Gaians",
         surface_id=surface,
+        run_id=run,
         action_space=[
             Action(id="unit:0", action="Colony Pod"),
             Action(id="facility:4", action="Recycling Tanks"),
@@ -303,6 +306,124 @@ def test_a_deadline_of_zero_means_indefinite_not_immediate() -> None:
     view = world_view()
     view.decision_deadline_ms = 0
     assert brain._deadline(view) == (45.0, None)
+
+
+# ------------------------------------------------- the game's own identity (na-bzd)
+#
+# The deadline above only helps while the engine is ALIVE to reach it — nothing on this side
+# counts down once a decision loop is blocked. Kill the game and its pendings sit here forever,
+# answerable, indistinguishable from live work. Measured 2026-08-02: four decisions at turn 40,
+# status "pending", ages 600-1275s, every one from a process dead for twenty minutes; claiming
+# and answering one returned the ordinary success response.
+#
+# `run_id` is the adapter naming its process. These tests are about the three answers the queue
+# gives it, and the two quiet ones matter more than the loud one.
+
+
+def test_a_new_run_retires_every_decision_left_over_from_the_one_before() -> None:
+    """The loud case, and the whole of the bug: a `POST /decide` from a different process is
+    the only evidence the orchestrator will ever get that the previous one died.
+
+    Retired means gone from all three surfaces at once. The measured failure was that they
+    disagreed with nothing — the queue held them, `waiting()` listed them, and `claim()` handed
+    them out, all for a game that no longer existed.
+    """
+    queue = DecisionQueue()
+    first = queue.post(world_view(run="run-a"))
+    queue.claim()  # an agent was already thinking about it when the game died
+
+    live = queue.post(world_view(surface="base.hurry", run="run-b"))
+
+    assert [p.id for p in queue.waiting()] == [live.id]
+    assert first.status == "abandoned"
+    with pytest.raises(NotClaimable, match="game process that raised it is gone"):
+        queue.answer(first.id, Orders(choices=[Choice(action_id="unit:0")]))
+
+
+def test_the_blocked_game_thread_of_a_dead_run_is_released_not_left_hanging() -> None:
+    """The worker holding the socket to the dead process must come back, or the fix trades a
+    stale queue entry for a leaked thread — and with `llm_timeout_ms = 0` (wait indefinitely,
+    the documented configuration for agent play) it would never come back at all.
+
+    It has to come back with the *reason*, because that string is what the decision record's
+    `degrade_reason` becomes. "no answer within Ns" would blame the agent for a game that was
+    killed.
+    """
+    queue = DecisionQueue()
+    dead = queue.post(world_view(run="run-a"))
+    threading.Timer(0.05, lambda: queue.post(world_view(run="run-b"))).start()
+    with pytest.raises(Unanswered, match="game process that raised it is gone"):
+        queue.await_answer(dead, timeout=3)
+
+
+def test_the_first_run_id_a_queue_ever_sees_drops_nothing() -> None:
+    """Adopting is not the same as superseding, and conflating them costs a live decision.
+
+    An orchestrator that has been serving an adapter too old to send a run id, and is then
+    handed one, has *no evidence of a restart* — the decisions it is holding may well belong to
+    this very process. Dropping them on first sighting would abandon a decision the game is
+    sitting and waiting for, which is the mirror failure of na-bzd and hits an adapter that is
+    behaving correctly.
+    """
+    queue = DecisionQueue()
+    older = queue.post(world_view())  # an adapter that says nothing
+    upgraded = queue.post(world_view(surface="base.hurry", run="run-a"))  # then one that does
+
+    assert older.status == "pending"
+    assert {p.id for p in queue.waiting()} == {older.id, upgraded.id}
+    assert queue.run_id == "run-a"
+
+
+def test_a_world_view_with_no_run_id_changes_nothing_at_all() -> None:
+    """Absent must read as *cannot tell*, and cannot-tell must not be destructive.
+
+    Every adapter is absent here until it is upgraded. If a missing run id counted as "not the
+    current run", an old adapter would have each decision retire the one before it — a queue
+    that empties itself, blamed on a game that never restarted.
+
+    It must also not overwrite what the queue knows: a silent world view arriving mid-run
+    cannot be allowed to erase the run id, or the *next* real one would look like a first
+    sighting and the retirement would never fire.
+    """
+    queue = DecisionQueue()
+    queue.post(world_view(run="run-a"))
+    first_silent = queue.post(world_view(surface="base.hurry"))
+    second_silent = queue.post(world_view(surface="faction.tech"))
+
+    assert first_silent.status == "pending"
+    assert second_silent.status == "pending"
+    assert len(queue.waiting()) == 3
+    assert queue.run_id == "run-a", "a silent world view must not erase the known run"
+
+    # And the retirement still fires afterwards, which is what that last assertion is for.
+    queue.post(world_view(surface="base.abandon", run="run-b"))
+    assert len(queue.waiting()) == 1
+
+
+def test_a_dead_run_does_not_count_against_the_depth_bound() -> None:
+    """Order of operations, and it is load-bearing: retire first, then check depth.
+
+    A killed game leaves as many pendings as it had blocked workers. If those still counted,
+    the *new* game's first decisions would be refused with `QueueFull` and degrade to the
+    deterministic tier — the restart repairing the queue would be the thing that broke the run.
+    """
+    queue = DecisionQueue(max_depth=2)
+    queue.post(world_view(run="run-a"))
+    queue.post(world_view(surface="base.hurry", run="run-a"))
+    queue.post(world_view(surface="faction.tech", run="run-b"))  # must not raise
+    assert len(queue.waiting()) == 1
+
+
+def test_decisions_of_the_same_run_are_never_disturbed() -> None:
+    """The regression guard. A game posts several decisions per turn — several per base — and
+    every one of them arrives with the same run id. If the check were on anything other than
+    equality, ordinary play would retire its own outstanding work.
+    """
+    queue = DecisionQueue()
+    first = queue.post(world_view(run="run-a"))
+    second = queue.post(world_view(surface="base.hurry", run="run-a"))
+    third = queue.post(world_view(surface="faction.tech", run="run-a"))
+    assert {p.id for p in queue.waiting()} == {first.id, second.id, third.id}
 
 
 # -------------------------------------------------------------------- doorbell

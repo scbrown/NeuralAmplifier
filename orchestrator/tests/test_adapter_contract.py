@@ -29,6 +29,10 @@ BASE_PRODUCTION = {
     "turn": 42,
     "faction_id": 1,
     "faction": "Gaians",
+    # na_write_head: which run of the game process raised this. Every world view carries it,
+    # observations included — it names the process, and a process is what an observation record
+    # has too (unlike decision_deadline_ms, which asserts a wait an observation never performs).
+    "run_id": "68ad1e40-0004e1c8-1a2c",
     "trace": {"traceparent": "00-0000002a000000010000000107a1c0de-000000010000002b-01"},
     "base_id": 0,
     "base": "Gaia's Landing",
@@ -121,6 +125,7 @@ BASE_HURRY = {
     "turn": 42,
     "faction_id": 1,
     "faction": "Gaians",
+    "run_id": "68ad1e40-0004e1c8-1a2c",
     "trace": {"traceparent": "00-0000002a000000010000000207a1c0de-000000020000002b-01"},
     "base_id": 0,
     "base": "Gaia's Landing",
@@ -173,6 +178,7 @@ FACTION_TECH = {
     "turn": 42,
     "faction_id": 1,
     "faction": "Gaians",
+    "run_id": "68ad1e40-0004e1c8-1a2c",
     "trace": {"traceparent": "00-0000002a000000010000000307a1c0de-000000030000002b-01"},
     "metrics": {
         "energy_reserves": 82,
@@ -413,6 +419,31 @@ def test_the_engine_deadline_populates_the_contract_field_not_merely_the_payload
     # And an adapter that has not been upgraded must stay unbounded rather than acquire a
     # default — inventing one here would abandon decisions the game is still blocked on.
     assert WorldView.model_validate(BASE_HURRY).decision_deadline_seconds() is None
+
+
+def test_the_run_id_populates_the_contract_field_not_merely_the_payload() -> None:
+    """The third field in a row that the orchestrator reads by name (na-bzd), pinned for the
+    third time for the reason na-wzw established: an extra satisfies `model_dump()` and leaves
+    the attribute reading None forever, and nothing anywhere reports that it never arrived.
+
+    Here that failure would be silent in the worst direction. `DecisionQueue.post` treats a
+    missing run id as *cannot tell* and deliberately drops nothing — so a `run_id` that parsed
+    as an extra would leave the queue behaving exactly as it did before the fix, offering the
+    decisions of a game that has been dead for twenty minutes, with the field visibly present
+    on every world view in the log.
+
+    Asserted on all three surfaces because `na_write_head` emits it, not the decide paths: an
+    observation record names its process too, and na-observations.jsonl is one file appended
+    across every run of the game with nothing else in it to mark where a run ended.
+    """
+    for payload in (BASE_PRODUCTION, BASE_HURRY, FACTION_TECH):
+        world_view = WorldView.model_validate(payload)
+        assert world_view.run_id == "68ad1e40-0004e1c8-1a2c"
+
+    # Absent is a legitimate state, not a parse failure: it is where every adapter sits until it
+    # is upgraded, and the queue's whole first-decision rule depends on being able to see it.
+    silent = {k: v for k, v in BASE_HURRY.items() if k != "run_id"}
+    assert WorldView.model_validate(silent).run_id is None
 
 
 def test_history_items_name_something_the_brain_could_choose() -> None:

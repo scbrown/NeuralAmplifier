@@ -24,7 +24,7 @@ the time you read it, and the adapter has moved on (na-t3h).
 (`decision_deadline_ms` in the world view), and the orchestrator gives up *first*, deliberately.
 So a late submit is now **refused with 409**, naming the deadline and saying the game moved on:
 
-```
+```text
 409  base.production-7 was abandoned: the engine's 2500ms deadline passed with no answer;
      the game has applied its own fallback and moved on. Do not resubmit this decision —
      re-read the board and answer the next one.
@@ -104,7 +104,9 @@ tmux new-session -d -s smac -n brain
 
 On reconnecting, or after a compaction, call `decisions_waiting` before anything else. It
 tells you what is outstanding so you do not double-answer or sit idle next to an open
-decision.
+decision. Everything it lists belongs to the game process that is running now — a restarted
+game's leftovers are retired the moment the new run posts its first decision, so a long age
+there means a slow answer, never a dead game (na-bzd).
 
 ## 3. Reading a world view
 
@@ -234,6 +236,11 @@ memory of the board is not. Where they disagree, the payload wins.
 - **"already answered"** — you submitted twice. Call `decisions_waiting` to resync.
 - **"was abandoned"** — the game stopped waiting and played the deterministic tier's choice.
   The turn has moved on; collect the next decision rather than arguing with this one.
+- **"the game process that raised it is gone"** — the game was killed or restarted while you
+  were thinking, and a new run is now posting decisions. Nothing can apply an answer to that
+  decision and nothing you do will change that. Do not retry it, and **do not trust your memory
+  of the board**: the new run is a different game. Call `decisions_waiting`, collect a decision
+  from it, and read the world view as if you had just sat down.
 - **"orchestrator unreachable"** — the service is down. Report it. Do not keep polling.
 
 Never invent an `action_id` to get unstuck. The engine's list is the only legal set, and a

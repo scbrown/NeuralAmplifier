@@ -252,6 +252,51 @@ decision reached the *game* is an adapter-side fact (`tier` in `na-observations.
 claim about it made from inside the orchestrator is inference. `/agent/submit` no longer says
 "applied to the game" for that reason — it says what this process did and stops there.
 
+#### The half a deadline cannot reach: the game process that is gone (na-bzd)
+
+`decision_deadline_ms` fixes the case above by making the orchestrator race a clock the engine
+declared. That only works while the engine is **alive to reach it**. Nothing on the orchestrator
+side counts down once a decision loop is already blocked — the expiry is the adapter's socket read
+giving up — so a deadline stated by a process that has since been killed is never reached by
+anything at all.
+
+Measured 2026-08-02. A game was killed mid-decision and relaunched; the still-running
+orchestrator's `/agent/waiting` offered **four decisions at turn 40, status `pending`, ages
+600–1275 s**, every one raised by a process dead for twenty minutes. Claiming and answering one
+returned the ordinary success response with `degraded: false`. They were indistinguishable from
+live work in the queue, in `/agent/waiting`, and to an agent polling `/agent/next`.
+
+This is the §5.4 family again with the detector one layer further out. The orchestrator's record
+would have been internally consistent, the adapter would have written no contradicting row at all
+(there was no adapter), and the only observable was an age — which is exactly the signal that
+cannot be trusted here, because a legitimately slow agent looks identical to a dead game and this
+project deliberately supports agents that think for minutes.
+
+The fix is the same rule a third time: **ask the party that actually knows.** `run_id`
+(contract.md) is the adapter naming its own process. A `POST /decide` bearing a run id different
+from the one the queue has been seeing is the only evidence the orchestrator will ever get that
+the process it was serving has exited, and on that evidence every decision from the older run is
+retired — released with a degraded record naming the restart, removed from `/agent/waiting` and
+`/agent/next`, and refused on `/agent/submit` with a 409 that says the game that raised it is gone
+rather than a bare conflict.
+
+Two readings are deliberately **not** destructive, because absence is not evidence: a world view
+with no `run_id` changes nothing (every adapter is absent until it is upgraded), and the *first*
+run id an orchestrator sees is adopted without retiring anything (a first sighting is not a
+restart). The failure those rules avoid is the mirror one — abandoning decisions a healthy game is
+still blocked on, which would read in a log exactly like this bug and hit adapters doing nothing
+wrong.
+
+The record shape is unchanged; what is new is a `degrade_reason` that names a process death. A run
+with several of those is a run whose game was restarted, and that is now readable from the decision
+log alone instead of being invisible.
+
+> **Retired operational note.** Until this landed, the standing advice was to restart the
+> orchestrator whenever the game restarted and to confirm `/agent/waiting` was empty before
+> trusting the queue. That is no longer necessary, and the reason it is worth recording that it
+> ever was: the workaround cost real time twice during one run, because stale pendings looked
+> like live work and nothing in the interface said otherwise.
+
 ### 5.5 Action-space adherence
 
 Orders referencing an `action_id` not in the world view's `action_space` should be

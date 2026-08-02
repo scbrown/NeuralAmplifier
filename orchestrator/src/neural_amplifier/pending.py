@@ -48,6 +48,27 @@ MAX_DEPTH = 64
 SETTLED_MEMORY = 128
 
 
+def orphaned_reason(previous: str | None, current: str) -> str:
+    """Why a decision was dropped when a new game process started (na-bzd).
+
+    An agent reads this text as a tool result and has to act on it, so it must say the one
+    thing a generic "abandoned" cannot: the work is unrecoverable and nothing the agent does
+    will change that. "Abandoned" alone reads to a model as *try again* — which is exactly the
+    wrong move, because there is no process left to try against.
+
+    It names both runs on purpose. An agent that answered a decision from run A and is now
+    being offered run B's decisions needs to be able to tell that its board state is stale,
+    not merely that one call failed.
+    """
+    return (
+        f"the game process that raised it is gone. It came from run {previous}, and run "
+        f"{current} is now posting decisions, so the process that was blocked on this one has "
+        "exited — nothing can apply an answer to it, and any reasoning spent on it was spent "
+        "on a board that no longer exists. Do not resubmit: collect a decision from the "
+        "current run instead."
+    )
+
+
 @dataclass
 class Pending:
     """One decision waiting for an answer."""
@@ -95,6 +116,11 @@ class DecisionQueue:
         self._order: list[str] = []
         self._ids = itertools.count(1)
         self._max_depth = max_depth
+        # The engine run every live decision here belongs to — the last ``run_id`` seen on a
+        # posted world view, or None while no adapter has ever stated one. Public because it is
+        # the one piece of queue state an operator or a test needs to read directly; the queue
+        # never interprets it beyond equality (see ``post``).
+        self.run_id: str | None = None
         # Why each recently-settled decision closed, so a late answer gets told *what*
         # happened rather than merely that the id is unknown. An agent reads this text as a
         # tool result and acts on it: "abandoned, nobody answered in time" means re-read the
@@ -113,21 +139,96 @@ class DecisionQueue:
         Raises :class:`QueueFull` rather than blocking. A full queue means the agent side has
         stopped consuming, and the caller's correct response is to degrade to the deterministic
         tier immediately — waiting would convert one stuck decision into every decision stuck.
+
+        This is also where a **restarted game** is noticed (na-bzd). A ``POST /decide`` carrying
+        a ``run_id`` the queue has not been seeing is the only evidence the orchestrator ever
+        gets that the process it was serving is gone: there is no liveness probe, and there
+        cannot usefully be one — the socket close is not observable from inside a sync FastAPI
+        handler, and an age cap cannot tell a dead game from an agent that is legitimately
+        thinking for minutes, which this project deliberately supports.
+
+        **The limit that follows from that, stated so nobody assumes otherwise:** a game killed
+        and *never restarted* leaves its decisions here, because the evidence is the next run
+        arriving and there is no next run. What the fix guarantees is that they cannot be
+        mistaken for the *current* game's work, which is the failure that cost real time — an
+        agent answering stale decisions it had no way to identify. A queue with nothing posting
+        to it at all is a state an operator can already see.
         """
-        with self._lock:
-            live = [i for i in self._order if self._by_id[i].status in ("pending", "claimed")]
-            if len(live) >= self._max_depth:
-                raise QueueFull(f"{len(live)} decisions already waiting")
-            surface = world_view.surface_id or "decision"
-            pending = Pending(
-                id=f"{surface}-{next(self._ids)}",
-                world_view=world_view,
-                created=time.monotonic(),
-            )
-            self._by_id[pending.id] = pending
-            self._order.append(pending.id)
-            self._arrived.notify_all()
-            return pending
+        orphaned: list[Pending] = []
+        try:
+            with self._lock:
+                # Before the depth check, not after: a dead run's decisions must not be able to
+                # push the live run over the bound and degrade its first turn.
+                orphaned = self._supersede(world_view.run_id)
+                live = [i for i in self._order if self._by_id[i].status in ("pending", "claimed")]
+                if len(live) >= self._max_depth:
+                    raise QueueFull(f"{len(live)} decisions already waiting")
+                surface = world_view.surface_id or "decision"
+                pending = Pending(
+                    id=f"{surface}-{next(self._ids)}",
+                    world_view=world_view,
+                    created=time.monotonic(),
+                )
+                self._by_id[pending.id] = pending
+                self._order.append(pending.id)
+                self._arrived.notify_all()
+        finally:
+            # Outside the lock, and unconditionally. Each of these wakes a ``POST /decide``
+            # worker blocked since the old process died — it takes this same lock on its way out
+            # of ``await_answer``, so waking it while we hold it only makes it block again — and
+            # whether *this* post succeeded has no bearing on whether the old run is over.
+            for dead in orphaned:
+                dead._done.set()
+        return pending
+
+    def _supersede(self, run_id: str | None) -> list[Pending]:
+        """Retire every live decision when the game process changes. Caller holds the lock.
+
+        Three cases, and the two quiet ones are the ones that had to be got right:
+
+        * **No ``run_id`` on this world view** — do nothing at all, and do not touch
+          ``self.run_id``. Absence means *cannot tell*, never *a new run*: every adapter that
+          has not been upgraded is absent here, and reading that as a restart would drop the
+          pendings of an adapter behaving perfectly. Cannot-tell must not be destructive. This
+          is the same rule ``decision_deadline_ms`` follows for the same reason (na-t3h), one
+          field over.
+        * **First ``run_id`` this queue has ever seen** — adopt it and drop nothing. On a fresh
+          orchestrator there is nothing to drop anyway; the case that matters is an orchestrator
+          that has been serving an older adapter and now meets an upgraded one, where the live
+          decisions may well belong to this very process. There is no evidence of a restart, so
+          there is no licence to act like there was one.
+        * **A different ``run_id``** — the process that was blocked on every live decision here
+          has exited. Retire them all.
+
+        That last step rests on one invariant worth stating: **one orchestrator serves one
+        game.** It is what makes "a different run id" mean "the previous run ended" rather than
+        "a second game is also talking to us". The design already depends on it elsewhere —
+        ``game_id`` is per orchestrator instance and the decision log is per run — and two games
+        sharing an orchestrator would be corrupting both of those long before they reached here.
+
+        Retiring includes decisions whose own ``run_id`` is ``None``. They are older than the
+        run that just ended, and one game at a time means older is also gone. This is inference
+        from the invariant above, not a guess about a field we cannot read.
+        """
+        if run_id is None or run_id == self.run_id:
+            return []
+        previous, self.run_id = self.run_id, run_id
+        if previous is None:
+            return []
+        orphaned: list[Pending] = []
+        for decision_id in list(self._order):
+            dead = self._by_id[decision_id]
+            if dead.status not in ("pending", "claimed"):
+                continue
+            dead.status = "abandoned"
+            dead.reason = orphaned_reason(previous, run_id)
+            # Forgotten, so `waiting()` stops listing it and `claim()` stops handing it out in
+            # the same instant it stops being answerable. Those three surfaces disagreeing is
+            # the whole of what na-bzd measured: the queue, /agent/waiting and /agent/next all
+            # offered work from a process that had been dead for twenty minutes.
+            self._forget(decision_id)
+            orphaned.append(dead)
+        return orphaned
 
     def await_answer(
         self, pending: Pending, timeout: float | None, reason: str | None = None

@@ -648,6 +648,214 @@ def test_an_adapter_that_states_no_deadline_still_gets_the_configured_wait() -> 
     assert results["body"]["degraded"] is False
 
 
+# ------------------------------------------- the game process that is gone (na-bzd)
+#
+# The deadline above is the case where the engine is ALIVE and has stopped waiting. This is the
+# case where the engine no longer EXISTS, and no deadline reaches it: nothing on the orchestrator
+# side counts down once a decision loop is already blocked, so the adapter's clock expires in a
+# process that is not running to expire it.
+#
+# Measured 2026-08-02, and the acceptance below is that measurement turned into a test. The game
+# was killed mid-decision and relaunched; the still-running orchestrator's `/agent/waiting`
+# offered four decisions at turn 40, status "pending", ages 600-1275s, every one raised by a
+# process dead for twenty minutes. Claiming and answering one returned the ordinary success
+# response, `degraded: false`. They were indistinguishable from live work in the queue, in
+# `/agent/waiting`, and to an agent polling `/agent/next`.
+#
+# A real game cannot be killed from a test, so the two runs are two `run_id`s posted through the
+# TestClient. That substitution is honest for exactly the reason process identity was chosen over
+# the alternatives: the orchestrator never observes the process, only the id it sends. A killed
+# game and a second `run_id` are the same event as far as every line of code under test.
+
+RUN_A = dict(WORLD_VIEW, run_id="run-a-4e1c8")
+RUN_B = dict(WORLD_VIEW, turn=43, run_id="run-b-91f30")
+
+
+def _post(client: TestClient, world_view: dict, results: dict, key: str) -> threading.Thread:
+    """`POST /decide` for a named run, on its own thread, because it is going to block."""
+
+    def call() -> None:
+        results[key] = client.post("/decide", json=world_view).json()
+
+    thread = threading.Thread(target=call, daemon=True)
+    thread.start()
+    return thread
+
+
+def test_a_killed_games_decisions_are_not_offered_to_the_agent_once_a_new_run_starts() -> None:
+    """The acceptance, first half: kill a game mid-decision, start a new one, and confirm
+    `/agent/waiting` does not offer the dead run's decisions.
+
+    Both surfaces are asserted because both lied, independently. `/agent/waiting` is what an
+    agent reads to answer "is the game waiting on me?", and `/agent/next` is what it reads to
+    get work — an entry removed from one and still handed out by the other would leave the
+    queue exactly as untrustworthy as it was, with a passing test.
+    """
+    brain = AgentBrain(doorbell=Doorbell(target="", enabled=False), timeout=None)
+    client = TestClient(create_app(brain=brain))
+    results: dict = {}
+
+    dead = _post(client, RUN_A, results, "a")
+    orphan = _await_claim(client)
+    assert orphan["world_view"]["turn"] == 42
+
+    # The game is killed here. Nothing tells the orchestrator; the next thing it hears is the
+    # relaunched process introducing itself.
+    live = _post(client, RUN_B, results, "b")
+
+    dead.join(timeout=5)
+    assert not dead.is_alive(), "the worker blocked on the dead process was never released"
+
+    listed = client.post("/agent/waiting").json()["waiting"]
+    assert [entry["decision_id"] for entry in listed] != [orphan["decision_id"]]
+    assert orphan["decision_id"] not in {entry["decision_id"] for entry in listed}
+    assert [entry["turn"] for entry in listed] == [43], "only the live run may be offered"
+
+    # And `/agent/next` hands out the new run's decision, not the dead one it would previously
+    # have offered first — the queue is ordered oldest-first, so this is the ordering that
+    # made the stale entries so easy to pick up.
+    claimed = client.post("/agent/next", json={"wait": 5}).json()
+    assert claimed["world_view"]["turn"] == 43
+
+    client.post(
+        "/agent/submit",
+        json={"decision_id": claimed["decision_id"], "action_id": "unit:0"},
+    )
+    live.join(timeout=5)
+    assert results["b"]["choices"][0]["action_id"] == "unit:0"
+
+
+def test_answering_a_dead_runs_decision_is_refused_and_says_the_game_is_gone() -> None:
+    """The acceptance, second half: submitting to one is refused rather than recorded.
+
+    The refusal has to carry *why*. An agent that reads a bare 409 tries again, which is the
+    one move guaranteed to be wasted here — there is no process left to try against. It also
+    needs to learn that its board state is stale, and "abandoned" does not say that; only
+    naming the run change does.
+
+    The cost this prevents is real reasoning spent on a decision that cannot land, and a
+    decision record written as though it did.
+    """
+    brain = AgentBrain(doorbell=Doorbell(target="", enabled=False), timeout=None)
+    client = TestClient(create_app(brain=brain))
+    results: dict = {}
+
+    dead = _post(client, RUN_A, results, "a")
+    orphan = _await_claim(client)
+    _post(client, RUN_B, results, "b")
+    dead.join(timeout=5)
+
+    refused = client.post(
+        "/agent/submit",
+        json={"decision_id": orphan["decision_id"], "action_id": "unit:0"},
+    )
+    assert refused.status_code == 409
+    detail = refused.json()["detail"]
+    assert orphan["decision_id"] in detail
+    assert "game process that raised it is gone" in detail
+    assert "run-a-4e1c8" in detail and "run-b-91f30" in detail
+    assert "Do not resubmit" in detail
+
+
+def test_the_record_for_a_dead_runs_decision_degrades_and_names_the_restart(tmp_path) -> None:
+    """The other half of "refused rather than recorded", and the half na-t3h is about.
+
+    Releasing the blocked worker writes a record. If that record read `degraded: false` the fix
+    would have moved the false claim rather than removed it — a decision the brain never
+    answered, for a game that no longer existed, logged as an ordinary one. Every number derived
+    from the decision log rests on `degraded` meaning what it says.
+
+    The reason matters as much as the flag. `degrade_reason` is where a run's post-mortem starts,
+    and "no answer within Ns" would blame the agent for a game that was killed.
+    """
+    from neural_amplifier.decisions import DecisionLog
+
+    log_path = tmp_path / "decisions.jsonl"
+    brain = AgentBrain(doorbell=Doorbell(target="", enabled=False), timeout=None)
+    client = TestClient(create_app(brain=brain, log=DecisionLog(log_path)))
+    results: dict = {}
+
+    dead = _post(client, RUN_A, results, "a")
+    _await_claim(client)
+    _post(client, RUN_B, results, "b")
+    dead.join(timeout=5)
+
+    assert results["a"]["degraded"] is True
+    records = [json.loads(line) for line in log_path.read_text().splitlines() if line.strip()]
+    assert len(records) == 1
+    assert records[0]["degraded"] is True
+    assert "game process that raised it is gone" in records[0]["degrade_reason"]
+
+
+def test_an_adapter_that_sends_no_run_id_keeps_every_decision_it_raised() -> None:
+    """Absent means *cannot tell*, and cannot-tell must not be destructive.
+
+    Every adapter is absent here until it is upgraded, and this is the failure that would hit
+    the ones behaving correctly: if a missing run id read as "not the current run", each
+    decision would retire the one before it. A game that never restarted would watch its own
+    queue empty, degrade every turn, and blame a process death that never happened.
+
+    Two decisions of the *same* real game are outstanding at once here, which is ordinary — the
+    engine drills into several bases per turn.
+    """
+    brain = AgentBrain(doorbell=Doorbell(target="", enabled=False), timeout=None)
+    client = TestClient(create_app(brain=brain))
+    results: dict = {}
+
+    first = _post(client, WORLD_VIEW, results, "first")
+    _await_claim(client)
+    second = _post(client, dict(WORLD_VIEW, turn=43), results, "second")
+
+    # Both still outstanding, and the first is still answerable — nothing may have been retired.
+    deadline = time.monotonic() + 5
+    while len(client.post("/agent/waiting").json()["waiting"]) < 2 and time.monotonic() < deadline:
+        time.sleep(0.02)
+    listed = client.post("/agent/waiting").json()["waiting"]
+    assert len(listed) == 2, "a silent adapter's decisions must not retire each other"
+
+    for entry in listed:
+        answered = client.post(
+            "/agent/submit",
+            json={"decision_id": entry["decision_id"], "action_id": "unit:0"},
+        )
+        assert answered.status_code == 200
+    first.join(timeout=5)
+    second.join(timeout=5)
+    assert results["first"]["degraded"] is False
+    assert results["second"]["degraded"] is False
+
+
+def test_the_first_run_id_after_an_orchestrator_start_retires_nothing() -> None:
+    """An orchestrator that has been serving an older adapter and then meets an upgraded one has
+    no evidence of a restart — the decision it is holding may well belong to that same process.
+
+    Adopting the id without acting on it is the only reading that cannot destroy live work. The
+    alternative fails in the direction that is hardest to see: a decision the game is sitting and
+    waiting for, abandoned by the orchestrator, on the very first turn after an upgrade.
+    """
+    brain = AgentBrain(doorbell=Doorbell(target="", enabled=False), timeout=None)
+    client = TestClient(create_app(brain=brain))
+    results: dict = {}
+
+    silent = _post(client, WORLD_VIEW, results, "silent")
+    older = _await_claim(client)
+    _post(client, RUN_A, results, "upgraded")
+
+    deadline = time.monotonic() + 5
+    while len(client.post("/agent/waiting").json()["waiting"]) < 2 and time.monotonic() < deadline:
+        time.sleep(0.02)
+    listed = client.post("/agent/waiting").json()["waiting"]
+    assert len(listed) == 2, "the first run id seen must adopt, not supersede"
+
+    answered = client.post(
+        "/agent/submit",
+        json={"decision_id": older["decision_id"], "action_id": "unit:0"},
+    )
+    assert answered.status_code == 200, "the pre-upgrade decision was still live"
+    silent.join(timeout=5)
+    assert results["silent"]["degraded"] is False
+
+
 def test_a_directive_naming_an_unknown_metric_is_refused_while_the_agent_can_fix_it(
     agent_app,
 ) -> None:
