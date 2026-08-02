@@ -10,6 +10,19 @@
 #
 # Run scripts/setup-host.sh once first for the toolchain.
 #
+# For an UNATTENDED run, two knobs, and neither is optional in practice:
+#
+#   NA_EXIT_TURN=<n>    stop after n complete turns (docs/headless-harness.md §3.2)
+#   NA_TIMEOUT=<secs>   kill the run if it has not stopped by then (§3.3)
+#
+# They are not redundant, which is why both exist. NA_EXIT_TURN is the game
+# ending itself on a condition it can observe; NA_TIMEOUT is this script ending a
+# game that can no longer observe anything. The second is what covers the failure
+# NA_EXIT_TURN cannot: a run that hangs before the turn counter ever moves again.
+# Under Xvfb both failures look identical from outside — a live process drawing
+# nothing — so "treat a hung run as a failure, not a flake" needs a clock that is
+# not the game's.
+#
 # Two things this is careful about, because both are easy to get wrong and
 # expensive to debug:
 #
@@ -216,21 +229,131 @@ if [ "${NA_RESUME:-1}" != "0" ]; then
     fi
 fi
 
+# ── Bound the run ───────────────────────────────────────────────────────────
+#
+# NA_EXIT_TURN is forwarded, not inferred. It is deliberately NOT implied by
+# `headless`: a headless run is one nobody is watching, which is not the same
+# claim as one that should stop at a fixed turn, and an unattended run of
+# indefinite length is a legitimate thing to ask for.
+#
+# The flag is also NOT part of what makes the DLL suppress error dialogs — that
+# follows from -na-headless / -na-autoload alone (thinker src/neural.cpp
+# na_headless). So a bounded run still shows its errors to whoever is sitting there.
+exit_args=()
+if [ -n "${NA_EXIT_TURN:-}" ]; then
+    case "$NA_EXIT_TURN" in
+        ''|*[!0-9]*) die "NA_EXIT_TURN must be a positive integer, got '$NA_EXIT_TURN'" ;;
+    esac
+    [ "$NA_EXIT_TURN" -gt 0 ] || die "NA_EXIT_TURN must be a positive integer, got '$NA_EXIT_TURN'"
+    exit_args=(-na-exit-turn "$NA_EXIT_TURN")
+    log "run bounded to $NA_EXIT_TURN complete turn(s)"
+fi
+
+# The timeout is the outer bound and applies to every mode. `timeout` sends TERM,
+# then KILL after a grace period, because a wine process that is wedged in the way
+# this exists to catch is exactly the kind that ignores TERM.
+#
+# Default off for an attended launch — a human at the keyboard is the timeout —
+# and on for headless, where nobody will notice a hang. Set NA_TIMEOUT= to disable
+# it explicitly even in headless.
+run_timeout="${NA_TIMEOUT-}"
+if [ -z "${NA_TIMEOUT+set}" ] && [ "$cmd" = "headless" ]; then
+    run_timeout=1800
+fi
+timeout_args=()
+if [ -n "$run_timeout" ]; then
+    command -v timeout >/dev/null || die "timeout(1) missing — coreutils required for NA_TIMEOUT"
+    timeout_args=(timeout --kill-after=30s "${run_timeout}s")
+    log "hard timeout ${run_timeout}s (set NA_TIMEOUT= to disable)"
+fi
+
+# ── Wait for the GAME, not the launcher ─────────────────────────────────────
+#
+# thinker.exe is an injector, not a supervisor. It CreateProcess-es terranx.exe
+# suspended, injects thinker.dll, resumes the thread, and `return 0` — see the
+# fork's src/launch.cpp:110-118. It never calls WaitForSingleObject on the game,
+# so it exits within a couple of seconds of a run that has barely started.
+#
+# Measured 2026-08-01, and this was silently breaking the headless lane outright:
+#
+#   timeout 120 xvfb-run -a … wine thinker.exe -na-autoload … -na-exit-turn 2
+#   -> LAUNCHER rc=0 elapsed=3s
+#      XIO: fatal IO error 2 on X server ":99" … explicit kill or server shutdown
+#
+# xvfb-run tears the display down as soon as ITS command returns, so the game died
+# ~3s in, and na-observations.jsonl gained nothing. The autoload state machine
+# waits 12s for engine startup to FINISH before it does anything, so it had not
+# yet taken its first action. Every `play-thinker.sh headless` run was a
+# three-second no-op that reported "no new observations" and looked like a
+# configuration problem.
+#
+# Attended mode hid this: with no xvfb-run to kill the display the game survives
+# as an orphan and plays on, so only the script's report was premature. That is
+# why the bug reached here — the mode a human watches is the mode that works.
+#
+# `wineserver -w` blocks until every process in the prefix has exited, which is
+# the wait thinker.exe declines to do. It is correct here specifically because the
+# prefix is ours and holds nothing else (NA_WINEPREFIX, §3.0).
+#
+# The game's exit code is NOT recoverable this way — thinker.exe discarded it
+# before we could see it, and wineserver reports on the prefix, not on a process.
+# So NA_EXIT_TURN_LIMIT vs NA_EXIT_UNANSWERABLE has to be read from the run's own
+# records in na-observations.jsonl, which is where the report below looks. The one
+# outcome this layer CAN state by itself is the timeout, and that is the one the
+# game cannot report about itself.
 cd "$PLAY_DIR"
+# `set -e` would exit here before the report runs, and the report is the point of
+# the run. Capture the status instead and decide below.
+rc=0
 if [ "$cmd" = "headless" ]; then
     command -v xvfb-run >/dev/null || die "xvfb-run missing — run scripts/setup-host.sh"
     log "launching on a virtual display (Xvfb)"
-    xvfb-run -a --server-args="-screen 0 1280x1024x24" wine thinker.exe "${resume_args[@]}" || true
+    "${timeout_args[@]}" xvfb-run -a --server-args="-screen 0 1280x1024x24" \
+        bash -c 'wine thinker.exe "$@" && wineserver -w' _ \
+        "${resume_args[@]}" "${exit_args[@]}" || rc=$?
 else
     log "launching on display ${DISPLAY:-<none>}"
-    wine thinker.exe "${resume_args[@]}" || true
+    "${timeout_args[@]}" bash -c 'wine thinker.exe "$@" && wineserver -w' _ \
+        "${resume_args[@]}" "${exit_args[@]}" || rc=$?
 fi
+
+# timeout(1) reports 124 when it fired, 137 when the KILL escalation was needed.
+# Both mean the same thing to a harness: the run did not stop on its own.
+timed_out=0
+case "$rc" in 124|137) timed_out=1 ;; esac
 
 # ── Report ──────────────────────────────────────────────────────────────────
 after=0
 [ -f "$OBS" ] && after="$(wc -l < "$OBS")"
 new=$(( after - before ))
 echo
+
+# How the run ENDED is a separate question from what it produced, and reporting
+# only the second is what let a three-second no-op read as a configuration
+# problem for as long as it did. So say the ending first, and say it from
+# evidence: the timeout is ours to know, and the turn limit is the DLL's, written
+# to the log by na_exit_turn_check at the moment it decided to stop.
+if [ "$timed_out" = "1" ]; then
+    warn "run did NOT stop on its own — killed by the ${run_timeout}s timeout"
+    warn "Treat this as a failure, not a flake (docs/headless-harness.md §3.3)."
+    warn "Artifacts produced before the kill are kept; they are the diagnosis."
+elif [ -n "${NA_EXIT_TURN:-}" ] \
+  && [ -f "$OBS" ] && tail -n 40 "$OBS" 2>/dev/null | grep -q '"surface_id":"na.exit_turn"'; then
+    log "run stopped itself at the turn limit"
+    tail -n 40 "$OBS" | grep '"surface_id":"na.exit_turn"' | tail -1
+elif [ -n "${NA_EXIT_TURN:-}" ]; then
+    warn "run ended without reaching -na-exit-turn $NA_EXIT_TURN"
+    warn "It stopped for some other reason — check the tail of $OBS."
+fi
+
+# A suppressed dialog is the other way an unattended run ends early, and it is
+# invisible unless looked for: na_message_box writes the record and returns, and
+# the caller's own next statement decides whether the process dies.
+if [ -f "$OBS" ] && tail -n 40 "$OBS" 2>/dev/null | grep -q '"surface_id":"na.headless"'; then
+    warn "a dialog was suppressed during this run:"
+    tail -n 40 "$OBS" | grep '"surface_id":"na.headless"' | tail -3
+fi
+
 if [ "$new" -gt 0 ]; then
     log "$new new observation(s) in $OBS"
     tail -n 3 "$OBS"
