@@ -100,8 +100,24 @@ Two escape hatches keep it from being a trap:
 - **`NA_AGENT_TIMEOUT`** (orchestrator, seconds). Unset means wait forever. Set it for an
   unattended run and a silent agent degrades to the deterministic tier with a recorded reason
   instead of hanging the game.
-- **`llm_timeout_ms`** (thinker.ini). Same idea one layer down; `0` means wait forever, which
-  is the default.
+- **`llm_timeout_ms`** (thinker.ini). Same idea one layer down. `0` means wait forever, and
+  `0` is **not** the default — the shipped default is **2500 ms**, and `thinker.ini` carries no
+  override. An agent-driven run must set it explicitly. (This line claimed `0` was the default
+  until na-t3h; the gap cost a whole measured run, and the correction is the point of the
+  paragraph below.)
+
+**These two numbers are not independent, and until na-t3h nothing connected them.** The adapter
+gave up after 2500 ms and applied the deterministic tier's pick; the orchestrator waited forever
+and accepted a late answer into a full decision loop, recording `tier=llm, degraded=false` for a
+turn the game had resolved minutes earlier. Measured over one run: 66 adapter rows, **zero** with
+`tier=llm`.
+
+The adapter now states its deadline in every world view it posts (`decision_deadline_ms`), and
+the orchestrator waits on the **tighter** of that and `NA_AGENT_TIMEOUT`, minus a small margin,
+so it gives up *first* — the decision degrades honestly and a late `submit_orders` is refused
+with 409 instead of being recorded as applied. Setting `llm_timeout_ms` generously is still the
+right configuration for an agent-driven run; the coupling only makes the failure legible when it
+is not.
 
 **On the adapter side the wait is sliced, and it deliberately does not pump.** The obvious way
 to keep a window alive while blocking is `PeekMessage(PM_REMOVE)` + `DispatchMessage`, and that
@@ -241,7 +257,7 @@ agent  submit_orders(hurry:now)
    ->  NOT applied — a repair decision follows; collect it and choose again
        advisories: hurry:now spends 81 energy_reserves but only 40 is available
 agent  next_decision            -> the same surface, carrying that advisory
-agent  submit_orders(hurry:none) -> applied to the game
+agent  submit_orders(hurry:none) -> accepted — returned to the engine to apply
 game   degraded: false
 ```
 

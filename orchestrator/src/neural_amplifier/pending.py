@@ -129,13 +129,22 @@ class DecisionQueue:
             self._arrived.notify_all()
             return pending
 
-    def await_answer(self, pending: Pending, timeout: float | None) -> Orders:
+    def await_answer(
+        self, pending: Pending, timeout: float | None, reason: str | None = None
+    ) -> Orders:
         """Block until this decision is answered, then return the orders.
 
         ``timeout=None`` waits forever, which is the configured default: a turn-based game
         pausing at a decision point is what it does for a human player too. The parameter exists
         because an unattended run needs an escape — a hung agent would otherwise hang the game
         with no way back to the deterministic tier — and one number is a cheap way to have both.
+
+        ``reason`` overrides what the abandonment is recorded and reported as. The caller
+        sometimes knows *why* this particular number was the deadline — chiefly
+        ``AgentBrain``, which bounds the wait on the engine's own deadline (na-t3h) — and
+        "no answer within 2.25s" does not tell an agent that the game has moved on without it.
+        That text is what the agent reads back as a 409, so it is the whole of what it has to
+        act on.
 
         Raises :class:`Unanswered` on timeout, having marked the decision abandoned so a late
         answer is rejected rather than applied to a turn that has moved on.
@@ -144,7 +153,7 @@ class DecisionQueue:
             with self._lock:
                 if pending.status in ("pending", "claimed"):
                     pending.status = "abandoned"
-                    pending.reason = f"no answer within {timeout}s"
+                    pending.reason = reason or f"no answer within {timeout}s"
                     self._forget(pending.id)
             raise Unanswered(pending.reason or "abandoned")
         with self._lock:

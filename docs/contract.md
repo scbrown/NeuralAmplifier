@@ -30,6 +30,8 @@ omitted (the orchestrator treats missing sections as "not available on this engi
   "scope": "turn",                  // "turn" | "unit" | "base"  (drill-down granularity)
   "surface_id": "base.production",  // optional: stable decision id (see game-surface.md)
   "trace": { "traceparent": "00-4bf92f35…-00f067aa…-01" },  // optional: W3C trace context
+  "decision_deadline_ms": 2500,     // optional: how long the engine will wait before
+                                    // applying its own answer (see "Telemetry fields")
   "turn": 42,
   "year": 2142,
   "faction": "GAIANS",
@@ -179,7 +181,37 @@ Three optional, additive fields carry observability without changing the shape o
 | --- | --- | --- |
 | `surface_id` | adapter → orchestrator | Which decision this is, from [game-surface.md](game-surface.md). Drives coverage measurement. |
 | `trace.traceparent` | adapter → orchestrator | W3C trace context. The **adapter is the root** — the game is the root of the causality — and the orchestrator continues it across Quipu/Hank. |
+| `decision_deadline_ms` | adapter → orchestrator | How long the engine will wait before applying its own answer. See below. |
 | `degraded` | orchestrator → adapter | This response is the safe fallback, not a decision. |
+
+### `decision_deadline_ms` — the adapter's own clock
+
+A statement of fact about the engine thread, not a request: after this many milliseconds the
+adapter stops reading, applies the deterministic tier's pick, and moves on (invariant 9). An
+answer arriving later reaches nobody.
+
+- **Absent** means the engine did not say, so the orchestrator **cannot bound its wait** to
+  anything the game will still be listening for. Absent is not a default — it is the state every
+  adapter was in before this field existed, and the orchestrator must not invent a deadline for
+  one, or it would abandon decisions the game was still blocked on.
+- **`0` or negative** means *wait indefinitely* and is read identically to absent. That matches
+  `na_http_post`, which arms its socket deadline only for `timeout_ms > 0`, and `NA_AGENT_TIMEOUT`,
+  which reads `0` the same way. The thinker adapter **omits** the field rather than sending `0`,
+  because a literal `0` on the wire is the value most likely to be misread as *abandon
+  immediately* — which would turn a deliberate no-limit run into an instant fallback on every
+  decision, with nothing in either log that looks like a misconfiguration.
+
+**Why it exists.** Without it the two sides had independent clocks and no way to reconcile them:
+the thinker adapter gave up after 2500 ms while the orchestrator's agent brain waited forever, so
+a late answer completed a decision loop for a turn the game had already resolved and recorded it
+as `tier=llm, degraded=false`. Measured: 66 adapter rows in one run, **zero** with `tier=llm`,
+against orchestrator records claiming applied llm decisions for the same turns
+([observability.md §5.4](observability.md)). With the field, the orchestrator waits on the tighter
+of this deadline and its own timeout, minus a margin, so it gives up *first* — the decision
+degrades honestly and a late `/agent/submit` is refused with 409.
+
+An adapter that can state this **should**. It is the only thing that lets the orchestrator tell a
+slow answer from a useless one.
 
 ## Fairness
 

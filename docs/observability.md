@@ -213,6 +213,45 @@ brain was absent the whole time.
 entire class of failure becomes impossible to ship silently. If you build one thing from this
 document, build this.
 
+#### The inverse: `degraded: false` on a decision the game abandoned (na-t3h)
+
+The paragraph above assumes `degraded` is *reachable* — that the orchestrator finds out when a
+decision failed to land. It did not, and the resulting run was worse than the one above, because
+it looked green from both ends and the two ends did not agree.
+
+The thinker adapter blocks for `conf.llm_timeout_ms` (2500 by default), then applies the
+deterministic tier's pick and moves on. The orchestrator's agent brain waited on
+`NA_AGENT_TIMEOUT`, which is unset by default and means *wait forever*. Nothing carried the
+adapter's deadline across, so an agent answering minutes later ran a full decision loop for a
+turn resolved long before — and wrote a record saying `tier=llm, degraded=false`, while
+`/agent/submit` replied `"applied to the game"`.
+
+Measured over one live run: **66 adapter rows in `na-observations.jsonl`, zero with
+`tier=llm`** — every one `applied=native`, `fallback_reason="orchestrator unreachable or slow"`
+— against orchestrator records claiming applied llm decisions for the same turns.
+
+Three properties of this failure are worth naming, because each one defeats a check that
+normally works:
+
+- **The fallback-rate ceiling passes.** The orchestrator's degrade rate was ~0. It was measuring
+  its own decision loop, which completed every time.
+- **Neither log is malformed.** Both are internally consistent. The disagreement is only visible
+  by joining them, which nothing did.
+- **The agent cannot detect it.** It is told its choice was applied, so its next turn reasons
+  from a board state that never existed.
+
+The fix is the same shape as §5.5.1: ask the party that actually knows. `decision_deadline_ms`
+(contract.md) is the adapter stating how long it will still be listening; `AgentBrain` waits on
+the tighter of that and its own timeout, minus a margin, so **the orchestrator gives up first,
+always and deliberately**. The decision then degrades honestly, and a late `/agent/submit` is
+refused with 409 naming the deadline rather than recorded as applied.
+
+The general rule this leaves behind: **a `degraded` flag can only be trusted about the process
+that sets it.** `degrade.rate` measures whether the *orchestrator* reached a brain. Whether a
+decision reached the *game* is an adapter-side fact (`tier` in `na-observations.jsonl`), and any
+claim about it made from inside the orchestrator is inference. `/agent/submit` no longer says
+"applied to the game" for that reason — it says what this process did and stops there.
+
 ### 5.5 Action-space adherence
 
 Orders referencing an `action_id` not in the world view's `action_space` should be

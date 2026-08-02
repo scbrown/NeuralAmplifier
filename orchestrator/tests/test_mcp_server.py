@@ -45,7 +45,13 @@ class FakeClient(OrchestratorClient):
             raise self.raises
         self.submitted.append((decision_id, action_id, reason))
         self.extras.append(extra)
-        return {"decision_id": decision_id, "applied": [action_id], "status": "applied to the game"}
+        return {
+            "decision_id": decision_id,
+            "applied": [action_id],
+            # Mirrors what the real service returns. A stub that keeps the retired
+            # "applied to the game" wording would go on teaching the claim na-t3h removed.
+            "status": "accepted — returned to the engine to apply",
+        }
 
     def directive(self, payload: dict[str, Any]) -> dict[str, Any]:
         if self.raises:

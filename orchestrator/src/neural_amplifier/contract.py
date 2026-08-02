@@ -230,6 +230,34 @@ class WorldView(_Model):
     surface_id: str | None = None
     trace: Trace | None = None
 
+    #: How long the engine will wait for this decision before applying its own answer, in
+    #: milliseconds. The adapter's deadline, stated by the adapter — not a request, a fact.
+    #:
+    #: ``None`` means the engine did not say, so the orchestrator **cannot bound its wait** to
+    #: anything the game will still be listening for. That is a real gap, not a default: it is
+    #: the state every adapter was in before this field existed.
+    #:
+    #: It exists because of na-t3h, and the failure is worth stating in full because nothing in
+    #: either log looked wrong. The thinker adapter blocks for ``conf.llm_timeout_ms`` (2500 by
+    #: default) and then applies the deterministic tier's pick and moves on. The orchestrator
+    #: waited on ``NA_AGENT_TIMEOUT``, which defaults to *forever*. So an agent answering minutes
+    #: later completed a decision loop for a turn the game had long since resolved — and the
+    #: record it wrote said ``tier=llm, degraded=false`` while ``/agent/submit`` replied
+    #: "applied to the game". Measured over one run: 66 adapter rows, **zero** with ``tier=llm``,
+    #: every one ``applied=native`` with ``fallback_reason="orchestrator unreachable or slow"``,
+    #: against orchestrator records claiming applied llm decisions for the same turns.
+    #:
+    #: The abandon path in ``pending.py`` was already correct and already complete. The only
+    #: thing missing was this number: the orchestrator had no way to learn when the game stopped
+    #: caring. With it, ``AgentBrain`` gives up *before* the engine does, the decision degrades
+    #: honestly, and a late answer is refused with 409 instead of being recorded as applied.
+    #:
+    #: A typed field rather than a passthrough extra, and that is deliberate (na-wzw, same
+    #: session): the orchestrator reads this by name, and a name the orchestrator reads that is
+    #: not on the contract is silently dropped by the model parser — it never arrives, and
+    #: nothing reports that it did not.
+    decision_deadline_ms: int | None = None
+
     year: int | None = None
     fairness: Fairness | None = None
     action_space: list[Action] = Field(default_factory=list)
@@ -323,6 +351,24 @@ class WorldView(_Model):
             value = trace.get("traceparent")
             return value if isinstance(value, str) else None
         return None
+
+    def decision_deadline_seconds(self) -> float | None:
+        """The engine's deadline in seconds, or ``None`` if it did not bound one.
+
+        Zero and negative collapse into ``None`` on purpose, and it is the same reading
+        ``NA_AGENT_TIMEOUT`` already takes: an adapter writes ``0`` when it means *wait
+        indefinitely* (``na_http_post`` treats ``timeout_ms <= 0`` exactly that way), so the
+        other reading would turn a deliberate "no limit" into abandon-immediately — every
+        decision an instant fallback, with nothing in the log that looks like a misconfiguration.
+
+        One place, because two callers ask this question (``AgentBrain.decide`` bounds its wait
+        on it, ``/agent/submit`` checks whether it has passed) and a disagreement between them
+        would be the same class of bug this field exists to fix.
+        """
+        ms = self.decision_deadline_ms
+        if ms is None or ms <= 0:
+            return None
+        return ms / 1000.0
 
     def fallback_action_id(self) -> str | None:
         """The safe degradation target: ``end_turn`` where present, else the

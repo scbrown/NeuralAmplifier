@@ -210,6 +210,101 @@ def test_missing_doorbell_is_not_an_error() -> None:
         brain.decide(world_view())
 
 
+# ------------------------------------------------------- the engine's deadline (na-t3h)
+
+
+def test_the_engine_deadline_bounds_a_brain_configured_to_wait_forever() -> None:
+    """The shipped default is `NA_AGENT_TIMEOUT` unset, which means wait forever — and that is
+    the configuration na-t3h was measured in. Waiting forever is only defensible while the game
+    is still waiting too; once the adapter has applied its own pick, every further second is
+    spent producing an answer that can reach nobody and a record that says it did.
+    """
+    brain = AgentBrain(doorbell=SilentDoorbell(), timeout=None)
+    view = world_view()
+    view.decision_deadline_ms = 300
+
+    # Driven from a watchdog thread rather than called directly, because the regression this
+    # guards is *blocking forever* — and a direct call would express that as a hung suite with
+    # no failing test in it, which is the same shape of unhelpful as the bug (§5.4: the run that
+    # looks green is the one nobody investigates; the run that never finishes is the one nobody
+    # can read).
+    raised: list[BaseException] = []
+
+    def call() -> None:
+        try:
+            brain.decide(view)
+        except BaseException as exc:  # noqa: BLE001 — recorded and re-asserted below
+            raised.append(exc)
+
+    thread = threading.Thread(target=call, daemon=True)
+    thread.start()
+    thread.join(timeout=5)
+    assert not thread.is_alive(), "the brain waited past the deadline the engine gave it"
+    assert raised and isinstance(raised[0], BrainError)
+    assert "300ms deadline" in str(raised[0])
+
+
+def test_the_tighter_of_the_two_deadlines_is_the_one_waited_on() -> None:
+    """Two clocks, and neither is authoritative on its own.
+
+    `NA_AGENT_TIMEOUT` says how long *we* will wait; the engine's deadline says how long the
+    *game* will still listen. Taking the configured one when it is looser re-creates the bug;
+    taking the engine's when it is looser abandons decisions nobody had given up on. Only the
+    minimum is safe in both directions, which is why this asserts the arithmetic rather than
+    just the fast path.
+    """
+    from neural_amplifier.agent_brain import ABANDON_MARGIN_SECONDS
+
+    view = world_view()
+    view.decision_deadline_ms = 2500
+
+    # Engine tighter: shave the margin so the orchestrator loses the race deliberately.
+    loose = AgentBrain(doorbell=SilentDoorbell(), timeout=600.0)
+    timeout, reason = loose._deadline(view)
+    assert timeout == pytest.approx(2.5 - ABANDON_MARGIN_SECONDS)
+    assert reason is not None and "moved on" in reason
+
+    # Configured tighter: it expires first, so the reason must not blame a deadline that was
+    # never reached — a misleading cause is worse here than a generic one.
+    tight = AgentBrain(doorbell=SilentDoorbell(), timeout=1.0)
+    assert tight._deadline(view) == (1.0, None)
+
+
+def test_a_very_tight_deadline_still_leaves_the_agent_a_chance_to_answer() -> None:
+    """Subtracting a fixed margin goes negative below 250ms, and a negative wait abandons
+    *instantly* — an adapter configured tight would offer decisions no agent could ever take,
+    while the log blamed the agent for not answering. Shaving proportionally keeps the wait
+    positive for any positive deadline.
+    """
+    brain = AgentBrain(doorbell=SilentDoorbell(), timeout=None)
+    view = world_view()
+    view.decision_deadline_ms = 100
+    timeout, _ = brain._deadline(view)
+    assert timeout == pytest.approx(0.05)
+
+
+def test_no_engine_deadline_leaves_the_configured_wait_exactly_as_it_was() -> None:
+    """Silence is not a bound. Every adapter that has not been upgraded says nothing here, and
+    inventing a deadline for them would degrade decisions the game was still blocked on.
+    """
+    forever = AgentBrain(doorbell=SilentDoorbell(), timeout=None)
+    assert forever._deadline(world_view()) == (None, None)
+    configured = AgentBrain(doorbell=SilentDoorbell(), timeout=30.0)
+    assert configured._deadline(world_view()) == (30.0, None)
+
+
+def test_a_deadline_of_zero_means_indefinite_not_immediate() -> None:
+    """The adapter writes 0 for "wait indefinitely" (na_http.cpp arms its socket deadline only
+    for `timeout_ms > 0`), and `NA_AGENT_TIMEOUT` already reads 0 the same way. The opposite
+    reading turns a deliberate no-limit run into an instant fallback on every decision, with
+    nothing in the log that looks like a misconfiguration.
+    """
+    brain = AgentBrain(doorbell=SilentDoorbell(), timeout=45.0)
+    view = world_view()
+    view.decision_deadline_ms = 0
+    assert brain._deadline(view) == (45.0, None)
+
+
 # -------------------------------------------------------------------- doorbell
 
 

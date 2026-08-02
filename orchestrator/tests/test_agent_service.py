@@ -98,7 +98,11 @@ def test_an_agent_answers_a_blocked_decision(agent_app) -> None:
     answered = submitted.json()
     assert answered["submitted"] == "facility:4"
     assert answered["applied"] == ["facility:4"]
-    assert answered["status"] == "applied to the game"
+    # It says what this process did, not what happened on the board. The orchestrator does not
+    # observe the game — an HTTP response, the adapter's legality gates and the engine itself
+    # sit between here and anything being built — and the string it used to return claimed
+    # otherwise on every decision, including the ones the game had already abandoned (na-t3h).
+    assert answered["status"] == "accepted — returned to the engine to apply"
     assert answered["degraded"] is False
 
     thread.join(timeout=5)
@@ -327,7 +331,7 @@ def test_a_denied_order_becomes_a_repair_the_agent_can_answer() -> None:
         },
     ).json()
     assert fixed["applied"] == ["hurry:none"]
-    assert fixed["status"] == "applied to the game"
+    assert fixed["status"] == "accepted — returned to the engine to apply"
 
     thread.join(timeout=5)
     assert results["body"]["choices"][0]["action_id"] == "hurry:none"
@@ -471,6 +475,177 @@ def test_an_agent_can_issue_a_plan_that_steers_a_later_decision(tmp_path) -> Non
         },
     )
     thread2.join(timeout=5)
+
+
+# ------------------------------------------------------- the engine's own deadline (na-t3h)
+#
+# The adapter blocks for `conf.llm_timeout_ms` and then applies the deterministic tier's pick
+# and moves on. The orchestrator's wait defaulted to *forever*. Nothing connected the two, so a
+# late answer completed a decision loop for a turn the game had already resolved and the record
+# said `tier=llm, degraded=false` while `/agent/submit` replied "applied to the game" — against
+# 66 adapter rows for the same run, every one `applied=native`. Both logs well-formed, flatly
+# disagreeing about who decided the game.
+#
+# `decision_deadline_ms` is the adapter saying how long it will still be listening. These tests
+# are the mechanism, not the intention: they assert the orchestrator gives up FIRST.
+
+#: Short enough that the tests do not sleep, long enough that the shave in
+#: ``ABANDON_MARGIN_SECONDS`` cannot drive the wait to zero and make them pass for the wrong
+#: reason — a decision abandoned instantly would satisfy every assertion below without the
+#: deadline arithmetic ever having been exercised.
+DEADLINE_MS = 400
+
+DEADLINED = dict(WORLD_VIEW, decision_deadline_ms=DEADLINE_MS)
+
+
+def test_a_decision_the_engine_stopped_waiting_for_is_recorded_as_degraded(tmp_path) -> None:
+    """The whole of na-t3h, as one record.
+
+    A run where the game abandoned every decision and the agent answered every one of them late
+    finishes clean and reads as a fully brain-driven game — `degraded` is what makes that class
+    of failure loud (observability.md §5.4), and it was reading False on decisions the game
+    never used. The brain must wait on the *engine's* clock, not only its own, or the field
+    measures the orchestrator's opinion of itself.
+
+    `timeout=None` here is the shipped default and is the exact configuration that failed: this
+    brain would otherwise wait forever for an answer no one is listening for any more.
+    """
+    from neural_amplifier.decisions import DecisionLog
+
+    log_path = tmp_path / "decisions.jsonl"
+    brain = AgentBrain(doorbell=Doorbell(target="", enabled=False), timeout=None)
+    client = TestClient(create_app(brain=brain, log=DecisionLog(log_path)))
+    results: dict = {}
+
+    def call() -> None:
+        results["body"] = client.post("/decide", json=DEADLINED).json()
+
+    thread = threading.Thread(target=call, daemon=True)
+    thread.start()
+    _await_claim(client)  # claimed, and then deliberately never answered
+
+    thread.join(timeout=5)
+    assert not thread.is_alive(), "the game must not still be blocked past its own deadline"
+    assert results["body"]["degraded"] is True
+
+    records = [json.loads(line) for line in log_path.read_text().splitlines() if line.strip()]
+    assert len(records) == 1
+    record = records[0]
+    assert record["degraded"] is True
+    # And it must say the *game* stopped waiting. "no answer within 0.15s" is true and useless:
+    # it reads as an orchestrator timeout somebody set too low, which is a different bug with a
+    # different fix.
+    assert f"{DEADLINE_MS}ms deadline" in record["degrade_reason"]
+    assert "moved on" in record["degrade_reason"]
+
+
+def test_an_answer_after_the_engine_deadline_is_refused_rather_than_applied(tmp_path) -> None:
+    """The second half, and the one that stops the false record being written at all.
+
+    Refusing late is not tidiness. An agent that is told "applied to the game" builds its next
+    turn's reasoning on a board state that never existed, and it has no way to discover the
+    mistake — the orchestrator's own log agrees with it. A 409 naming the deadline is the only
+    thing here that can reach the model.
+    """
+    brain = AgentBrain(doorbell=Doorbell(target="", enabled=False), timeout=None)
+    client = TestClient(create_app(brain=brain))
+    results: dict = {}
+
+    def call() -> None:
+        results["body"] = client.post("/decide", json=DEADLINED).json()
+
+    thread = threading.Thread(target=call, daemon=True)
+    thread.start()
+    claimed = _await_claim(client)
+    thread.join(timeout=5)
+    assert results["body"]["degraded"] is True, "the deadline must have expired first"
+
+    late = client.post(
+        "/agent/submit",
+        json={"decision_id": claimed["decision_id"], "action_id": "unit:0"},
+    )
+    assert late.status_code == 409
+    detail = late.json()["detail"]
+    assert claimed["decision_id"] in detail
+    # The message has to say the game moved on and that resubmitting is not the repair, because
+    # "abandoned" alone reads to a model as something it should try again.
+    assert "moved on" in detail
+    assert "Do not resubmit" in detail
+    assert f"{DEADLINE_MS}ms deadline" in detail
+
+
+def test_an_answer_inside_the_engine_deadline_is_unchanged(tmp_path) -> None:
+    """The regression guard. The fix is worthless if it costs the decisions that were working.
+
+    A generous deadline must behave exactly as no deadline did: answered, applied, not degraded,
+    one ordinary record. This is deliberately the same shape as
+    `test_the_decision_record_is_written_for_an_agent_answer` — if bounding the wait changed
+    anything on the healthy path, these two assertions diverge.
+    """
+    from neural_amplifier.decisions import DecisionLog
+
+    log_path = tmp_path / "decisions.jsonl"
+    brain = AgentBrain(doorbell=Doorbell(target="", enabled=False), timeout=10)
+    client = TestClient(create_app(brain=brain, log=DecisionLog(log_path)))
+    results: dict = {}
+    generous = dict(WORLD_VIEW, decision_deadline_ms=30_000)
+
+    def call() -> None:
+        results["body"] = client.post("/decide", json=generous).json()
+
+    thread = threading.Thread(target=call, daemon=True)
+    thread.start()
+    claimed = _await_claim(client)
+
+    answered = client.post(
+        "/agent/submit",
+        json={
+            "decision_id": claimed["decision_id"],
+            "action_id": "facility:4",
+            "reason": "infrastructure before expansion",
+        },
+    )
+    assert answered.status_code == 200
+    assert answered.json()["applied"] == ["facility:4"]
+    assert answered.json()["status"] == "accepted — returned to the engine to apply"
+    assert answered.json()["degraded"] is False
+
+    thread.join(timeout=5)
+    assert results["body"]["choices"][0]["action_id"] == "facility:4"
+    assert results["body"]["degraded"] is False
+
+    records = [json.loads(line) for line in log_path.read_text().splitlines() if line.strip()]
+    assert len(records) == 1
+    assert records[0]["degraded"] is False
+    assert records[0]["degrade_reason"] is None
+
+
+def test_an_adapter_that_states_no_deadline_still_gets_the_configured_wait() -> None:
+    """Absent must not become a bound. Every adapter is absent until it is upgraded.
+
+    The failure mode this rules out is the mirror of na-t3h and would be worse, because it would
+    hit adapters that are behaving correctly: inventing a default deadline here would abandon
+    decisions the game was still sitting and waiting for, converting a working run into a run of
+    fallbacks with nothing in the log that looks like a change.
+    """
+    brain = AgentBrain(doorbell=Doorbell(target="", enabled=False), timeout=10)
+    client = TestClient(create_app(brain=brain))
+    results: dict = {}
+    thread = _post_decision(client, results)  # WORLD_VIEW carries no decision_deadline_ms
+
+    claimed = _await_claim(client)
+    assert "decision_deadline_ms" not in claimed["world_view"]
+    # Well past any deadline the field could have implied, and the decision is still open.
+    time.sleep(0.5)
+    assert client.post("/agent/waiting").json()["waiting"], "the decision was abandoned early"
+
+    client.post(
+        "/agent/submit",
+        json={"decision_id": claimed["decision_id"], "action_id": "unit:0"},
+    )
+    thread.join(timeout=5)
+    assert results["body"]["choices"][0]["action_id"] == "unit:0"
+    assert results["body"]["degraded"] is False
 
 
 def test_a_directive_naming_an_unknown_metric_is_refused_while_the_agent_can_fix_it(

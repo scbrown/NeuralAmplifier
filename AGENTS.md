@@ -63,6 +63,13 @@ Break these and the project stops being what it claims to be. They are not style
    other brain keeps the invariant unconditionally. See
    [docs/agent-play.md](docs/agent-play.md) §4.
 
+   **The two waits are coupled, and must stay coupled.** The adapter states its own deadline in
+   every world view (`decision_deadline_ms`) and the orchestrator waits on the tighter of that
+   and `NA_AGENT_TIMEOUT`, minus a margin, so it abandons *first*. Uncoupled, the exception above
+   silently becomes a lie: the engine applies its own pick at 2500 ms while the orchestrator
+   waits forever and records the agent's late answer as `tier=llm, degraded=false` — 66 adapter
+   rows in one measured run, zero of them `tier=llm` (na-t3h).
+
 ## Repository Layout
 
 A platform-agnostic brain + two engine adapters, joined by one JSON contract.

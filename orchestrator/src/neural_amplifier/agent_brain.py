@@ -32,6 +32,19 @@ from .pending import DecisionQueue, NotClaimable, QueueFull, Unanswered
 
 log = logging.getLogger(__name__)
 
+#: How far ahead of the engine's own deadline this brain gives up, in seconds.
+#:
+#: The two deadlines must not be raced. If the orchestrator abandons at the same instant the
+#: engine does, the outcome depends on scheduling and network latency, and the losing case is
+#: precisely the one na-t3h is about: an answer accepted into a decision loop for a turn the
+#: game has already resolved. Shaving a margin makes the orchestrator lose that race
+#: deliberately and always, which is the only way it can be reasoned about.
+#:
+#: 250ms rather than something smaller because the shave has to cover the reply's trip back
+#: through ``/decide`` to the adapter, not just the local wakeup — the engine's clock starts at
+#: its send and stops at its receive.
+ABANDON_MARGIN_SECONDS = 0.25
+
 
 def _timeout_from_env() -> float | None:
     """``NA_AGENT_TIMEOUT`` in seconds; unset or ``0`` means wait forever.
@@ -116,10 +129,44 @@ class AgentBrain:
             log.info("no doorbell for %s; waiting for an agent to poll", pending.id)
 
         self._current.pending = pending
+        timeout, reason = self._deadline(world_view)
         try:
-            return self.queue.await_answer(pending, self.timeout)
+            return self.queue.await_answer(pending, timeout, reason=reason)
         except Unanswered as exc:
             raise BrainError(str(exc)) from exc
+
+    def _deadline(self, world_view: WorldView) -> tuple[float | None, str | None]:
+        """How long to wait for this decision, and what to say if the wait runs out.
+
+        The configured timeout (``NA_AGENT_TIMEOUT``) says how long *we* are willing to wait.
+        ``world_view.decision_deadline_ms`` says how long the *game* will still be listening.
+        The tighter of the two is the only one worth waiting for: past the engine's deadline the
+        adapter has applied its own pick and moved on, so an answer arriving after it cannot
+        reach the game no matter how correct it is (na-t3h — measured, 66 adapter rows, zero
+        ``tier=llm``, against orchestrator records claiming applied llm decisions).
+
+        Neither present keeps the old behaviour exactly: wait on whatever was configured,
+        including forever. An adapter that does not state a deadline has not told us it has one,
+        and inventing a bound here would degrade decisions the game was still waiting for.
+        """
+        engine = world_view.decision_deadline_seconds()
+        if engine is None:
+            return self.timeout, None
+        # Shave the margin, but never below half the engine's own allowance. A fixed subtraction
+        # goes negative on a very tight deadline, and a negative wait abandons *instantly* —
+        # turning a merely-difficult deadline into a decision the agent was never offered a
+        # chance at. Proportional shaving keeps the wait positive for any positive deadline.
+        bounded = max(engine - ABANDON_MARGIN_SECONDS, engine / 2)
+        reason = (
+            f"the engine's {world_view.decision_deadline_ms}ms deadline passed with no answer; "
+            "the game has applied its own fallback and moved on. Do not resubmit this decision "
+            "— re-read the board and answer the next one."
+        )
+        if self.timeout is None or self.timeout > bounded:
+            return bounded, reason
+        # The configured timeout is the tighter one, so it is what actually expires — say so,
+        # rather than blaming a deadline that had not been reached.
+        return self.timeout, None
 
     def publish_outcome(self, outcome: dict[str, object]) -> None:
         """Tell the agent what the decision loop actually did with its orders.

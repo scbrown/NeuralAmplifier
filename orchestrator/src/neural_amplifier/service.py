@@ -23,7 +23,7 @@ from .coverage import report
 from .decisions import DecisionLog
 from .directives import accept
 from .orchestrator import Orchestrator
-from .pending import NotClaimable
+from .pending import NotClaimable, Pending
 from .replay import WorldViewStore
 from .telemetry import OtelSink, Sink
 
@@ -108,6 +108,38 @@ def build_guard(retriever: object | None, config: Config | None = None) -> objec
     if retriever is not None:
         guards.append(CitationGuard())
     return GuardChain(*guards)
+
+
+def _accepted_status(pending: Pending) -> str:
+    """What to tell an agent whose choice survived validation and the guard.
+
+    This used to be the flat string "applied to the game", and that string was a lie the
+    orchestrator was structurally unable to detect (na-t3h). It is inferred from the
+    orchestrator's *own* outcome — the orders it is about to return — and the orchestrator does
+    not observe the game. Between this line and anything happening on the board sit an HTTP
+    response, the adapter's own legality gates, and the engine, which can drop a choice for
+    reasons nobody has encoded (observability.md §5.5.1 measured exactly that). The only
+    evidence of application lives on the adapter side, in `na-observations.jsonl`.
+
+    So the wording says what this process did and stops there. It is deliberately still
+    unambiguous about success, because the alternative failure — an agent that reads a hedge as
+    a rejection and re-submits — costs a turn too.
+
+    The deadline branch is the specific case na-t3h found, and it is a *backstop*, not the
+    primary fix: `AgentBrain` now abandons before the engine does, so a late answer is normally
+    refused with 409 and never reaches this code. It can still be reached when the shave was too
+    thin — the decision loop runs grounding, the guard and possibly a repair after the answer is
+    handed over, and that work is not inside `ABANDON_MARGIN_SECONDS`. An answer that was in
+    time and an outcome that is late look identical from here except for this check.
+    """
+    deadline = pending.world_view.decision_deadline_seconds()
+    if deadline is not None and pending.age_seconds() >= deadline:
+        return (
+            "NOT applied — the engine's "
+            f"{pending.world_view.decision_deadline_ms}ms deadline passed before this decision "
+            "finished; the game has applied its own fallback and moved on"
+        )
+    return "accepted — returned to the engine to apply"
 
 
 def create_app(
@@ -305,7 +337,7 @@ def create_app(
             status = str(outcome.get("status") or "")
             if not status:
                 if action_id in applied:
-                    status = "applied to the game"
+                    status = _accepted_status(answered)
                 elif applied:
                     status = f"NOT applied — the guard replaced it with {', '.join(applied)}"
                 else:

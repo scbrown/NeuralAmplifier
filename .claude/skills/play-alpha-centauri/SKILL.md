@@ -18,13 +18,34 @@ grep -n '^llm_timeout_ms' "$SMAC_PLAY_DIR/thinker.ini"   # absent means you get 
 
 Set it to `0` (wait indefinitely) or a large finite value before an agent-driven run. On the
 default, every decision you are handed has *already* been answered by the deterministic tier by
-the time you read it, and the adapter has moved on — while `/agent/submit` still replies
-`"applied to the game"` and the decision log still records `tier: llm`. Two well-formed logs,
-flatly disagreeing about who decided the game (na-t3h).
+the time you read it, and the adapter has moved on (na-t3h).
 
-**So do not treat a successful submit as proof the loop closed.** The only proof is on the
-adapter's side: a `tier: llm` row in `na-observations.jsonl`, or `applied_item` matching what
-you chose. Verify there, not in the reply you were handed.
+**What now happens when you are too late.** The adapter tells the orchestrator its deadline
+(`decision_deadline_ms` in the world view), and the orchestrator gives up *first*, deliberately.
+So a late submit is now **refused with 409**, naming the deadline and saying the game moved on:
+
+```
+409  base.production-7 was abandoned: the engine's 2500ms deadline passed with no answer;
+     the game has applied its own fallback and moved on. Do not resubmit this decision —
+     re-read the board and answer the next one.
+```
+
+That is the correct outcome, not a fault. Do exactly what it says: **do not resubmit**, and do
+not treat it as a transport error to retry. The decision is gone; call `next_decision` and work
+on what is open now. If you are seeing these, `llm_timeout_ms` is too tight for you — fix the
+configuration, not the submit.
+
+Before the fix that answer was accepted: the loop completed, the record said `tier: llm,
+degraded: false`, and the reply said `"applied to the game"`, for a turn the engine had decided
+without you. **Old orchestrator, or an adapter that does not send the deadline, and that is
+still what happens** — the refusal depends on the adapter stating a deadline, so an unpatched
+build gives you the silent version.
+
+**So still do not treat a successful submit as proof the loop closed.** The reply now says
+`"accepted — returned to the engine to apply"`, which is the honest limit of what the
+orchestrator can know: it does not observe the game. The only proof is on the adapter's side —
+a `tier: llm` row in `na-observations.jsonl`, or `applied_item` matching what you chose. Verify
+there, not in the reply you were handed.
 
 With the timeout set, the claim above holds: a decision point is the engine sitting and waiting,
 exactly as it does for a human player, and no decision resolves until you answer it.
@@ -184,7 +205,12 @@ is the point.
 It reports what **actually ran**, which is not always what you asked for. Validation and the
 policy guard sit between your order and the game.
 
-- `"status": "applied to the game"` — your choice ran.
+- `"status": "accepted — returned to the engine to apply"` — your choice survived validation
+  and the guard, and went back to the adapter. It does **not** say the game applied it, because
+  the orchestrator cannot see that (na-t3h). Confirm on the adapter side if it matters.
+- `"status": "NOT applied — the engine's ...ms deadline passed ..."` — you answered inside the
+  window but the decision loop finished outside it. Same as a 409 in effect: the game has moved
+  on. Do not resubmit.
 - `"status": "NOT applied — the guard replaced it with ..."` — your choice was legal by the
   action space but failed a policy check. `advisories` says why. The commonest cause is an
   order the current state cannot pay for: the option was offered when reserves were 82 and by

@@ -101,6 +101,10 @@ BASE_PRODUCTION = {
     ],
     "action_space_size": 2,
     "cost_unit": "minerals",
+    # na_write_decision_deadline: conf.llm_timeout_ms, stated so the orchestrator can abandon
+    # before the engine does. Emitted on the four *decide* paths only — an observation posts
+    # nothing and waits for nobody, so it does not appear in an observation record.
+    "decision_deadline_ms": 2500,
     "tier": "llm",
     "applied": "llm",
     "applied_item": 0,
@@ -388,6 +392,27 @@ def test_history_populates_the_contract_field_not_merely_the_payload() -> None:
     assert world_view.history, "adapter output must populate the typed contract field"
     assert world_view.history[-1].action == "Recycling Tanks"  # type: ignore[attr-defined]
     assert world_view.history[-1].tier == "llm"
+
+
+def test_the_engine_deadline_populates_the_contract_field_not_merely_the_payload() -> None:
+    """Same pin as `history` above, one bug later (na-t3h), and for the same reason.
+
+    `decision_deadline_ms` is read by name — `AgentBrain` bounds its wait on it and
+    `/agent/submit` checks whether it has passed. A passthrough extra would satisfy
+    `model_dump()["decision_deadline_ms"]` and leave both of those reading None forever, which
+    is precisely the state that produced 66 adapter rows with zero `tier=llm` against
+    orchestrator records claiming applied llm decisions. Nothing would have looked broken.
+
+    The `2500` is the adapter's shipped default (`main.h`), not an arbitrary fixture value: an
+    unconfigured agent-driven run gets 2.5 seconds, which is why the field had to exist.
+    """
+    world_view = WorldView.model_validate(BASE_PRODUCTION)
+    assert world_view.decision_deadline_ms == 2500
+    assert world_view.decision_deadline_seconds() == pytest.approx(2.5)
+
+    # And an adapter that has not been upgraded must stay unbounded rather than acquire a
+    # default — inventing one here would abandon decisions the game is still blocked on.
+    assert WorldView.model_validate(BASE_HURRY).decision_deadline_seconds() is None
 
 
 def test_history_items_name_something_the_brain_could_choose() -> None:

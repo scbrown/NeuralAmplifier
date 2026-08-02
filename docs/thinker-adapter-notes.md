@@ -192,7 +192,17 @@ surface consequences in [game-surface.md](game-surface.md); dialog handling in
   | --- | --- | --- |
   | `llm_factions` | `0` | Bitmask of faction ids routed to the orchestrator. `0` is stock Thinker — no bridge in the loop at all. `llm_factions=2` routes faction 1. |
   | `llm_endpoint` | `http://127.0.0.1:8000` | Orchestrator base URL. `http` only; an `https` value is **refused**, not downgraded. |
-  | `llm_timeout_ms` | `2500` | Ceiling on one decision's whole exchange. Past it the engine's own answer applies. |
+  | `llm_timeout_ms` | `2500` | Ceiling on one decision's whole exchange. Past it the engine's own answer applies. Also **sent** to the orchestrator as `decision_deadline_ms` — see below. |
+
+  `llm_timeout_ms` is not only a local timeout: every world view the decide paths post carries
+  it as `decision_deadline_ms`, so the orchestrator can abandon the decision *before* the engine
+  does. Without that the orchestrator had no way to learn when the game stopped listening, and
+  an attached agent's late answer was recorded as an applied `tier=llm` decision the game never
+  used — 66 adapter rows in one measured run, zero of them `tier=llm` (na-t3h;
+  [observability.md §5.4](observability.md), [contract.md](contract.md)). Emitted by
+  `na_write_decision_deadline` at the four decide sites only, and **omitted** rather than sent
+  as `0` when `llm_timeout_ms <= 0`, since that configuration means wait-indefinitely and a
+  literal `0` invites the opposite reading.
 
 ## 6.1 The transport
 
