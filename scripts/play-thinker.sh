@@ -103,6 +103,74 @@ fi
 [ -d "$THINKER_DIR/src" ] || die "no Thinker checkout at $THINKER_DIR (clone your fork, or set THINKER_DIR)"
 command -v i686-w64-mingw32-g++ >/dev/null || die "cross-compiler missing — run scripts/setup-host.sh"
 
+# ── Refuse a stale source tree ──────────────────────────────────────────────
+#
+# assert_flag_in_dll (below) checks the ARTIFACT for a flag's literal, which
+# catches a stale build only when the missing change ADDED A STRING. It is blind
+# to the more common kind: a change that alters a VALUE.
+#
+# Measured 2026-08-02. thinker 0722b7b makes metrics.energy_income net rather
+# than gross (na-s4e). It adds no flag and no new string — its one new sentence
+# is inside a C++ comment, so it never reaches the binary. The checkout this
+# script defaults to sat one commit behind that fix while the INSTALLED DLL had
+# it, because the DLL had been built from a worktree. A `launch` from the
+# default THINKER_DIR would rebuild from the older tree and `cp` it over the
+# newer one at line ~143, silently reverting the deployed game to the optimistic
+# setback_turns arithmetic — with assert_flag_in_dll still passing, because the
+# -na-* flags are present in both builds.
+#
+# So: check the SOURCE for currency and the ARTIFACT for capability. Neither
+# subsumes the other. This one runs BEFORE the build, so a refusal costs no
+# compile time and, more importantly, leaves the good installed DLL untouched.
+assert_thinker_current() {
+    git -C "$THINKER_DIR" rev-parse --git-dir >/dev/null 2>&1 || {
+        warn "$THINKER_DIR is not a git checkout — cannot check it is current."
+        return 0
+    }
+    # Fetch first. A checkout's own remote-tracking ref is not evidence of
+    # currency: it reports "0 behind" whenever the ref itself is stale, which is
+    # the failure this check exists to catch. A fetch that cannot reach the
+    # remote is not fatal — we fall through and say the comparison is weaker.
+    local fetched=yes
+    timeout 30 git -C "$THINKER_DIR" fetch --quiet 2>/dev/null || fetched=no
+
+    local up
+    up="$(git -C "$THINKER_DIR" rev-parse --abbrev-ref --symbolic-full-name '@{upstream}' 2>/dev/null)" \
+        || up="$(git -C "$THINKER_DIR" rev-parse --verify --quiet origin/master >/dev/null && echo origin/master)"
+    [ -n "$up" ] || { warn "$THINKER_DIR has no upstream — cannot check it is current."; return 0; }
+
+    local behind
+    behind="$(git -C "$THINKER_DIR" rev-list --count "HEAD..$up" 2>/dev/null || echo 0)"
+    [ "$behind" -gt 0 ] 2>/dev/null || return 0
+
+    local msg
+    msg="$(printf '%s\n' \
+        "$THINKER_DIR is $behind commit(s) behind $up." \
+        "  building:  $(git -C "$THINKER_DIR" log --oneline -1 2>/dev/null)" \
+        "  missing:" \
+        "$(git -C "$THINKER_DIR" log --oneline --reverse "HEAD..$up" 2>/dev/null | sed 's/^/    /')" \
+        "  fix:       cd $THINKER_DIR && git merge --ff-only $up   # then re-run" \
+        "$([ "$fetched" = no ] && echo '  NOTE: git fetch failed, so this compares against a possibly-stale ref — it may be further behind.')")"
+
+    if [ -n "${NA_ALLOW_STALE_THINKER:-}" ]; then
+        warn "NA_ALLOW_STALE_THINKER set — building from a stale tree anyway."
+        printf '%s\n' "$msg" >&2
+        return 0
+    fi
+    die "$(printf '%s\n' "$msg" \
+        "This is a refusal, not a warning: the build is about to be installed over" \
+        "the running game's DLL, so a stale tree does not merely fail to add something" \
+        "— it REMOVES fixes that are already deployed, and every other check still passes." \
+        "Set NA_ALLOW_STALE_THINKER=1 to build an older tree deliberately.")"
+}
+assert_thinker_current
+
+# A dirty tree is normal mid-development, so this is a note rather than a gate —
+# but it is worth saying, because the commit line printed after the build then
+# does not fully describe what was built.
+[ -z "$(git -C "$THINKER_DIR" status --porcelain 2>/dev/null)" ] \
+    || warn "$THINKER_DIR has uncommitted changes — the sha logged below is not the whole story."
+
 log "building thinker (release)"
 # `cmake --preset` resolves CMakePresets.json relative to the working directory,
 # not to -S, so this has to run from inside the checkout.
