@@ -155,6 +155,52 @@ if [ -f "$INI" ] && ! grep -q '^llm_factions' "$INI"; then
     log "added llm_factions=254 to thinker.ini"
 fi
 
+# ── The adapter's half of invariant 9's agent exception (na-t3h) ────────────
+#
+# AGENTS.md invariant 9 carves out ONE exception: with NA_BRAIN=agent the game
+# *does* wait, "the fallback is not removed, only made explicit: set
+# NA_AGENT_TIMEOUT (and `llm_timeout_ms` on the adapter)". NOTHING SET IT. Before
+# this, `llm_timeout_ms` appeared only in docs, comments and tests — never in a
+# file the engine reads — so every agent run inherited main.h's default of 2500ms.
+#
+# 2500 is not a bug in itself: main.h picks it "to cover a Haiku call on a warm
+# connection", which is right for the LLM tier and keeps the game from stalling on
+# a dead orchestrator. It is wrong for the ONE brain the exception exists for. No
+# attached agent answers in 2.5s, so an agent run could never win the race — and
+# na-t3h measured what that looks like from outside: the adapter correctly logged
+# `fallback_reason="orchestrator unreachable or slow"` while the orchestrator wrote
+# a second, contradictory record marking the same decision tier=llm, applied,
+# degraded=false. Silent, and flattering, which is the worst combination.
+#
+# So the timeout FOLLOWS THE BRAIN, which is the coupling AGENTS.md already
+# requires ("the two waits are coupled, and must stay coupled"). Export NA_BRAIN
+# the same way `just play` does and the adapter's deadline matches the orchestrator
+# that is actually serving.
+#
+# Finite, not 0. `timeout_ms <= 0` means wait indefinitely, and an unattended run
+# that hangs forever is the exact failure NA_TIMEOUT exists to catch (na-ie9) — a
+# hung game and a working one are indistinguishable under Xvfb. 300000 is long
+# enough for a human or an agent to think and short enough that the run still ends.
+if [ -f "$INI" ] && ! grep -q '^llm_timeout_ms' "$INI"; then
+    if [ -n "${NA_LLM_TIMEOUT_MS:-}" ]; then
+        _timeout_ms="$NA_LLM_TIMEOUT_MS"; _why="NA_LLM_TIMEOUT_MS"
+    elif [ "${NA_BRAIN:-}" = "agent" ]; then
+        _timeout_ms=300000; _why="NA_BRAIN=agent"
+    else
+        _timeout_ms=2500; _why="default brain (main.h)"
+    fi
+    printf '; How long a decision may wait on the orchestrator before the engine applies its own\n; answer (invariant 9). Follows the brain: 2500 suits a fast model, an attached agent needs\n; minutes. Written explicitly because inheriting the built-in default silently broke agent\n; play (na-t3h).\nllm_timeout_ms=%s\n' "$_timeout_ms" >> "$INI"
+    log "set llm_timeout_ms=$_timeout_ms in thinker.ini ($_why)"
+    if [ "$_timeout_ms" = "2500" ] && [ -z "${NA_BRAIN:-}" ]; then
+        warn "llm_timeout_ms=2500 suits a fast model, NOT an attached agent."
+        warn "For agent play export NA_BRAIN=agent (as \`just play\` does) or set"
+        warn "NA_LLM_TIMEOUT_MS — otherwise every decision degrades to Thinker while"
+        warn "the orchestrator still reports it as an applied LLM-tier decision (na-t3h)."
+    fi
+else
+    [ -f "$INI" ] && log "llm_timeout_ms already set in thinker.ini — leaving it ($(grep -m1 '^llm_timeout_ms' "$INI"))"
+fi
+
 # ── Resolution sanity ───────────────────────────────────────────────────────
 #
 # video_mode=0 is fullscreen at the native desktop resolution. On a 4K display
