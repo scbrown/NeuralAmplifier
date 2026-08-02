@@ -21,7 +21,7 @@ from .config import load as load_config
 from .contract import Choice, Directive, Orders, WorldView
 from .coverage import report
 from .decisions import DecisionLog
-from .directives import accept
+from .directives import DirectiveStore, accept
 from .orchestrator import Orchestrator
 from .pending import NotClaimable, Pending
 from .replay import WorldViewStore
@@ -165,6 +165,19 @@ def create_app(
     # (observability step 7) has nothing to feed back.
     store_path = config.run.world_view_store
     resolved_retriever = _build_retriever(config)
+    # The standing plan. `NA_PLAN`/`run.plan` was read into config and consumed by nothing, so a
+    # served orchestrator always ran with `plan=None`: `/agent/directive` answered "attached; it
+    # takes effect when you submit this decision", the decision succeeded, and the directive went
+    # nowhere. Every record from a real game carried `plan_absent: true`, which reads as "no plan
+    # was configured" rather than "the configuration was ignored" (na-43h).
+    #
+    # Measured before the fix, turn 45: an agent issued `bank-for-expansion` on a live
+    # base.production decision, got the success response with a stamped baseline of 181, and the
+    # plan file was never created. The next decision was shown nothing.
+    #
+    # Absent path stays absent — no `NA_PLAN` means no store, which is a legitimate way to run and
+    # is what `plan_absent` is for.
+    plan_path = config.run.plan
     orchestrator = Orchestrator(
         brain=brain or build_brain(config),
         log=resolved_log,
@@ -172,6 +185,7 @@ def create_app(
         store=WorldViewStore(store_path) if store_path else None,
         retriever=resolved_retriever,  # type: ignore[arg-type]
         guard=build_guard(resolved_retriever, config),  # type: ignore[arg-type]
+        plan=DirectiveStore(Path(plan_path)) if plan_path else None,
         policy=config.surfaces,
     )
     app.state.orchestrator = orchestrator
