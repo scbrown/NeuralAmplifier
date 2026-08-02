@@ -1,0 +1,27 @@
+{
+  "note": "Does metrics.energy_income actually change when facility maintenance is nonzero, and in which direction?",
+  "kind": "build A/B — no model, no brain. Two thinker.dll builds replaying one identical save.",
+  "save": {
+    "file": "saves/auto/Autosave_2234.sav",
+    "sha1": "bf33f458cafd66dc8e93dc4336ccf66543ae3ad2",
+    "turn": 135,
+    "factions": ["Gaians (1)", "Hive (2)", "University (3)"],
+    "bases_per_faction": [51, 49, 55]
+  },
+  "arms": {
+    "gross": {
+      "thinker_commit": "2929637",
+      "expression": "plr.energy_surplus_total",
+      "dll_sha1_prefix": "f31625a3",
+      "rows_with_metrics": 127
+    },
+    "net": {
+      "thinker_commit": "0722b7b",
+      "expression": "plr.energy_surplus_total + plr.turn_commerce_income - plr.facility_maint_total",
+      "dll_sha1_prefix": "e2dbc9e5",
+      "rows_with_metrics": 125
+    }
+  },
+  "matched_pairs": 69,
+  "answered_by": "deterministic engine replay (no brain invoked)"
+}

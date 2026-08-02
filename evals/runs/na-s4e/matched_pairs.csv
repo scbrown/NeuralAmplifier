@@ -1,0 +1,70 @@
+surface,faction,base,turn,call_seq,energy_reserves,base_count,gross_old,net_new,old_minus_new
+base.production,Gaians,Solstice Haven,135,1,538,51,323,348,-25
+base.production,Gaians,Twilight Vale,135,1,556,51,390,436,-46
+base.production,Gaians,Earthsong Enclave,135,1,518,51,246,247,-1
+base.production,Gaians,Fruitful Fields,135,1,559,51,404,455,-51
+base.production,Gaians,Emerald Heights,135,1,543,51,338,368,-30
+base.production,Gaians,Pulsing Prairie,135,1,522,51,264,270,-6
+base.production,Gaians,Rustling Ravine,135,1,527,51,135,137,-2
+base.production,Gaians,Haven Heights,135,1,547,51,355,390,-35
+base.production,Gaians,Humming Hollow,135,1,515,51,213,208,5
+base.production,Gaians,Starfall Retreat,135,1,528,51,119,122,-3
+base.production,Gaians,Aurora Grove,135,1,534,51,304,325,-21
+base.production,Gaians,Riverbank Retreat,135,1,579,51,473,547,-74
+base.production,Hive,The Commune,135,1,700,49,26,6,20
+base.production,Hive,People's Unity,135,1,700,49,26,6,20
+base.production,Hive,Loyalty Stronghold,135,1,700,49,26,6,20
+base.production,Hive,Laborer's Enclave,135,1,700,49,26,6,20
+base.production,Hive,Discipline Enclave,135,1,700,49,26,6,20
+base.production,Hive,Manufacturing Maze,135,1,700,49,26,6,20
+base.production,Hive,Fecundity Tower,135,1,700,49,26,6,20
+base.production,Hive,The Leader's Horde,135,1,700,49,26,6,20
+base.production,Hive,People's Bastion,135,1,700,49,26,6,20
+base.production,Hive,Communal Hub,135,1,700,49,26,6,20
+base.production,Hive,Unification Cavern,135,1,700,49,26,6,20
+base.production,Hive,Yang Community,135,1,700,49,26,6,20
+base.production,Hive,Worker's Outpost,135,1,700,49,26,6,20
+base.production,Hive,Collective Enclave,135,1,700,49,26,6,20
+base.production,Hive,Socialism Tunnels,135,1,700,49,26,6,20
+base.production,Hive,The Industry Warren,135,1,700,49,26,6,20
+base.production,Hive,People's Endeavor,135,1,700,49,26,6,20
+base.production,Hive,Collective Assembly,135,1,700,49,26,6,20
+base.production,Hive,Society Stronghold,135,1,700,49,26,6,20
+base.production,Hive,The Colony,135,1,700,49,26,6,20
+base.production,Hive,Willpower Bastion,135,1,700,49,26,6,20
+base.production,Hive,The Comrade's Hold,135,1,700,49,26,6,20
+base.production,Hive,People's Assembly,135,1,700,49,26,6,20
+base.production,Hive,The Drone Mound,135,1,700,49,26,6,20
+base.production,Hive,Labor Network,135,1,700,49,26,6,20
+base.production,Hive,Laborer's Outpost,135,1,700,49,26,6,20
+base.production,Hive,Fellowship City,135,1,700,49,26,6,20
+base.production,Hive,Social Artery,135,1,700,49,26,6,20
+base.production,Hive,Chairman's Burrow,135,1,700,49,26,6,20
+base.production,Hive,Collective Bastion,135,1,700,49,26,6,20
+base.production,Hive,Factory Stronghold,135,1,700,49,26,6,20
+base.production,Hive,Social Citadel,135,1,700,49,26,6,20
+base.production,Hive,Collective Chamber,135,1,700,49,26,6,20
+base.production,Hive,Socialism Pathways,135,1,700,49,26,6,20
+base.production,Hive,Worker's Nexus,135,1,700,49,26,6,20
+base.production,Hive,The Unifier's Den,135,1,700,49,26,6,20
+base.production,Hive,The Hive,135,1,707,49,0,0,0
+base.production,Hive,Unity Lair,135,1,700,49,26,6,20
+base.production,Hive,Social Spire,135,1,700,49,26,6,20
+base.production,Hive,Unity Halls,135,1,700,49,26,6,20
+base.production,Hive,Social Enclave,135,1,700,49,26,6,20
+base.production,Hive,Proletarian Passage,135,1,700,49,26,6,20
+base.production,Hive,Communal Complex,135,1,700,49,26,6,20
+base.production,Hive,Commonalty Core,135,1,700,49,26,6,20
+base.production,Hive,The Great Coalescence,135,1,700,49,26,6,20
+base.production,Hive,Worker's Citadel,135,1,700,49,26,6,20
+base.production,Hive,Collective Spire,135,1,700,49,26,6,20
+base.production,Hive,Social Engineering Den,135,1,700,49,26,6,20
+base.production,Hive,Mental Fortress,135,1,700,49,26,6,20
+faction.tech,Hive,,135,,700,49,26,6,20
+base.production,University,New Arzamas,135,1,488,55,148,78,70
+base.production,University,University Base,135,1,547,55,0,0,0
+base.production,University,Meteorite Park,135,1,481,55,116,67,49
+base.production,University,Saturn Center,135,1,547,55,10,7,3
+base.production,University,Zarya Zenith,135,1,543,55,26,9,17
+base.production,University,Academgorodok,135,1,483,55,136,76,60
+base.production,University,Molecular Studies,135,1,549,55,40,17,23
