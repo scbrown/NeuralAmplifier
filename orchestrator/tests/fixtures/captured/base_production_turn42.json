@@ -1,0 +1,170 @@
+{
+  "action_space": [
+    {
+      "action": "Colony Pod",
+      "category": "unit",
+      "cost": 33,
+      "effects": {
+        "minerals_remaining": -33.0
+      },
+      "id": "unit:0",
+      "role": "FOUNDS A NEW BASE elsewhere - does not grow this base",
+      "triad": "land",
+      "turns_if_continued": 1,
+      "turns_if_switched": 5
+    },
+    {
+      "action": "Formers",
+      "category": "unit",
+      "cost": 22,
+      "effects": {
+        "minerals_remaining": -22.0
+      },
+      "id": "unit:1",
+      "role": "terraforms terrain to improve tile yields",
+      "triad": "land",
+      "turns_if_switched": 4
+    },
+    {
+      "action": "Scout Patrol",
+      "category": "unit",
+      "cost": 11,
+      "effects": {
+        "minerals_remaining": -11.0
+      },
+      "id": "unit:2",
+      "role": "explores and scouts terrain",
+      "triad": "land",
+      "turns_if_switched": 2
+    },
+    {
+      "action": "Synthmetal Garrison",
+      "category": "unit",
+      "cost": 22,
+      "effects": {
+        "minerals_remaining": -22.0
+      },
+      "id": "unit:256",
+      "role": "defends a base or position",
+      "triad": "land",
+      "turns_if_switched": 4
+    },
+    {
+      "action": "Recycling Tanks",
+      "category": "facility",
+      "cost": 44,
+      "effect": "Bonus Resources",
+      "effects": {
+        "minerals_remaining": -44.0
+      },
+      "id": "facility:3",
+      "maint": 0,
+      "turns_if_switched": 7
+    },
+    {
+      "action": "Network Node",
+      "category": "facility",
+      "cost": 88,
+      "effect": "Labs Bonus",
+      "effects": {
+        "minerals_remaining": -88.0
+      },
+      "id": "facility:8",
+      "maint": 1,
+      "turns_if_switched": 13
+    },
+    {
+      "action": "The Human Genome Project",
+      "category": "project",
+      "cost": 220,
+      "effect": "+1 Talent Each Base",
+      "effects": {
+        "minerals_remaining": -220.0
+      },
+      "id": "facility:70",
+      "maint": 0,
+      "turns_if_switched": 32
+    },
+    {
+      "action": "The Weather Paradigm",
+      "category": "project",
+      "cost": 220,
+      "effect": "Terraform Rate +50%",
+      "effects": {
+        "minerals_remaining": -220.0
+      },
+      "id": "facility:72",
+      "maint": 0,
+      "turns_if_switched": 32
+    }
+  ],
+  "action_space_size": 8,
+  "advisories": null,
+  "base": "Morgan Solutions",
+  "base_id": 14,
+  "base_state": {
+    "current_item": 0,
+    "current_item_name": "Colony Pod",
+    "eco_damage": 0,
+    "energy_intake": 3,
+    "mineral_intake": 8,
+    "mineral_surplus": 7,
+    "minerals_accumulated": 27,
+    "nutrient_intake": 10,
+    "pop_size": 4,
+    "queue_size": 0,
+    "specialists": 0,
+    "worked_tiles": 532741
+  },
+  "bases": null,
+  "call_seq": 1,
+  "contacts": null,
+  "cost_unit": "minerals",
+  "decision_deadline_ms": null,
+  "deltas": null,
+  "directives": null,
+  "economy": null,
+  "engine": "thinker",
+  "faction": "Morganites",
+  "faction_id": 4,
+  "fairness": {
+    "difficulty": "talent",
+    "handicaps": [],
+    "slot": "ai"
+  },
+  "grounding": null,
+  "has_gov": 0,
+  "history": [],
+  "map": null,
+  "memory": null,
+  "metrics": {
+    "base_count": 5.0,
+    "drone_total": 0.0,
+    "energy_income": 13.0,
+    "energy_reserves": 274.0,
+    "labs_output": 7.0,
+    "military_units": 7.0,
+    "mineral_surplus": 7.0,
+    "minerals_remaining": 6.0,
+    "pop_size": 4.0,
+    "pop_total": 11.0,
+    "turns_to_completion": 1.0
+  },
+  "native_choice": 0,
+  "native_choice_name": "Colony Pod",
+  "run_id": "6a6ea65c-19f72e99-01b4",
+  "schema_version": "0.1",
+  "scope": "base",
+  "scores": null,
+  "subjects": null,
+  "surface_id": "base.production",
+  "trace": {
+    "traceparent": "00-6a6ea676000000040000000107a1c0de-000000010000002b-01"
+  },
+  "tradeoffs": null,
+  "turn": 42,
+  "units": null,
+  "x": 51,
+  "y": 69,
+  "year": null
+}

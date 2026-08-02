@@ -1,0 +1,61 @@
+{
+  "action_space": [
+    {
+      "action": "No change",
+      "category": "se",
+      "effects": null,
+      "id": "se:none"
+    }
+  ],
+  "action_space_size": 1,
+  "advisories": null,
+  "bases": null,
+  "contacts": null,
+  "current": {
+    "Economics": "Simple",
+    "Future Society": "None",
+    "Politics": "Frontier",
+    "Values": "Survival"
+  },
+  "decision_deadline_ms": null,
+  "deltas": null,
+  "directives": null,
+  "economy": null,
+  "engine": "thinker",
+  "faction": "Gaians",
+  "faction_id": 1,
+  "fairness": {
+    "difficulty": "talent",
+    "handicaps": [],
+    "slot": "ai"
+  },
+  "grounding": null,
+  "history": null,
+  "map": null,
+  "memory": null,
+  "metrics": {
+    "base_count": 5.0,
+    "drone_total": 0.0,
+    "energy_income": 14.0,
+    "energy_reserves": 171.0,
+    "labs_output": 9.0,
+    "military_units": 9.0,
+    "pop_total": 11.0
+  },
+  "native_choice": "se:none",
+  "native_choice_name": "No change",
+  "run_id": "6a6ea65c-19f72e99-01b4",
+  "schema_version": "0.1",
+  "scope": "turn",
+  "scores": null,
+  "subjects": null,
+  "surface_id": "faction.se",
+  "trace": {
+    "traceparent": "00-6a6ea676000000010000000207a1c0de-000000020000002b-01"
+  },
+  "tradeoffs": null,
+  "turn": 42,
+  "units": null,
+  "upheaval_cost": 0,
+  "year": null
+}
