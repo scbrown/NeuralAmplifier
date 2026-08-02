@@ -316,6 +316,58 @@ elif [ -n "${NA_EXIT_TURN:-}" ]; then
     warn "limit can only be reached if something else is driving the game."
 fi
 
+# ── Every flag we pass must exist in the DLL we just installed ──────────────
+#
+# A flag terranx does not recognise is IGNORED IN SILENCE — argv parsing is a
+# wcscmp chain (thinker src/main.cpp) with no else-branch, so an unknown -na-*
+# token produces no error, no log line, and no exit code. Meanwhile this script
+# has already announced it: "ending own turn after 120s with no turn change".
+# The banner describes the INTENT; the binary decides the BEHAVIOUR; and when
+# THINKER_DIR is stale those two disagree with nothing to say so.
+#
+# Measured 2026-08-02, and it cost 90 minutes of wall clock: THINKER_DIR
+# defaulted to a checkout 7 commits behind origin/master, in which
+# `grep -c na_auto_turn src/neural.cpp` was 0 against 4 on origin. The run
+# announced auto-turn, loaded turn 4, advanced ZERO turns, and died to
+# NA_TIMEOUT — which is indistinguishable from a wedged game, and was diagnosed
+# as one twice before the DLL was suspected.
+#
+# So check the ARTIFACT, not the source: this greps the installed thinker.dll
+# for the flag's own UTF-16LE literal. Building from the right tree is what we
+# INTEND; the string being in the shipped binary is what we can OBSERVE. Those
+# come apart whenever the build silently no-ops or installs elsewhere, and the
+# whole point of this check is to catch the case where intent and artifact
+# diverge.
+assert_flag_in_dll() {
+    local flag="$1" why="$2" dll="$PLAY_DIR/thinker.dll"
+    if ! command -v strings >/dev/null; then
+        warn "strings(1) missing — cannot verify '$flag' is in the installed DLL."
+        warn "A stale build would ignore it silently. Install binutils to get this check."
+        return 0
+    fi
+    if strings -el "$dll" 2>/dev/null | grep -qxF -- "$flag"; then
+        return 0
+    fi
+    die "$(printf '%s\n' \
+        "'$flag' is NOT in the installed thinker.dll — it would be ignored in silence." \
+        "  set by:  $why" \
+        "  built:   $THINKER_DIR @ $(git -C "$THINKER_DIR" rev-parse --short HEAD 2>/dev/null || echo '?')" \
+        "  fix:     cd $THINKER_DIR && git merge --ff-only origin/master   # then re-run" \
+        "This is a refusal, not a warning: the run would look healthy and advance nothing.")"
+}
+
+for _i in "${!resume_args[@]}"; do
+    case "${resume_args[$_i]}" in
+        -na-*) assert_flag_in_dll "${resume_args[$_i]}" "NA_RESUME (autoload)" ;;
+    esac
+done
+for _i in "${!exit_args[@]}"; do
+    case "${exit_args[$_i]}" in
+        -na-exit-turn) assert_flag_in_dll "-na-exit-turn" "NA_EXIT_TURN=$NA_EXIT_TURN" ;;
+        -na-auto-turn) assert_flag_in_dll "-na-auto-turn" "NA_AUTO_TURN=$NA_AUTO_TURN" ;;
+    esac
+done
+
 # The timeout is the outer bound and applies to every mode. `timeout` sends TERM,
 # then KILL after a grace period, because a wine process that is wedged in the way
 # this exists to catch is exactly the kind that ignores TERM.
