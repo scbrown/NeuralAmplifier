@@ -69,7 +69,7 @@ Per-unit orders fire separately as the engine iterates units (`mod_enemy_turn`
 
 ---
 
-## 2.5 Instrumentation status — measured 2026-07-29
+## 2.5 Instrumentation status — measured 2026-07-29, amended 2026-08-01
 
 **4 of 77 surfaces the brain can actually decide.** All four apply: the choice executes, and it
 is validated against the engine's own availability tests first, so an illegal order is rejected
@@ -79,15 +79,23 @@ surfaces` reports it from the frozen registry rather than from this paragraph.
 The registry is frozen at 77 (`orchestrator/surfaces.py`), partitioned by contract scope:
 `base` 25, `unit` 32, `turn` 20.
 
+A fifth surface, `base.governor_config`, is **instrumented but not brain-decidable**, and is
+deliberately not in the four. It has a deterministic tier in the fork and a probe, and no
+decide or apply path at all — which is the intended first step for the 21 `NO_AI_PATH`
+surfaces (na-2mn): give them a native answer *before* a model, so there is something to fall
+back to and something to measure against. Counting it in the four would report as
+brain-covered a surface the brain has never been asked about.
+
 | Surface | Scope | Seam | Action space | Probe |
 | --- | --- | --- | --- | --- |
 | `base.production` | base | `mod_base_build` | engine-authoritative, costed in minerals, roles + effects | `observe <base_id>` |
 | `faction.tech` | turn | `mod_tech_selection` | `tech_avail`, with the AI's own valuation weights | `observe-tech <faction_id>` |
 | `faction.se` | turn | `mod_social_ai` | legal (field, model) pairs with effect deltas | `observe-se <faction_id>` |
 | `base.hurry` | base | `mod_base_hurry` (wrapped) | hurry / don't, with credit cost and turns saved; unaffordable option omitted | `observe-hurry <base_id>` |
+| `base.governor_config` | base | `governor_priorities` | n/a — deterministic tier only so far; records the resolved weights and their source | `observe-gov <base_id>` |
 
-Each has an apply command, and each validates with the engine's own test rather than with a
-reconstruction of it:
+Each of the four has an apply command, and each validates with the engine's own test rather
+than with a reconstruction of it:
 
 | Surface | Apply | Legality test | Costs |
 | --- | --- | --- | --- |
@@ -131,6 +139,19 @@ toggle per surface, and one switched off is recorded at `deterministic` tier —
 degraded, because the brain was never asked. That is how a surface gets rolled out one step at a
 time: instrument it, watch it observe, then let it decide.
 
+`base.governor_config` is at the first of those steps with an extra one in front of it. A
+`NO_AI_PATH` surface has a rollout one longer than the others — **native answer, instrument,
+observe, then decide** — because the usual first step assumes a deterministic tier already
+exists to observe, and on these 21 it does not. It therefore has a `thinker.ini` option
+(`na_governor_policy`, default off) and no `na.toml` toggle, there being no brain answer yet
+to switch on.
+
+It is also the reason that list is worth working through rather than routing straight to the
+model: it looked like a permissions checkbox and turned out to be the sole input to every build
+decision a player-owned base makes. Had it gone to the brain first there would have been no
+baseline to A/B against, because there was no decision to compare with — which is the argument
+na-2mn makes for all 21.
+
 **Every new surface ships a side-effect-free probe.** In-game input cannot be driven at all
 ([headless-harness.md](headless-harness.md) §3.0.2), so a surface that fires every five to ten
 turns is otherwise unverifiable without playing until it happens. A probe calls the serialiser
@@ -160,7 +181,7 @@ preserving 39". That is the value proposition working: not a better rule lookup,
 whether the reserve is better spent than held. Whether it is *right* is a separate question that
 needs outcome measurement over a game, not a single decision.
 
-### What the 73 remaining actually divide into
+### What the 72 remaining actually divide into
 
 The gap is not uniform, and the interesting split is not by scope:
 
@@ -215,7 +236,7 @@ LLM drills down.
 | `base.hq_relocate` | ✅ | `find_relocate_base` base.cpp:45 (`conf.auto_relocate_hq`) | D |
 | `base.name` | ✅ | `mod_name_base` game.cpp:2075 | D |
 | `base.abandon` | ❌ | AI returns early base.cpp:3325 — **"ABANDONBASE" is human-only** | **L** |
-| `base.governor_config` | ❌ | `gov_config()` returns `~0u` for AI (engine_base.h:248) — **no AI policy exists** | **L** |
+| `base.governor_config` | ❌ | `gov_config()` returns `~0u` for AI (engine_base.h:249) — no AI policy exists; **deterministic tier added in the fork** (`na_governor_policy`, plan.cpp) | D+L |
 | `base.hq_escape` | ❌ | `X_pop("ESCAPE")` base.cpp:515 — human single-player only; others auto-`true` :513 | **L** |
 | `base.disband` | ❌ | `mod_base_kill` base.cpp:224 — no deliberate AI caller | L |
 | `base.retool` | ❌ | penalty applies to humans only (base.cpp:1045, build.cpp:11) | L |
