@@ -8,15 +8,21 @@ worst kind available to us: a hallucinated tech prerequisite is indistinguishabl
 from a real one downstream, and the whole point of the datalinks plane is that
 canonical rules are trustworthy. Extraction is the last place to spend a model.
 
-Two parsing traps this handles, both load-bearing:
+Three parsing traps this handles, all load-bearing:
 
 - **Comments are line-initial only.** ``;`` starts a comment, but effect text
   contains it — "Naval Movement +2; Naval Bases". Stripping inline would silently
   truncate a facility's description.
+- **…except in ``#RULES`` and ``#WORLDBUILDER``,** which are bare numbers with
+  their meaning in an *inline* ``;`` comment. Those two sections have their own
+  reader (:func:`_tuned`); the rule above still holds everywhere else, so the
+  tempting global fix is the one that breaks the file.
 - **``Disable`` is not a prerequisite.** A ``preq`` column holds a tech shortcode,
   ``None`` (no prerequisite), or ``Disable`` (excluded from this game entirely).
   Treating ``Disable`` as a tech would invent an edge and quietly hide that an
-  item is unavailable.
+  item is unavailable. In the *other* columns that accept it — a facility's
+  free-with tech, a citizen's obsoleting tech, a terraform's sea variant — it
+  inverts, and means "never" rather than "excluded".
 """
 
 from __future__ import annotations
@@ -371,6 +377,190 @@ class ResourceYield:
     energy: int | None
 
 
+@dataclass(frozen=True)
+class TunedParameter:
+    """One numbered tuning constant — ``#RULES`` and ``#WORLDBUILDER``.
+
+    Both sections are positional like ``#SOCIO``, and for the same reason: nothing in a row names
+    itself. The row is bare numbers and the meaning lives in an **inline** ``;`` comment beside
+    them, which makes these the only two sections where the file's "comments are line-initial"
+    rule does not hold. So ``index`` is the identity and ``label`` is a courtesy — a mod that
+    strips the comments still parses, with empty labels, rather than silently renumbering.
+
+    Kept as raw values rather than a named-field record on purpose, and that costs less than it
+    looks. Some of these are legible ("Population limit w/o hab complex"), but plenty are engine
+    coefficients whose units are undocumented ("Encourages fractal to grow deep water"), and one
+    record with ``deep_water_bias: int`` on it would dress the opaque half as understood. The
+    file's own gloss travels with the value instead, so a reader sees exactly what the designers
+    wrote and no more.
+
+    Both sections are also the cleanest *mod* signal in the file. Thinker's whole balance patch
+    is a handful of changed integers here, and a per-index diff against stock finds them with no
+    interpretation at all — which is the ``ruleTier`` question asked as arithmetic.
+    """
+
+    #: ``"RULES"`` or ``"WORLDBUILDER"``. Index alone is not an identity across two blocks that
+    #: both start at 0.
+    section: str
+    #: Row position within the section, and the real identity. The engine reads these blocks by
+    #: offset, and ``label`` is not unique: measured against a real ``alphax.txt``, ``#RULES``
+    #: rows 17, 18 and 19 all read "Psi combat offense-to-defense ratio" and are told apart only
+    #: by ``note`` ("LAND"/"SEA"/"AIR unit defending"). Keying these by label loses two of them.
+    index: int
+    #: Text before the comment's parenthesis — "Max artillery range", "Rivers rain mod.".
+    label: str
+    #: The parenthesised gloss, where the file supplies one. Sometimes the only disambiguator.
+    note: str
+    #: A tuple, not an int: several rows carry more than one number — the artillery damage
+    #: numerator and denominator, the three psi combat ratios, five continent-size ratios.
+    values: tuple[int, ...]
+
+
+@dataclass(frozen=True)
+class MoraleLevel:
+    """One rung of the morale ladder — ``#MORALE``.
+
+    A lookup, deliberately not a model. The section is seven name pairs and nothing else; every
+    *rule* about morale (that Green is the default, that "Very Green" needs a net -1, what a
+    rung is worth in combat) lives in the file's prose comment or in the engine, not in these
+    rows. Parsing the names and stopping is the honest read.
+
+    It earns its place because morale is reported to a brain as a word. ``#SOCMORALE`` says
+    "+2 Morale!" and a unit's status says "Hardened"; without the ordered ladder those are two
+    unrelated strings, and with it they compose.
+
+    ``native_name`` is the second column, and it is not a synonym — it is the same rung for
+    native life (Hatchling, Larval Mass, … Demon Boil), which is why a Mind Worm's displayed
+    "Great Boil" and a Formers squad's "Commando" are the same number.
+    """
+
+    #: Row position, which is the engine's own morale value. Green — the default — is 1.
+    index: int
+    name: str
+    native_name: str
+
+
+@dataclass(frozen=True)
+class CombatMode:
+    """A weapon or armour damage type — ``#DEFENSEMODES`` / ``#OFFENSEMODES``.
+
+    **The matchup bonuses are deliberately not modelled here.** The file states them in a prose
+    comment above the sections ("Projectile weapons receive a bonus against Energy Armor") and
+    the rows themselves carry nothing but four display strings — no magnitude, no matrix, not
+    even which mode a given weapon *is*. Encoding the matchup from that comment would mint a
+    canonical-tier numeric rule out of English we read, which is the one thing this plane exists
+    to prevent; and the magnitude is not in the file at any tier, so we could not state it even
+    if we wanted to.
+
+    What the rows do give is the vocabulary: three defensive modes, three offensive ones, and
+    the abbreviations the UI prints. That is enough to recognise a mode when the engine reports
+    one, and it is where the parse stops.
+    """
+
+    #: ``"offense"`` or ``"defense"``. The two sections overlap but are not identical —
+    #: defence has Binary, offence has Missile — so the pair a mode belongs to is a fact.
+    kind: str
+    name: str
+    #: Name prefix the UI splices onto a component — "Proj-", "Energy-".
+    prefix: str
+    abbrev: str
+    letter: str
+
+
+@dataclass(frozen=True)
+class UnitOrder:
+    """One entry from ``#ORDERS`` — a name and its key.
+
+    **This section is not the full order list, and reading it as one would understate what a
+    unit can do by about two thirds.** Nine rows here cover movement and sentry; every terraform
+    order (farm, mine, road, plant fungus…) is absent. The evidence is in ``#TERRAIN`` rather
+    than in any comment: each of its twenty rows carries its *own* two trailing key columns
+    ("f, F" for Farm, "R, R" for Road), which is exactly the data these rows carry, and there
+    would be no reason for a terrain row to hold a key binding if the order list already did.
+    So the engine's order menu is these rows plus ``#TERRAIN``, and :class:`TerraformAction`
+    already models the other half.
+
+    ``key`` is a UI binding, not a rule — the file's own comment for the identical ``#TERRAIN``
+    columns says changing the text does not change the key mapping. It is parsed because it is
+    the only stable identifier a row has (two orders can be renamed by a mod; the key is what
+    the engine dispatches on), not because a brain should press it.
+    """
+
+    name: str
+    key: str
+
+
+@dataclass(frozen=True)
+class Citizen:
+    """A citizen type — ``#CITIZENS``. Specialists and the three plain drone/worker/talent rows.
+
+    The section has **two row shapes** and the short one carries no prerequisite column at all:
+    the last three rows are ``Drone, Drones`` and nothing more. They are display names for
+    ordinary citizens, not specialists that can be assigned, so ``specialist`` records which
+    shape a row had rather than leaving a reader to infer it from three zeroed bonuses — which
+    would be indistinguishable from a specialist that happens to be worth nothing.
+
+    ``obsoleted_by`` follows the ``#FACILITIES`` "Free" idiom: ``Disable`` in that column means
+    *never obsoleted*, not "excluded from the game". Engineer carries it, and reading it as a
+    disable would delete the best late-game specialist from the picture.
+    """
+
+    name: str
+    plural: str
+    requires: tuple[str, ...]
+    disabled: bool
+    #: Tech that retires this specialty. ``None`` means it is never superseded.
+    obsoleted_by: str | None
+    #: Energy to the economy/reserves column.
+    ops: int
+    #: Energy to psych.
+    psych: int
+    #: Energy to labs.
+    research: int
+    #: False for the trailing drone/worker/talent rows, which are names only.
+    specialist: bool
+
+
+@dataclass(frozen=True)
+class SocialEffectLevel:
+    """One rung of a social-effect ladder — ``#SOCECONOMY`` … ``#SOCRESEARCH``.
+
+    These tables are what make the numbers on :class:`SocialModel` mean anything. ``#SOCIO``
+    says Free Market is ``economy +2``; on its own that is a token a brain can only guess at.
+    This section is the game's own gloss of the same +2 — "+1 energy each square!" — written by
+    the designers, in the file, at canonical tier. The pair is strictly better than either half:
+    the delta is what arithmetic needs, the text is what a decision needs.
+
+    The ladders are also **ragged and asymmetric**, which is itself a fact worth having. Economy
+    runs -3..+5, talent runs -1..+1, research -5..+5. A reader assuming a uniform -3..+3 would
+    invent rungs at both ends of half the tables.
+
+    ``description`` keeps the file's trailing ``!`` marks verbatim. They are the game's own
+    emphasis for a notable rung ("PARADIGM ECONOMY!!"), so stripping them would discard the one
+    signal in the row about how much the change matters. ``#SOCTALENT`` level 0 has no text at
+    all — an empty string, not a missing rung.
+    """
+
+    #: Long-form effect name, matching :data:`SOCIAL_EFFECTS` and ``SocialModel.effects``.
+    effect: str
+    level: int
+    description: str
+
+
+@dataclass(frozen=True)
+class EnergyCategory:
+    """One of the three energy allocation buckets — ``#ENERGY``.
+
+    Two display strings, and that is the whole section. Parsed because the allocation is a
+    recurring faction-level decision and the brain will be shown these exact words by the
+    engine; **not** parsed as a rule, because the rules that matter (the split sums to ten, and
+    social efficiency taxes it) are engine behaviour with no representation in this file.
+    """
+
+    abbrev: str
+    name: str
+
+
 def _terraform(row: Row) -> TerraformAction:
     land_requires, land_disabled = prereqs(row.get(1))
     sea_requires, sea_disabled = prereqs(row.get(3))
@@ -406,6 +596,87 @@ def _resource(row: Row) -> ResourceYield:
     )
 
 
+def _tuned(section: str, index: int, row: Row) -> TunedParameter:
+    """``384, ; Land base        (Seeded land size of a standard world)``
+
+    The only two sections with inline comments, so the split happens here rather than in
+    :func:`sections` — doing it globally would truncate every facility effect containing a ``;``,
+    which is the trap the module docstring opens with.
+
+    The fields are rejoined before splitting because the comment itself contains commas ("x0, x1,
+    x2") and has therefore already been shredded into separate fields by the row split. Anything
+    before the ``;`` that is not an integer is dropped rather than defaulted to 0: a mod's stray
+    token becoming a silent zero here would look exactly like a deliberately zeroed knob, and
+    these knobs are read by offset, so a dropped row would shift every meaning after it.
+    """
+    text = ", ".join(row.fields)
+    data, _, comment = text.partition(";")
+    values = tuple(int(v) for v in (p.strip() for p in data.split(",")) if _is_int(v))
+    head, _, tail = comment.strip().partition("(")
+    note = tail.strip()
+    if note.endswith(")"):
+        note = note[:-1].strip()
+    return TunedParameter(
+        section=section, index=index, label=head.strip(), note=note, values=values
+    )
+
+
+def _morale(index: int, row: Row) -> MoraleLevel:
+    return MoraleLevel(index=index, name=row.get(0), native_name=row.get(1))
+
+
+#: Both mode sections share a row shape; only which list a mode belongs to differs.
+COMBAT_MODE_SECTIONS: Final[dict[str, str]] = {
+    "OFFENSEMODES": "offense",
+    "DEFENSEMODES": "defense",
+}
+
+
+def _combat_mode(kind: str, row: Row) -> CombatMode:
+    """``Projectile, Proj-, Proj., P`` — four display strings, no rule."""
+    return CombatMode(
+        kind=kind,
+        name=row.get(0),
+        prefix=row.get(1),
+        abbrev=row.get(2),
+        letter=row.get(3),
+    )
+
+
+def _order(row: Row) -> UnitOrder:
+    return UnitOrder(name=row.get(0), key=row.get(1))
+
+
+def _citizen(row: Row) -> Citizen:
+    """``singular, plural, preq, obsolete, ops, psych, research, flags`` — or just the first two.
+
+    Arity is the discriminator and it is safe to use here, unlike in ``#FACILITIES``: no citizen
+    field can contain a comma, so a seven-column row is a specialist and a two-column row is a
+    plain citizen name. Nothing else in the section distinguishes them.
+    """
+    specialist = len(row.fields) >= 7
+    requires, disabled = prereqs(row.get(2))
+    obsolete = row.get(3)
+    return Citizen(
+        name=row.get(0),
+        plural=row.get(1),
+        requires=requires,
+        disabled=disabled,
+        # `Disable` here means "never obsoleted", the same inversion `#FACILITIES` uses for its
+        # free-with column — not "excluded from the game", which is what the token means in a
+        # prerequisite column two fields to the left.
+        obsoleted_by=None if obsolete in ("", NO_PREREQ, DISABLED) else obsolete,
+        ops=row.number(4),
+        psych=row.number(5),
+        research=row.number(6),
+        specialist=specialist,
+    )
+
+
+def _energy(row: Row) -> EnergyCategory:
+    return EnergyCategory(abbrev=row.get(0), name=row.get(1))
+
+
 class _Disableable(Protocol):
     # A read-only property, not a mutable attribute: the part classes are frozen
     # dataclasses, and a settable-attribute protocol does not match them.
@@ -437,6 +708,44 @@ class Datalinks:
     #: A list, not a dict: ``#TERRAIN`` has two rows named "Fungus" (remove, and plant).
     terraform: list[TerraformAction] = field(default_factory=list)
     resources: dict[str, ResourceYield] = field(default_factory=dict)
+    #: All eleven ``#SOC*`` ladders in one list. Flat rather than nested by effect because the
+    #: only access pattern is ``(effect, level) -> text``; see :meth:`effect_meaning`.
+    social_levels: list[SocialEffectLevel] = field(default_factory=list)
+    citizens: list[Citizen] = field(default_factory=list)
+    #: Ordered — a morale level's meaning *is* its position in the ladder.
+    morale_levels: list[MoraleLevel] = field(default_factory=list)
+    #: Offensive and defensive modes together; ``CombatMode.kind`` separates them. One list
+    #: because "Projectile" appears in both and keying by name alone would lose one of them.
+    combat_modes: list[CombatMode] = field(default_factory=list)
+    orders: list[UnitOrder] = field(default_factory=list)
+    energy_categories: list[EnergyCategory] = field(default_factory=list)
+    #: Positional, like ``social_models``: ``TunedParameter.index`` is the identity.
+    rules: list[TunedParameter] = field(default_factory=list)
+    world_builder: list[TunedParameter] = field(default_factory=list)
+
+    def effect_meaning(self, effect: str, level: int) -> str | None:
+        """The game's own gloss for a social-effect rung — ``("economy", 2)`` -> "+1 energy each
+        square!".
+
+        This is the join that makes ``#SOCIO`` legible. A :class:`SocialModel` carries
+        ``("economy", 2)``, and a brain shown only that has to supply the meaning from
+        somewhere — which, for a 1999 game, means from recollection. The ladder tables answer it
+        from the file.
+
+        ``None`` for an absent rung rather than the nearest one. The ladders are ragged (talent
+        runs -1..+1, research -5..+5), so clamping a +3 talent to the +1 text would state a
+        consequence the file does not have — and a *plausible* fabricated rule is the failure
+        mode this plane exists to prevent, not an obviously wrong one.
+        """
+        for rung in self.social_levels:
+            if rung.effect == effect and rung.level == level:
+                return rung.description
+        return None
+
+    @property
+    def specialists(self) -> list[Citizen]:
+        """Citizens that can actually be assigned, excluding the drone/worker/talent names."""
+        return [c for c in self.citizens if c.specialist]
 
     def design_space(self) -> int:
         """How many distinct unit designs the rules permit.
@@ -561,6 +870,32 @@ def social_effect(token: str) -> tuple[str, int] | None:
     return name, sign
 
 
+#: ``#SOCECONOMY`` → ``economy``. The section names are the :data:`SOCIAL_EFFECTS` keys with a
+#: ``SOC`` prefix, so the ladders and the ``#SOCIO`` deltas land on the same vocabulary and a
+#: model's ``("economy", 2)`` resolves against the table without a second mapping to drift.
+SOCIAL_LADDER_SECTIONS: Final[dict[str, str]] = {
+    f"SOC{key}": name for key, name in SOCIAL_EFFECTS.items()
+}
+
+
+def _social_level(effect: str, row: Row) -> SocialEffectLevel | None:
+    """``-3, Murderous inefficiency`` — a signed level and the game's own gloss.
+
+    Returns ``None`` when the first column is not an integer rather than letting
+    :meth:`Row.number` default it to 0, which would file a stray line as the *neutral* rung —
+    the one a brain is most likely to read as "nothing happens".
+    """
+    if not _is_int(row.get(0)):
+        return None
+    return SocialEffectLevel(
+        effect=effect,
+        level=int(row.get(0)),
+        # Rejoined rather than taken as one column: the descriptions are free text and a mod is
+        # free to put a comma in one, exactly as two facility effects already do.
+        description=", ".join(f for f in row.fields[1:] if f),
+    )
+
+
 def _social_rows(rows: list[Row]) -> list[SocialModel]:
     """Assign models to categories by position.
 
@@ -665,9 +1000,25 @@ def _is_int(value: str) -> bool:
 
 
 #: Weapons and armour share a row shape, so one reader serves both. Everything else with its
-#: own shape has its own reader. What remains unparsed — RULES, WORLDBUILDER, MORALE, the
-#: SOC<EFFECT> ladders and the translator tables — is skipped rather than half-read: a partial
-#: fact tagged canonical is worse than a missing one.
+#: own shape has its own reader.
+#:
+#: What remains unparsed is skipped rather than half-read — a partial fact tagged canonical is
+#: worse than a missing one — and the omissions below are decisions, not a backlog:
+#:
+#: - ``#TIMECONTROLS`` — multiplayer wall-clock budgets: *seconds of human thinking time* per
+#:   turn, per base, per unit. It is the one numeric section in the file that constrains the
+#:   players rather than the game. Nothing in it bears on a legal move, a cost or a yield, so
+#:   there is no question a brain could ask that it answers.
+#: - ``#COMPASS``, ``#TRIAD``, ``#PLANS``, ``#RESOURCES``, ``#BONUSNAMES``, ``#MANDATE``,
+#:   ``#MOOD``, ``#REPUTE``, ``#MIGHT``, ``#DIFF`` — display-name tables, several carrying the
+#:   file's own "NOTE TO TRANSLATORS" banner. The things they name are modelled where they are
+#:   *used* (``PLAN_ROLES``, ``Chassis.triad_name``); parsing them too would give the same
+#:   concept a second spelling and a place for a future mismatch to hide.
+#: - ``#WORLDSIZE`` — map dimensions. Useful, but it describes the board rather than the rules,
+#:   so it belongs to the world model; its ``|``-separated display names are also a row shape
+#:   nothing else in the file has.
+#: - ``#FACTIONS``/``#NEWFACTIONS`` — filename-and-search-key pairs pointing at separate faction
+#:   ``.txt`` files, per the file's own comment. The faction data is not in here to parse.
 COMPONENT_SECTIONS = {"WEAPONS": "weapon", "DEFENSES": "armor"}
 
 
@@ -706,6 +1057,24 @@ def parse(text: str) -> Datalinks:
         elif row.section == "RESOURCEINFO":
             res = _resource(row)
             out.resources[res.name] = res
+        elif row.section == "RULES":
+            out.rules.append(_tuned("RULES", len(out.rules), row))
+        elif row.section == "WORLDBUILDER":
+            out.world_builder.append(_tuned("WORLDBUILDER", len(out.world_builder), row))
+        elif row.section == "MORALE":
+            out.morale_levels.append(_morale(len(out.morale_levels), row))
+        elif row.section in COMBAT_MODE_SECTIONS:
+            out.combat_modes.append(_combat_mode(COMBAT_MODE_SECTIONS[row.section], row))
+        elif row.section == "ORDERS":
+            out.orders.append(_order(row))
+        elif row.section == "CITIZENS":
+            out.citizens.append(_citizen(row))
+        elif row.section == "ENERGY":
+            out.energy_categories.append(_energy(row))
+        elif row.section in SOCIAL_LADDER_SECTIONS:
+            rung = _social_level(SOCIAL_LADDER_SECTIONS[row.section], row)
+            if rung is not None:
+                out.social_levels.append(rung)
         elif row.section in COMPONENT_SECTIONS:
             out.components.append(_component(COMPONENT_SECTIONS[row.section], row))
     out.social_models = _social_rows(socio)

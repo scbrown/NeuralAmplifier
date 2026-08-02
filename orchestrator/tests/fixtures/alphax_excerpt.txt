@@ -12,6 +12,13 @@
 ;   - secret-project rows carrying five trailing AI-priority ints
 ;   - trailing commas
 ;   - a right-to-left flag bit string
+;   - INLINE `;` comments, in #RULES and #WORLDBUILDER only, whose own text
+;     contains commas — the inverse of the effect-text trap above
+;   - two row shapes in one section (#CITIZENS specialists vs. plain citizens)
+;   - a #SOC* ladder rung whose description is empty, and asymmetric ladders
+;
+; A few representative rows per section, not the whole file: the point is the
+; shapes, and a fixture that grew to match the source would stop being one.
 ;
 #TECHNOLOGY
 Sample Genetics,            Sampl,   0, 3, 2, 2, None,    None,    000100000
@@ -30,3 +37,40 @@ Sample Nexus,                  6, 1, SamInd,  Disable,  Naval Movement +2; Naval
 Removed Facility,              5, 0, Disable, Disable,  Does Nothing
 The Sample Project,           20, 0, Sampl,   Disable,  +1 Talent Each Base,             -1, 0, 1, 1, 2,
 The Removed Project,          20, 0, Disable, Disable,  Nothing At All,                   0, 0, 0, 0, 0,
+#RULES
+3,       ; Sample movement rate along roads
+3,2      ; Sample numerator & denominator for artillery fire damage
+7,       ; Sample population limit (without the habitation facility)
+#WORLDBUILDER
+384, ; Sample land base    (Seeded land size of a standard world)
+120, ; Sample land modifier (additional land from LAND selection: x0, x1, x2)
+3,6,12,18,24 ; Sample ratio (Continent size ratios)
+#MORALE
+Very Sample,  Sample Hatchling
+Sample,       Sample Larva
+Hard Sample,  Sample Adult
+#DEFENSEMODES
+Projectile, Proj-,   Proj., P
+Binary,     Binary-, Bin.,  B
+#OFFENSEMODES
+Projectile, Proj-,    Proj., P
+Missile,    Missile-, Miss., M
+#ORDERS
+No Orders,                -
+Sample Sentry,            L
+#CITIZENS
+Sample Technician, Sample Technicians, None,  SamFus,  3, 0, 0, 0000000
+Sample Engineer,   Sample Engineers,   SamFus, Disable, 3, 0, 2, 0000000
+Sample Drone,      Sample Drones,
+#ENERGY
+Econ,  Sample Economy,
+Labs,  Sample Laboratories,
+#SOCECONOMY
+-1, Sample penalty at the sample base
+ 0, Sample standard rates
+ 1, Sample bonus at each base
+ 2, Sample bonus at each square!
+#SOCTALENT
+-1, Sample extra drones
+ 0,
+ 1, Sample extra talents!

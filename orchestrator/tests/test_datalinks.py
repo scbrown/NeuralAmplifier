@@ -16,6 +16,7 @@ import rdflib
 
 from neural_amplifier.contract import Action, WorldView
 from neural_amplifier.datalinks import (
+    CombatMode,
     DatalinksRetriever,
     Provenance,
     briefing,
@@ -573,3 +574,239 @@ def test_a_star_yield_is_omitted_from_the_graph() -> None:
 
     assert "smac:yieldNutrients 1" in graph
     assert "yieldMinerals" not in graph
+
+
+# --- the #SOC* ladders, #CITIZENS, #MORALE, modes, orders, tuning (na-3qy) ----
+
+
+def test_a_social_ladder_gives_the_socio_deltas_a_meaning() -> None:
+    """`#SOCIO` says Free Market is `economy +2`. On its own that is a token, and a brain shown
+    only the number has to supply the meaning from its recollection of a 1999 game.
+
+    The `#SOC*` tables are the designers' own gloss of the same +2, in the file, at canonical
+    tier — which is the difference between grounding the decision and hoping.
+    """
+    from neural_amplifier.datalinks.parse import parse
+
+    links = parse("#SOCECONOMY\n-1, Sample penalty\n 0, Sample standard\n 2, Sample bonus!\n")
+
+    assert links.effect_meaning("economy", 2) == "Sample bonus!"
+    assert links.effect_meaning("economy", -1) == "Sample penalty"
+
+
+def test_an_absent_ladder_rung_is_none_not_the_nearest_one() -> None:
+    """The ladders are ragged — talent runs -1..+1 where research runs -5..+5 — so "clamp to the
+    end of the table" is a reachable implementation and a wrong one.
+
+    Reporting the +1 talent text for a +3 talent would state a consequence the file does not
+    have. A *plausible* fabricated rule is the failure this plane exists to prevent; an
+    obviously wrong one would at least be visible.
+    """
+    from neural_amplifier.datalinks.parse import parse
+
+    links = parse("#SOCTALENT\n-1, Sample drones\n 0,\n 1, Sample talents!\n")
+
+    assert links.effect_meaning("talent", 1) == "Sample talents!"
+    assert links.effect_meaning("talent", 3) is None
+    assert links.effect_meaning("research", 1) is None  # ladder not present at all
+
+
+def test_a_ladder_rung_with_no_text_is_still_a_rung() -> None:
+    """`#SOCTALENT` level 0 has a level and no description — the neutral rung, where nothing
+    happens, which is a fact rather than a gap.
+
+    Dropping it would make `effect_meaning("talent", 0)` indistinguishable from asking about a
+    level the ladder does not have.
+    """
+    from neural_amplifier.datalinks.parse import parse
+
+    links = parse("#SOCTALENT\n-1, Sample drones\n 0,\n 1, Sample talents!\n")
+
+    assert [r.level for r in links.social_levels] == [-1, 0, 1]
+    assert links.effect_meaning("talent", 0) == ""
+
+
+def test_a_ladder_rung_iri_keeps_the_sign() -> None:
+    """`slug` strips a leading minus, so `slug("economy -3")` and `slug("economy 3")` are the
+    same string — the two ends of a ladder would collapse into one node with whichever
+    description was emitted last.
+
+    Worth a test rather than a comment because the collision is silent: the Turtle parses, the
+    graph loads, and one real rung is simply gone.
+    """
+    from neural_amplifier.datalinks import Provenance, turtle
+    from neural_amplifier.datalinks.parse import parse
+
+    graph = turtle(parse("#SOCECONOMY\n-3, Sample bad\n 3, Sample good\n"), Provenance())
+
+    assert "rung:economy-neg3" in graph
+    assert "rung:economy-3" in graph
+    assert "Sample bad" in graph and "Sample good" in graph
+
+
+def test_a_stray_line_in_a_ladder_is_dropped_not_filed_as_neutral() -> None:
+    """`Row.number` defaults an unparseable column to 0, and 0 is the *neutral* rung — the one
+    reading "nothing happens".
+
+    A mod's stray line silently becoming "economy 0: <its text>" is worse than losing the line,
+    because it answers a question rather than declining to.
+    """
+    from neural_amplifier.datalinks.parse import parse
+
+    links = parse("#SOCECONOMY\nnot a level, some text\n 1, Sample bonus\n")
+
+    assert [(r.level, r.description) for r in links.social_levels] == [(1, "Sample bonus")]
+
+
+def test_citizens_have_two_row_shapes_in_one_section(links) -> None:  # type: ignore[no-untyped-def]
+    """The last three `#CITIZENS` rows are a name and a plural and nothing else — drones,
+    workers and talents, which are ordinary citizens rather than assignable specialists.
+
+    Recording which shape a row had matters because a specialist with three zeroed bonuses and a
+    plain citizen parse to identical numbers, and only one of them can be put to work.
+    """
+    by_name = {c.name: c for c in links.citizens}
+
+    assert by_name["Sample Technician"].specialist is True
+    assert by_name["Sample Technician"].ops == 3
+    assert by_name["Sample Drone"].specialist is False
+    assert [c.name for c in links.specialists] == ["Sample Technician", "Sample Engineer"]
+
+
+def test_disable_in_the_obsolete_column_means_never_obsoleted(links) -> None:  # type: ignore[no-untyped-def]
+    """Same inversion `#FACILITIES` uses for its free-with column, two fields away from a
+    prerequisite column where the identical token means "excluded from the game".
+
+    Reading Engineer's `Disable` as an exclusion would delete the best late-game specialist
+    from the picture — the `#TERRAIN` sea-variant mistake in a different section.
+    """
+    by_name = {c.name: c for c in links.citizens}
+
+    assert by_name["Sample Technician"].obsoleted_by == "SamFus"
+    assert by_name["Sample Engineer"].obsoleted_by is None
+    assert by_name["Sample Engineer"].disabled is False
+    assert by_name["Sample Engineer"].requires == ("SamFus",)
+
+
+def test_the_morale_ladder_is_ordered_and_the_second_column_is_not_a_synonym(links) -> None:
+    """Morale reaches a brain as a word ("Hardened") and as a number ("+2 Morale"), and only the
+    ladder's order composes the two.
+
+    The second column is the same rung for native life, not an alternative spelling — which is
+    why a Mind Worm's "Great Boil" and a squad's "Commando" are one fact, not two.
+    """
+    assert [m.index for m in links.morale_levels] == [0, 1, 2]
+    assert links.morale_levels[1].name == "Sample"
+    assert links.morale_levels[1].native_name == "Sample Larva"
+
+
+def test_combat_modes_are_names_and_the_matchup_rule_is_not_invented(links) -> None:  # type: ignore[no-untyped-def]
+    """The file states "Projectile weapons receive a bonus against Energy Armor" in a *prose
+    comment*, and the rows carry four display strings with no magnitude anywhere.
+
+    So the parser takes the vocabulary and stops. Encoding the matchup would mint a
+    canonical-tier combat rule out of English we read, and the number it would need is not in
+    the file at any tier.
+    """
+    offense = [m.name for m in links.combat_modes if m.kind == "offense"]
+    defense = [m.name for m in links.combat_modes if m.kind == "defense"]
+
+    # Overlapping but not identical, which is why `kind` is on the record and the two sections
+    # are not merged by name.
+    assert offense == ["Projectile", "Missile"]
+    assert defense == ["Projectile", "Binary"]
+    assert not [f for f in CombatMode.__dataclass_fields__ if "bonus" in f]
+
+
+def test_the_order_list_is_deliberately_partial(links) -> None:  # type: ignore[no-untyped-def]
+    """`#ORDERS` is movement and sentry only — every terraform order is missing from it.
+
+    The evidence is in `#TERRAIN`: each of its rows carries its own two trailing key columns
+    ("f, F" for Farm), which is exactly what an `#ORDERS` row carries, and a terrain row would
+    have no reason to hold a key binding if the order list already did. So the engine's order
+    menu is these rows *plus* `#TERRAIN`, and reading this section as the whole menu would
+    understate what a unit can do.
+    """
+    assert [o.name for o in links.orders] == ["No Orders", "Sample Sentry"]
+    assert links.orders[0].key == "-"
+    assert not any("Farm" in o.name for o in links.orders)
+
+
+def test_energy_categories_are_names_only(links) -> None:  # type: ignore[no-untyped-def]
+    """The allocation split is a recurring decision, so the brain will be shown these words —
+    but the rules that govern it (the split sums to ten; efficiency taxes it) are engine
+    behaviour with no representation in this file, and are not manufactured here."""
+    assert [(e.abbrev, e.name) for e in links.energy_categories] == [
+        ("Econ", "Sample Economy"),
+        ("Labs", "Sample Laboratories"),
+    ]
+
+
+def test_inline_comments_are_stripped_in_the_two_sections_that_have_them(links) -> None:
+    """`#RULES` and `#WORLDBUILDER` break the file's own "comments are line-initial" rule.
+
+    Handling that globally is the tempting fix and the wrong one — it would truncate every
+    facility effect containing a `;`, which is the first trap this module documents. So the
+    split lives in the one reader that needs it.
+    """
+    assert links.rules[0].values == (3,)
+    assert links.rules[0].label == "Sample movement rate along roads"
+    # And the effect-text trap still holds in the same parse.
+    assert links.facilities["Sample Nexus"].effect == "Naval Movement +2; Naval Bases"
+
+
+def test_a_comma_inside_an_inline_comment_does_not_become_a_value(links) -> None:
+    """The exact inverse of the effect-text trap, in the same file. `(… x0, x1, x2)` has already
+    been shredded into three fields by the row split before any reader sees it.
+
+    Rejoining before the `;` split is what keeps "x1" from being read as a second parameter — a
+    positional section, so one spurious value shifts the meaning of every row after it.
+    """
+    land_modifier = links.world_builder[1]
+
+    assert land_modifier.values == (120,)
+    assert land_modifier.label == "Sample land modifier"
+    assert land_modifier.note == "additional land from LAND selection: x0, x1, x2"
+
+
+def test_a_tuning_row_can_carry_several_numbers(links) -> None:
+    """Both sections have rows that are not one value: artillery damage is a numerator and a
+    denominator, and continent sizes are five ratios on one line.
+
+    Taking column 0 and stopping would read "3,2 artillery" as a 3 — half a rule, stated with
+    the confidence of a whole one.
+    """
+    assert links.rules[1].values == (3, 2)
+    assert links.world_builder[2].values == (3, 6, 12, 18, 24)
+
+
+def test_tuning_parameters_are_identified_by_position_not_label(links) -> None:
+    """The label comes from a comment, so a mod that strips the comments would leave every knob
+    anonymous — but the engine reads these blocks by *offset*, so position is the real identity.
+
+    Labels are not unique either, and that is measured rather than hypothetical: in a real
+    `alphax.txt`, `#RULES` rows 17, 18 and 19 all read "Psi combat offense-to-defense ratio" and
+    differ only in the parenthetical. Keying by label would silently keep one of the three.
+
+    `section` is on the record for the same reason: two blocks both starting at index 0 means an
+    index alone identifies nothing.
+    """
+    from neural_amplifier.datalinks.parse import parse
+
+    stripped = parse("#RULES\n3,\n7,\n")
+
+    assert [p.index for p in stripped.rules] == [0, 1]
+    assert [p.values for p in stripped.rules] == [(3,), (7,)]
+    assert [p.label for p in stripped.rules] == ["", ""]
+
+    repeated = parse(
+        "#RULES\n3,2, ; Sample psi ratio (LAND unit defending)\n"
+        "1,1, ; Sample psi ratio (SEA unit defending)\n"
+    )
+    assert [p.label for p in repeated.rules] == ["Sample psi ratio"] * 2
+    assert [(p.index, p.note) for p in repeated.rules] == [
+        (0, "LAND unit defending"),
+        (1, "SEA unit defending"),
+    ]
+    assert {p.section for p in links.world_builder} == {"WORLDBUILDER"}
+    assert {p.section for p in links.rules} == {"RULES"}

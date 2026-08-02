@@ -25,6 +25,7 @@ from .parse import (
     Facility,
     Reactor,
     ResourceYield,
+    SocialEffectLevel,
     SocialModel,
     Technology,
     TerraformAction,
@@ -46,6 +47,7 @@ PREFIXES = (
     f"@prefix abil: <{NAMESPACE}ability/> .",
     f"@prefix comp: <{NAMESPACE}component/> .",
     f"@prefix soc:  <{NAMESPACE}social/> .",
+    f"@prefix rung: <{NAMESPACE}socialrung/> .",
     f"@prefix terra: <{NAMESPACE}terraform/> .",
     f"@prefix res:  <{NAMESPACE}resource/> .",
     f"@prefix src:  <{NAMESPACE}source/> .",
@@ -283,6 +285,37 @@ def social_model(item: SocialModel, prov: Provenance) -> str:
     return _node(f"soc:{slug(item.category)}-{slug(item.name)}", "smac:SocialModel", props, prov)
 
 
+def social_rung(item: SocialEffectLevel, prov: Provenance) -> str:
+    """One rung of a ``#SOC*`` ladder — ``smac:SocialLadderRung`` in knowledge-architecture.md.
+
+    This is the node that makes :func:`social_model`'s numbers mean something. That function
+    already emits ``smac:effectEconomy 2``; on its own an integer named after an abstraction is
+    not grounding, and a model asked to act on it supplies the meaning from its recollection of
+    a 1999 game. The rung carries the designers' own gloss of the same +2 — "+1 energy each
+    square!" — so the meaning arrives with a tier and a source instead.
+
+    Kept as a separate node rather than folded into the model as text, because the ladders are
+    shared: eleven ladders serve sixteen models, and every model that reaches ``economy +2``
+    reaches the *same* rung. Inlining would copy each gloss once per model and let the copies
+    drift, which is the sort of duplication a graph exists to avoid.
+
+    ``neg3`` rather than ``-3`` in the IRI, and not for Turtle-grammar reasons — ``slug`` drops a
+    leading minus, so ``slug("economy -3")`` and ``slug("economy 3")`` are the *same string*.
+    Two real rungs at opposite ends of a ladder would silently become one node.
+    """
+    level = f"neg{abs(item.level)}" if item.level < 0 else str(item.level)
+    props: list[tuple[str, str]] = [
+        ("rdfs:label", literal(f"{item.effect} {item.level:+d}")),
+        ("smac:socialEffect", literal(item.effect)),
+        ("smac:level", str(item.level)),
+    ]
+    if item.description:
+        # Absent rather than empty: `#SOCTALENT` level 0 genuinely has no text, and an empty
+        # string would read as a gloss that says nothing rather than a rung the file left bare.
+        props.append(("smac:effectText", literal(item.description)))
+    return _node(f"rung:{slug(item.effect)}-{level}", "smac:SocialLadderRung", props, prov)
+
+
 def terraform(item: TerraformAction, prov: Provenance) -> str:
     """A former order, with its sea variant on the same node.
 
@@ -350,6 +383,8 @@ def statements(links: Datalinks, prov: Provenance | None = None) -> Iterator[str
         yield unit(design, provenance)
     for model in links.social_models:
         yield social_model(model, provenance)
+    for level in links.social_levels:
+        yield social_rung(level, provenance)
     for order in links.terraform:
         yield terraform(order, provenance)
     for square in links.resources.values():
