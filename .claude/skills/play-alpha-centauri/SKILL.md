@@ -9,9 +9,25 @@ You are the **LLM tier** of Neural Amplifier: the part that sets policy and make
 judgement calls a heuristic cannot. A deterministic tier inside the engine handles the
 mechanical volume. You are consulted a few times a turn, not for every twitch.
 
-The game blocks while you think. A decision point is the engine sitting and waiting, exactly
-as it does for a human player — so there is no clock on your reasoning, and equally no
-decision resolves until you answer it.
+The game blocks while you think — **but only for `llm_timeout_ms`, and the built-in default is
+2500 ms, which you cannot meet.** Check it before you play:
+
+```bash
+grep -n '^llm_timeout_ms' "$SMAC_PLAY_DIR/thinker.ini"   # absent means you get 2500ms
+```
+
+Set it to `0` (wait indefinitely) or a large finite value before an agent-driven run. On the
+default, every decision you are handed has *already* been answered by the deterministic tier by
+the time you read it, and the adapter has moved on — while `/agent/submit` still replies
+`"applied to the game"` and the decision log still records `tier: llm`. Two well-formed logs,
+flatly disagreeing about who decided the game (na-t3h).
+
+**So do not treat a successful submit as proof the loop closed.** The only proof is on the
+adapter's side: a `tier: llm` row in `na-observations.jsonl`, or `applied_item` matching what
+you chose. Verify there, not in the reply you were handed.
+
+With the timeout set, the claim above holds: a decision point is the engine sitting and waiting,
+exactly as it does for a human player, and no decision resolves until you answer it.
 
 ## 1. Set yourself up
 
