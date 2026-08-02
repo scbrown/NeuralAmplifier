@@ -477,6 +477,78 @@ scripted decisions should produce the same autosave sequence.
 - **Treat a hung run as a failure, not a flake.** Timeout, capture the artifacts produced so
   far, and fail — a silently-stalled game is the most likely bad outcome in this lane.
 
+### 3.4 Ending turns unattended — solved 2026-08-01
+
+`-na-autoload` reaches a live session and the run then stops dead, because **a loaded save
+resumes at the player's turn and the engine waits for a player**. Nothing in the harness
+ended a turn, so no turn was ever ended — and because `na_exit_turn_check` runs from
+`mod_turn_upkeep`, which is only reached by ending a turn, **`-na-exit-turn` could never
+fire either**. The failure looked like a hang and was a game politely waiting.
+
+`-na-auto-turn <secs>` ends our own turn after that long with no change in `*CurrentTurn`.
+A *stall* threshold, not a period: the engine legitimately spends a long time not accepting
+input (other factions' turns, animations, the council), so a periodic timer fires into all
+of it while a stall timer re-arms whenever the turn moves.
+
+**The part that cost the time, and the measurement that ended it.** Calling the engine's
+`Console_end_my_turn` directly did not return. One log line, then silence. Photographing the
+frozen Xvfb display showed why:
+
+```text
+OPERATIONS DIRECTOR
+Some of our units have not yet moved this turn. Do you really want to end the turn now?
+  Cancel.  /  Yes, end the turn.  /  OK
+```
+
+Two things were measured about that dialog, and together they close off every route except
+the one taken:
+
+| | Measured |
+| --- | --- |
+| Is the process wedged? | **No.** `terranx` sat at **~55% CPU** — it is running the dialog's own nested pump. `ModWinProc` is simply not called while it is up, so nothing of ours executes and the call never returns. |
+| Can it be answered from outside? | **No.** An `xdotool` click on "Yes, end the turn." against a live frozen instance **changed nothing**. This **extends §3.0.2**, which measured external input failing on the *file picker*, to the game's **own** dialogs. |
+
+So the fix does not answer the question — it removes the reason for it. `-na-auto-turn`
+issues `Console_skip` to every unit of the current faction that still has movement (the
+engine's own `moves_spent` vs `veh_speed` comparison), so by the time we ask to end the turn
+there are no unmoved units and the dialog has nothing to raise. **This is the §3.0.2 rule
+applied, not an exception to it: never open a modal.**
+
+Skipping units *is* a gameplay decision, and it is deliberately tied to `-na-auto-turn`
+rather than applied unconditionally — a run that ends its own turns has, by construction,
+nobody to move units. An attended session never reaches the code.
+
+Verified end to end, headless, on a real game:
+
+```text
+loaded                  turn=1   status=0
+auto_end_turn           turn=1   Console_end_my_turn after skipping 3 unit(s)
+auto_end_turn_returned  turn=1            <- unreachable before the fix
+base.production / faction.tech / faction.se   turn=2, all seven factions
+auto_end_turn           turn=2   ...  turn=3
+```
+
+and the terminating case, `-na-auto-turn 15 -na-exit-turn 3` from a turn-4 save:
+
+```text
+auto_end_turn_returned  turn=4
+na.exit_turn turn_limit turn=4
+(process exits on its own — not killed by NA_TIMEOUT)
+```
+
+`auto_end_turn_returned` exists as the **positive control**: before the fix it was
+unreachable by construction. If it ever stops appearing while `auto_end_turn` still does, a
+modal is back, and the log names the line it stopped at.
+
+> **`-na-exit-turn` is an ABSOLUTE turn number**, not a count — `na_exit_turn_check` tests
+> `*CurrentTurn >= na_exit_turn`. Resuming a save at turn 44 and passing `2` means "already
+> past", not "two more turns".
+
+**A hypothesis that was wrong, recorded so nobody re-runs it.** `PREF_BSC_PAUSE_END_TURN`
+(`engine_enums.h:437`) looked like the culprit and is not: it is bit 0, and
+`DefaultBasePref == 0xA3E1DD16` has bit 0 **clear**. With no `Alpha Centauri.ini` in the play
+directory the game runs on those defaults, so pause-end-turn was already off the whole time.
+
 ---
 
 ## 4. Dialogs, diplomacy, and custom UI
