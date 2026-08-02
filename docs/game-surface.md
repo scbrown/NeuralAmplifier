@@ -79,12 +79,20 @@ surfaces` reports it from the frozen registry rather than from this paragraph.
 The registry is frozen at 77 (`orchestrator/surfaces.py`), partitioned by contract scope:
 `base` 25, `unit` 32, `turn` 20.
 
-Two further surfaces, `base.governor_config` and `base.abandon`, are **instrumented but not
-brain-decidable**, and are deliberately not in the four. Each has a deterministic tier in the
-fork and a probe, and no decide or apply path at all — which is the intended first step for the
-21 `NO_AI_PATH` surfaces (na-2mn): give them a native answer *before* a model, so there is
-something to fall back to and something to measure against. Counting them in the four would
-report as brain-covered surfaces the brain has never been asked about.
+Three further surfaces — `base.governor_config`, `base.abandon` and `base.hq_escape` — are
+**instrumented but not brain-decidable**, and are deliberately not in the four. Each has a
+deterministic tier in the fork and a probe, and no decide or apply path at all — which is the
+intended first step for the 21 `NO_AI_PATH` surfaces (na-2mn): give them a native answer
+*before* a model, so there is something to fall back to and something to measure against.
+Counting them in the four would report as brain-covered surfaces the brain has never been
+asked about.
+
+`base.hq_escape` is worth reading as the honest case: its tier returns the **same answer as
+stock**. Affordability is settled upstream, the destination is the engine's, and the HQ's
+value scales with the empire, so a decline threshold would have been a fabricated number
+wearing the costume of reasoning. A native answer that is already right is still worth naming
+and recording — that is what the LLM tier falls back to and gets scored against — but it is
+not worth changing.
 
 | Surface | Scope | Seam | Action space | Probe |
 | --- | --- | --- | --- | --- |
@@ -94,6 +102,7 @@ report as brain-covered surfaces the brain has never been asked about.
 | `base.hurry` | base | `mod_base_hurry` (wrapped) | hurry / don't, with credit cost and turns saved; unaffordable option omitted | `observe-hurry <base_id>` |
 | `base.governor_config` | base | `governor_priorities` | n/a — deterministic tier only so far; records the resolved weights and their source | `observe-gov <base_id>` |
 | `base.abandon` | base | `mod_base_production` (size-1 base, pod ready) | keep / spend the base, with the growth numbers the answer turns on | `observe-abandon <base_id>` |
+| `base.hq_escape` | base | `mod_capture_base` | relocate / don't, with the 1000-credit cost, the reserve, and the engine's chosen destination | `observe-hq-escape <base_id>` |
 
 Each of the four has an apply command, and each validates with the engine's own test rather
 than with a reconstruction of it:
@@ -140,11 +149,11 @@ toggle per surface, and one switched off is recorded at `deterministic` tier —
 degraded, because the brain was never asked. That is how a surface gets rolled out one step at a
 time: instrument it, watch it observe, then let it decide.
 
-Both `NO_AI_PATH` surfaces are at the first of those steps with an extra one in front of it. A
+All three `NO_AI_PATH` surfaces are at the first of those steps with an extra one in front of it. A
 `NO_AI_PATH` surface has a rollout one longer than the others — **native answer, instrument,
 observe, then decide** — because the usual first step assumes a deterministic tier already
 exists to observe, and on these 21 it does not. Each therefore has a `thinker.ini` option
-(`na_governor_policy` and `na_abandon_policy`, both default off) and no `na.toml` toggle,
+(`na_governor_policy`, `na_abandon_policy`, `na_hq_escape_policy`; all default off) and no `na.toml` toggle,
 there being no brain answer yet to switch on.
 
 It is also the reason that list is worth working through rather than routing straight to the
@@ -238,7 +247,7 @@ LLM drills down.
 | `base.name` | ✅ | `mod_name_base` game.cpp:2075 | D |
 | `base.abandon` | ❌ | AI returns early (the `ABANDONBASE` popup is human-only); **deterministic tier added in the fork** (`na_abandon_policy`, base.cpp) | D+L |
 | `base.governor_config` | ❌ | `gov_config()` returns `~0u` for AI (engine_base.h:249) — no AI policy exists; **deterministic tier added in the fork** (`na_governor_policy`, plan.cpp) | D+L |
-| `base.hq_escape` | ❌ | `X_pop("ESCAPE")` base.cpp:515 — human single-player only; others auto-`true` :513 | **L** |
+| `base.hq_escape` | ❌ | `X_pop("ESCAPE")` — single-player human only; everyone else gets a literal `true`. **Deterministic tier added in the fork** (`na_hq_escape_policy`, base.cpp); answer unchanged on purpose | D+L |
 | `base.disband` | ❌ | `mod_base_kill` base.cpp:224 — no deliberate AI caller | L |
 | `base.retool` | ❌ | penalty applies to humans only (base.cpp:1045, build.cpp:11) | L |
 | `econ.energy_sliders` | ⚠️ | `mod_allocate_energy` game.cpp:1902 — **returns early for humans** :1908 | **L** |
