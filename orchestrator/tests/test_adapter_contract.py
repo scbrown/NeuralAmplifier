@@ -65,13 +65,16 @@ BASE_PRODUCTION = {
         "pop_size": 3,
         "turns_to_completion": 18,
     },
-    # na_write_history: newest first, one entry per base-turn, each attributed to the tier
-    # that settled it. Production is re-decided every turn, so without this a brain flips
-    # between two defensible options and accumulates nothing.
-    "recent_builds": [
-        {"turn": 41, "item": -4, "action": "Recycling Tanks", "tier": "llm"},
-        {"turn": 40, "item": -4, "action": "Recycling Tanks", "tier": "llm"},
-        {"turn": 39, "item": 0, "action": "Colony Pod", "tier": "deterministic"},
+    # na_write_history: the contract's `history`, OLDEST FIRST, one entry per base-turn, each
+    # attributed to the tier that settled it. Production is re-decided every turn, so without
+    # this a brain flips between two defensible options and accumulates nothing.
+    #
+    # `item` is the action-space id, not the raw engine int, so a past choice can be matched
+    # against an option on offer exactly rather than by comparing display names.
+    "history": [
+        {"turn": 39, "item": "unit:0", "action": "Colony Pod", "tier": "deterministic"},
+        {"turn": 40, "item": "facility:4", "action": "Recycling Tanks", "tier": "llm"},
+        {"turn": 41, "item": "facility:4", "action": "Recycling Tanks", "tier": "llm"},
     ],
     "action_space": [
         {
@@ -346,36 +349,57 @@ def test_a_superseded_replay_says_what_actually_ran() -> None:
     assert BASE_PRODUCTION["tier"] == "llm"
 
 
-def test_recent_builds_are_newest_first_and_attributed() -> None:
+def test_history_is_oldest_first_and_attributed() -> None:
     """History is only useful if the brain can tell *when* and *who*.
 
-    Newest first because a brain reading top-down should meet the most relevant entry first.
+    Oldest first because that is what ``WorldView.history`` documents and what the system prompt
+    tells the model to expect. The adapter used to emit newest first under a different name, so a
+    model applying the documented reading took the OLDEST entry for the most recent choice.
+
     Attributed because a run that mixes the LLM and deterministic tiers is otherwise a sequence
     of choices with no provenance, and "why did I pick that" has no answer.
     """
-    history = BASE_PRODUCTION["recent_builds"]
+    history = BASE_PRODUCTION["history"]
     turns = [entry["turn"] for entry in history]
-    assert turns == sorted(turns, reverse=True), "newest first"
+    assert turns == sorted(turns), "oldest first"
     assert all(entry["turn"] < BASE_PRODUCTION["turn"] for entry in history), (
         "history is the past; the current decision is not in it"
     )
-    assert {entry["tier"] for entry in history} <= {"llm", "deterministic", "probe"}
+    # The contract's Literal, exactly. "probe" was emitted here once and would have failed the
+    # whole world view rather than one field.
+    assert {entry["tier"] for entry in history} <= {"llm", "deterministic", None}
     # One entry per base-turn. The engine calls mod_base_build ~2x per base per turn, so
     # duplicates here would mean the per-turn cache stopped being the single write point.
     assert len(turns) == len(set(turns))
 
 
-def test_history_survives_as_an_engine_dependent_passthrough() -> None:
-    """`recent_builds` is not a contract field, and does not need to be.
+def test_history_populates_the_contract_field_not_merely_the_payload() -> None:
+    """The bug this pins (na-wzw): both halves existed and were wired to nothing.
 
-    WorldView allows extras and the whole payload is what reaches the prompt, so an adapter can
-    add a genuinely useful block without a contract change. What it must not do is arrive in a
-    shape the orchestrator would reject.
+    The adapter emitted ``recent_builds`` while the contract declared ``history``, so
+    ``WorldView.history`` was None on every real decision and the system prompt's continuity
+    guidance gated on a field that never arrived. Extras still reach the prompt, so nothing
+    looked broken — the payload was present, unexplained, and in the opposite order.
+
+    Asserting the parsed field rather than the raw dict is the whole point: a passthrough would
+    satisfy ``model_dump()["history"]`` and still leave ``world_view.history`` empty.
     """
     world_view = WorldView.model_validate(BASE_PRODUCTION)
-    carried = world_view.model_dump()["recent_builds"]
-    assert carried[0]["action"] == "Recycling Tanks"
-    assert carried[0]["tier"] == "llm"
+    assert world_view.history, "adapter output must populate the typed contract field"
+    assert world_view.history[-1].action == "Recycling Tanks"  # type: ignore[attr-defined]
+    assert world_view.history[-1].tier == "llm"
+
+
+def test_history_items_name_something_the_brain_could_choose() -> None:
+    """The convention the field rests on: a past choice is matched against an offered option by
+    id, never by display name. An `item` that is not in the action-space vocabulary reduces the
+    brain to string-matching names, which is how it misreads state it was handed correctly."""
+    world_view = WorldView.model_validate(BASE_PRODUCTION)
+    assert world_view.history is not None
+    for entry in world_view.history:
+        kind, _, num = entry.item.partition(":")
+        assert kind in {"unit", "facility"}, entry.item
+        assert num.isdigit(), entry.item
 
 
 def test_every_faction_metric_in_the_vocabulary_is_actually_reported() -> None:

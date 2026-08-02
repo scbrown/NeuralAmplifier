@@ -85,9 +85,11 @@ no other source, and inventing context is how a defensible move becomes a wrong 
   `satisfied: null` means *unmeasurable*, which is not the same as failing.
 - **`tradeoffs`** say what each option would cost each directive, in numbers —
   "hurrying costs 81 credits, leaving reserves at 1 against a plan wanting 300."
-- **`recent_builds`** (on `base.production`) is what this base was told to build over the last
-  few turns, newest first, each tagged with the `tier` that decided it. `llm` is you; anything
-  else is the deterministic tier. Read it before choosing — see below.
+- **`history`** (on `base.production`) is what this base was told to build over the last few
+  turns, **oldest first**, each tagged with the `tier` that decided it. `llm` is you; anything
+  else is the deterministic tier, and `null` means the adapter could not attribute it. `item`
+  is an action-space id, so you can match a past choice against an option on offer exactly.
+  Read it before choosing — see below.
 - **`fairness`** lists the rule asymmetries in force. If it is non-empty you are playing with
   advantages; reason about them out loud rather than quietly banking them.
 
@@ -107,13 +109,13 @@ Watch for these, all of which have actually happened:
   one only appears on the item already in production.
 - **Do not re-derive arithmetic that was given to you.** Turn counts are precomputed
   precisely because recomputing them went wrong.
-- **Prefer continuity, and check `recent_builds` before you break it.** Production is
+- **Prefer continuity, and check `history` before you break it.** Production is
   re-evaluated from scratch every turn, so nothing stops you from switching — and switching
   item category forfeits the minerals already accumulated. Half-built Recycling Tanks abandoned
   for a Scout Patrol abandoned for Recycling Tanks is every individual choice being defensible
   and the sequence being useless.
 
-  If `recent_builds` shows this base has been on the same item, the bar for changing it is what
+  If `history` shows this base has been on the same item, the bar for changing it is what
   has changed on the board, not which option looks best in isolation today. If it shows you
   already switched last turn, switching again is the pattern to break.
 

@@ -151,6 +151,41 @@ would actually show a base finishing what it starts. The `changed` arm also move
 once (the metric and the directive), so it shows the brain will switch when the case changes
 without saying which change did it.
 
+### The wire was missing under all of it (na-wzw)
+
+The result above was obtained by setting `history` directly on a synthetic world view. **No live
+game could produce one.** The adapter emitted the block as `recent_builds`, newest first, with
+`item` as a raw engine int; the contract declared `history`, oldest first, `item` a string.
+Nothing mapped between them, so `WorldView.history` was `None` on every real decision and the
+system prompt's continuity guidance gated on a field that never arrived.
+
+Nothing failed, which is why it survived. `WorldView` allows extras and the whole payload reaches
+the prompt, so the block *was* in front of the model — unexplained, and in the opposite order to
+the one the prompt described. A model applying the documented reading to the undocumented field
+takes the **oldest** entry for the most recent choice. That is worse than omitting it, and it is
+the na-eaa failure exactly: state handed over correctly and misread — the same run that invented
+"18/33 minerals done" against a world view saying 4.
+
+Fixed adapter-side, because the contract is what both engines must speak and GLSMAC will need the
+same field. Two things came out of checking it against a live game rather than a fixture:
+
+- **`tier: "probe"`** was emitted by the old writer and is not in `PriorChoice`'s literal. No call
+  site ever wrote it, but had one started, the world view would have been rejected whole rather
+  than losing one field. Unattributable entries now emit `null`, which is what the contract means
+  by "this adapter does not track authorship".
+- **History contained the current turn** on `call_seq >= 2`. The first call of a base-turn records
+  its choice, so later calls serialised a history holding the answer to the question they were
+  asking (measured: Zoloto-Gold turn 36, seq 2). The brain never saw it — seq ≥ 2 is served from
+  the per-turn cache — but `decision_stability.py` re-decides the **last** row for a surface, so
+  it would have handed the brain its own prior answer as history and scored the resulting
+  agreement as stability.
+
+The general lesson is the one worth keeping: **a fixture written to match the contract cannot
+catch an adapter that does not.** Both sides of this were tested and both passed.
+[`scripts/check_live_world_view.py`](https://github.com/scbrown/NeuralAmplifier/blob/main/scripts/check_live_world_view.py)
+parses a real capture and reports which typed fields are actually populated, which is the check
+that was missing.
+
 **Measured stability, five identical prompts.** 4 of 5 chose Colony Pod, 1 chose Formers —
 `stability 0.80`, `utilisation 0.20`. Both choices were legal and defensible. That is low enough
 to matter on a decision re-evaluated every turn and high enough that the earlier alarm about
