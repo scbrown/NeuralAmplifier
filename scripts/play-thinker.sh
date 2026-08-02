@@ -12,8 +12,16 @@
 #
 # For an UNATTENDED run, two knobs, and neither is optional in practice:
 #
-#   NA_EXIT_TURN=<n>    stop after n complete turns (docs/headless-harness.md §3.2)
+#   NA_AUTO_TURN=<secs> end our own turn after this long with no turn change
+#   NA_EXIT_TURN=<n>    stop AT ABSOLUTE TURN n (docs/headless-harness.md §3.2)
 #   NA_TIMEOUT=<secs>   kill the run if it has not stopped by then (§3.3)
+#
+# NA_AUTO_TURN is what makes the other two mean anything. A loaded save resumes
+# at the PLAYER's turn and the engine then waits for the player, so without it an
+# unattended run advances no turns — and since mod_turn_upkeep is only reached by
+# ending a turn, NA_EXIT_TURN never fires either and NA_TIMEOUT is what stops the
+# run. NA_EXIT_TURN is an absolute turn number, not a count: resuming a save at
+# turn 44 and asking for 2 means "already past", not "two more turns".
 #
 # They are not redundant, which is why both exist. NA_EXIT_TURN is the game
 # ending itself on a condition it can observe; NA_TIMEOUT is this script ending a
@@ -246,7 +254,20 @@ if [ -n "${NA_EXIT_TURN:-}" ]; then
     esac
     [ "$NA_EXIT_TURN" -gt 0 ] || die "NA_EXIT_TURN must be a positive integer, got '$NA_EXIT_TURN'"
     exit_args=(-na-exit-turn "$NA_EXIT_TURN")
-    log "run bounded to $NA_EXIT_TURN complete turn(s)"
+    log "run stops at absolute turn $NA_EXIT_TURN"
+fi
+if [ -n "${NA_AUTO_TURN:-}" ]; then
+    case "$NA_AUTO_TURN" in
+        ''|*[!0-9]*) die "NA_AUTO_TURN must be a positive integer (seconds), got '$NA_AUTO_TURN'" ;;
+    esac
+    [ "$NA_AUTO_TURN" -gt 0 ] || die "NA_AUTO_TURN must be a positive integer (seconds), got '$NA_AUTO_TURN'"
+    exit_args+=(-na-auto-turn "$NA_AUTO_TURN")
+    log "ending own turn after ${NA_AUTO_TURN}s with no turn change"
+elif [ -n "${NA_EXIT_TURN:-}" ]; then
+    # Worth saying out loud rather than letting the run time out looking healthy:
+    # a bounded run that cannot advance a turn can never reach its bound.
+    warn "NA_EXIT_TURN set without NA_AUTO_TURN — nothing will end a turn, so the"
+    warn "limit can only be reached if something else is driving the game."
 fi
 
 # The timeout is the outer bound and applies to every mode. `timeout` sends TERM,
