@@ -28,6 +28,7 @@ from .outcomes import EngineOutcome, OutcomeStore
 from .pending import NotClaimable, Pending
 from .replay import WorldViewStore
 from .telemetry import OtelSink, Sink
+from .turns import TurnAnnouncement, TurnStore
 
 
 def build_brain(config: Config | None = None) -> Brain:
@@ -203,6 +204,11 @@ def create_app(
     order_channel = OrderChannel(config.run.game_dir)
     app.state.orders = order_channel
 
+    # The turn as a whole (turns.py). Fed from three places — the adapter's announcement, every
+    # world view that arrives, and every outcome — so it stays true without anyone maintaining it.
+    turn_store = TurnStore()
+    app.state.turns = turn_store
+
     @app.get("/health")
     def health() -> dict[str, object]:
         return {
@@ -220,7 +226,11 @@ def create_app(
 
     @app.post("/decide", response_model=Orders)
     def decide(world_view: WorldView) -> Orders:
+        # Before the decision, so a world view that takes a long time to answer already shows as
+        # raised rather than looking like one that never arrived.
+        turn_store.note_raised(world_view)
         result = orchestrator.decide(world_view)
+        turn_store.note_answered(world_view)
         # Report back to whoever answered this, if anyone did. The agent asked for one thing;
         # validation and the policy guard sit between that and what ran, and an agent told its
         # stripped choice was "applied" has no reason to repair it.
@@ -404,6 +414,18 @@ def create_app(
                 "stats": outcome_store.stats(),
             }
 
+        @app.post("/agent/turn")
+        def agent_turn(body: dict[str, object] | None = None) -> dict[str, object]:
+            """The whole turn, for an agent deciding where to spend a limited pool.
+
+            `next_decision` gives you one decision at a time in the engine's order. This is the
+            same turn seen whole — including decisions that have not been raised yet, so a build
+            choice can be made knowing what else is competing for the same minerals.
+            """
+            raw = (body or {}).get("turn")
+            turn = int(raw) if isinstance(raw, int) else None
+            return turn_view_payload(turn)
+
         @app.post("/agent/waiting")
         def agent_waiting() -> dict[str, object]:
             return {
@@ -434,6 +456,9 @@ def create_app(
         that and not a decision id.
         """
         seq = outcome_store.record(body)
+        # Fold it onto the turn view too, so "what happened to everything I ordered this turn" is
+        # one read rather than a join the caller has to do.
+        turn_store.note_outcome(body)
         return {"recorded": seq, "traceparent": body.traceparent}
 
     @app.get("/outcomes")
@@ -458,6 +483,36 @@ def create_app(
         404 invites a caller to treat "no answer yet" as "nothing went wrong".
         """
         return outcome_store.get(traceparent).model_dump(exclude_none=True)
+
+    # ---------------------------------------------------------------- the turn as a whole
+    #
+    # `/agent/next` can only ever offer the oldest single decision, because when base #1 is asked
+    # the rest of the turn has not been POSTed and does not exist to the queue. These let the
+    # adapter say what is coming, so an agent can spend a limited pool across the whole turn.
+    @app.post("/turn")
+    def announce_turn(body: TurnAnnouncement) -> dict[str, object]:
+        """The adapter forecasting what the coming turn will ask about.
+
+        Re-announcing a turn replaces it: a second announcement means the adapter reached the
+        between-turns seam again, so the earlier forecast describes a board that no longer exists.
+        """
+        count = turn_store.announce(body)
+        return {"turn": body.turn, "expected": count}
+
+    @app.get("/turn")
+    def turn_view(turn: int | None = None) -> dict[str, object]:
+        """The turn as it stands: every decision, its status, and what has not arrived.
+
+        `expected` and `raised` are deliberately different words. The announcement is a FORECAST
+        made from the previous turn's board — a base can be captured or finish a project, and the
+        decision it was expected to raise never comes. So a turn where 51 were forecast and 47
+        arrived is ordinary, not an error. It is also what a stuck adapter looks like, which is
+        why `unraised` names the missing ones rather than leaving you to infer them from a count.
+        """
+        return turn_view_payload(turn)
+
+    def turn_view_payload(turn: int | None) -> dict[str, object]:
+        return turn_store.view(turn).model_dump(exclude_none=True)
 
     # ---------------------------------------------------------------- orders (door 2)
     #

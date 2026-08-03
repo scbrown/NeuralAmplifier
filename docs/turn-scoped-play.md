@@ -8,20 +8,26 @@ me again once I have moved the units".
 Companion to [agent-play.md](agent-play.md), which describes the mode as **built**; this describes
 what it cannot yet do and what the code actually permits. Tracked as `na-8ja`.
 
-**Status: Phase 1 is built. Phases 2–4 are not.** Said plainly and up front, in the manner of
+**Status: phases 1–3 are built. Phase 4 is not.** Said plainly and up front, in the manner of
 [policy-harness.md](policy-harness.md), because a design doc that reads like a feature list is how
 a plan becomes a claim — and a doc that keeps saying "none of this is built" after some of it is
 becomes its own kind of lie.
+
+One honest limit across all three: **none of it has been exercised against a running game.** The
+orchestrator halves are unit-tested, the adapter halves are in the deployed DLL and pass the wire
+suite under Wine, and the JSON each emitter produces has been posted to a live service and read
+back. That is not the same as a turn having been played through them.
 
 | phase | what | status |
 | --- | --- | --- |
 | 1 | outcome feedback — the engine reports what it did | **built** (`outcomes.py`, `POST /outcome`) |
 | 2 | order verbs on door 2 — `move` / `skip` / `build` | **built** (adapter `na_order_command`, `orders.py`, `POST /order`) |
-| 3 | turn view announced at `mod_turn_upkeep` | not built |
+| 3 | turn view announced at `mod_turn_upkeep` | **built** (`turns.py`, `POST /turn`, `GET /turn`) |
 | 4 | batching, and tile-visibility gating | not built — see the corrected fog note in §5 |
 
-Phase 2 is end-to-end: an agent can command any unit or base directly. What it cannot yet do is
-see the whole turn at once (phase 3), and orders are still one-at-a-time at 4 Hz (phase 4).
+Phases 1–3 are end-to-end: an agent can see the whole turn, command any unit or base directly,
+and learn what the engine did with each order. What remains is throughput (orders are
+one-at-a-time at 4 Hz) and tile-visibility gating — phase 4.
 
 ---
 
@@ -258,7 +264,27 @@ else in this service requires co-location; a remote orchestrator will order noth
 healthy, which is why `NA_GAME_DIR` is unset by default and reports `unavailable` rather than
 pretending.
 
-**Phase 3 — turn view.** Announce at `mod_turn_upkeep`, with `expected` vs `raised`.
+**Phase 3 — turn view. BUILT.** The adapter announces the coming turn from `mod_turn_upkeep`;
+`turns.py` keeps it and folds in every world view and outcome as they arrive, so the view stays
+true without anyone maintaining it.
+
+- **`expected` and `raised` are different words on purpose.** The announcement is built at the
+  between-turns seam from the board as it stood when the *previous* turn ended. A base can be
+  captured, starve, or finish a project, and the decision it was expected to raise never comes. A
+  turn where 51 were forecast and 47 arrived is ordinary — and is also what a stuck adapter looks
+  like, so `unraised` **names** the missing ones rather than leaving them to be inferred from a
+  count.
+- A decision that arrives **unforecast is added, not dropped**. The forecast is a guess; a
+  decision that shows up unannounced is real, and discarding it would make the view a record of
+  what we predicted rather than of what is happening.
+- **Status never walks backwards.** A base is asked several times per turn, so a replay arriving
+  after the answer must not reset the slot to `raised` — that would make an answered decision look
+  outstanding and invite a second answer. Divergence is terminal for the same reason in reverse: a
+  later `applied` must not paper over the engine disagreeing.
+- The adapter forecasts **`base.production` only**. That surface fires for every base every turn,
+  so it can be predicted honestly; `faction.tech` and `faction.se` fire conditionally, and a
+  forecast entry that never arrives is indistinguishable from a stuck adapter. A wrong forecast is
+  worse than a short one.
 
 **Phase 4 — batching and fog gating on orders.** Both are correctness work that only matters once
 Phase 2 is real.
