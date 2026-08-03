@@ -112,3 +112,45 @@ def test_a_tactical_response_still_reports_what_it_followed() -> None:
     """Tactical decisions cannot SET a plan, but the whole point is that they serve one."""
     for field in ("cited", "followed", "overrode"):
         assert field in TacticalOut.model_fields
+
+
+def test_the_directive_field_states_WHEN_to_issue_not_only_when_not_to() -> None:
+    """na-1gl: the model reads THIS schema, so the trigger condition has to live here.
+
+    It read "Standing intent for FUTURE decisions. Empty unless setting direction." — nine words
+    whose only actionable clause pointed at empty. Twenty runs of faction.tech issued zero
+    directives, including the ten invited to in the system prompt (na-j2w).
+
+    The trigger existed in ``contract.Orders.directives``, but that is the wire contract — "the
+    shape we pass around" — and the model never sees it. Same failure as ``cited``, which stayed
+    empty while its explanation sat in the system prompt.
+
+    So this asserts the description is not PURELY a suppressor: it must say when a directive is
+    called for, not only when to omit one. Pinned because the bug already recurred once, in the
+    same file, by the same route.
+    """
+    field = StrategicOut.model_fields["directives"]
+    description = (field.description or "").lower()
+
+    assert description, "the model-facing directives field has no description at all"
+    # The suppressor is deliberate and must survive — without it a faction decision emits policy
+    # every pass, which is the opposite failure.
+    assert "empty" in description, "the suppressor was dropped; expect directive spam"
+    # ...but it must not be the ONLY instruction. Something has to state the positive trigger.
+    assert "binds later turns" in description or "commits" in description, (
+        "the description tells the model when NOT to issue and never when to. That is the na-1gl "
+        f"defect verbatim: {field.description!r}"
+    )
+
+
+def test_the_directive_trigger_did_not_come_out_of_the_size_budget() -> None:
+    """The na-1gl wording is only safe because ``directives`` exists on the faction-scope schema
+    alone. This is the file whose whole reason for existing is that a too-large schema degraded
+    every decision to fallback while the harness reported a clean 1.00 — so growing a description
+    is checked, not assumed."""
+    strategic = len(json.dumps(StrategicOut.model_json_schema()))
+    tactical = len(json.dumps(TacticalOut.model_json_schema()))
+    assert strategic < BUDGET_BYTES, f"strategic schema {strategic}b over budget {BUDGET_BYTES}b"
+    assert tactical < BUDGET_BYTES, f"tactical schema {tactical}b over budget {BUDGET_BYTES}b"
+    # The high-frequency schema must not have paid for this at all.
+    assert "directives" not in TacticalOut.model_fields

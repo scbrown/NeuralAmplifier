@@ -112,7 +112,34 @@ class StrategicOut(TacticalOut):
 
     directives: list[DirectiveOut] = Field(
         default_factory=list,
-        description="Standing intent for FUTURE decisions. Empty unless setting direction.",
+        # This description states WHEN to issue, not only when not to (na-1gl). It read
+        # "Standing intent for FUTURE decisions. Empty unless setting direction." — nine words
+        # whose only actionable clause pointed at empty, and twenty runs of faction.tech returned
+        # zero directives, including the ten that invited them in the system prompt (na-j2w).
+        #
+        # The trigger condition existed, in `contract.Orders.directives` — but that is the wire
+        # contract, "the shape we pass around" (see this module's docstring), and the model never
+        # reads it. This is the `cited` lesson exactly, one layer over: cited stayed empty while
+        # its explanation lived in the system prompt, and only worked once it moved into the
+        # schema. `directives` got a description for that same reason and it went to the wrong
+        # schema, so the fix was applied in form and missed in substance.
+        #
+        # The suppressor is KEPT. Without it a low-frequency faction decision starts emitting
+        # policy on every pass, which is the opposite failure and a noisier one. What it lacked
+        # was something to weigh against.
+        #
+        # WORDED TIGHT ON PURPOSE. The first draft of this fix said what it meant in 163 chars and
+        # took the strategic schema to 2544 b — over the 2500 b budget in
+        # tests/test_response_schema.py, which caught it. That budget is a tripwire rather than a
+        # published limit, and it would have been easy to raise it by 44 b to fit this in; that is
+        # disarming a guard to admit the change it fired on. The wording was cut instead. Cost,
+        # stated so the next person is not surprised by it: schema headroom went from 51 b to 28 b,
+        # so this field is now close to the line and a further description here needs a measurement,
+        # not a guess.
+        description=(
+            "Standing intent for FUTURE decisions."
+            " Issue when this choice binds later turns; else empty."
+        ),
     )
 
 
