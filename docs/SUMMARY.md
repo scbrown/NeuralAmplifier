@@ -31,4 +31,5 @@
 
 - [Building & Testing](building-and-testing.md)
 - [Playing as the Brain](agent-play.md)
+- [Turn-scoped Play](turn-scoped-play.md)
 - [Observability](observability.md)

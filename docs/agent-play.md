@@ -158,6 +158,13 @@ Four tools: the three moments of a decision, plus setting a plan that outlives t
 Anything more would invite the model to go looking for game state instead of reading the world
 view it was handed, and there is no other source to look in.
 
+**That principle bounds where to look, not how much of the turn you may see.** Four things an
+agent cannot do with this surface — see the whole turn rather than the oldest decision, decide
+across it, learn whether an order was actually applied, and defer one decision until others have
+moved — are design work tracked in [turn-scoped-play.md](turn-scoped-play.md) and `na-8ja`. None
+of it is built. Each would still hand the agent a world view the orchestrator assembled; none
+adds a second source of game state.
+
 **`cited`, `followed` and `overrode` are not optional decoration.** They are the measurement
 channels: grounding utilisation, and directive attention. The agent pivot briefly zeroed all
 three by accepting only an action id, which in a record is indistinguishable from a brain that
