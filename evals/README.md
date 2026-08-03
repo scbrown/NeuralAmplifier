@@ -80,6 +80,34 @@ writer emits, not from what the reader declares.**
 to a person — some prompt changes cannot affect a given arm, and asserting which is a claim
 needing its own evidence.
 
+### Recording that judgement: `drift_reviewed`
+
+A person who has adjudicated a drift records it in the manifest, and `check` then prints
+`ok (drift reviewed …)` with the reason attached:
+
+```json
+"drift_reviewed": {
+  "from": "d9209f53e11c", "to": "ed422cd51144",
+  "on": "2026-08-03", "by": "sattler", "bead": "na-og3", "re_run": false,
+  "reason": "Common-mode inert addition — …"
+}
+```
+
+**It pins both hashes, and that is the entire design.** The original `prompt_sha256` is never
+overwritten, and a later change produces a third hash that matches no review and goes STALE
+again — naming the review that failed to cover it, so nobody reads a stale adjudication as a
+current one.
+
+The two obvious alternatives are both worse, in opposite directions. Re-hashing the manifest
+until the check goes quiet **erases the only signal that the answers are old**, and it is most
+tempting exactly when the drift looks harmless. Leaving the check permanently red gets it
+ignored — which is how na-og3's seven stale cells went unnoticed for an unknown period in the
+first place. A pinned adjudication is the only version that can go green *and* go red again.
+
+`re_run` is not decoration: it says whether the arms were re-answered against a model, or the
+drift was reasoned about from measurements. Those are very different warrants and the record has
+to say which. All seven na-og3 reviews are `re_run: false`.
+
 ## Two rules, both learned the hard way
 
 **An arm that cannot fail measures nothing.** `na-61c2` runs on a *contested* decision and puts

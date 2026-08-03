@@ -189,6 +189,19 @@ def check_prompts(out: Path, arms: dict[str, WorldView], label: str = "") -> int
     This does not judge whether the drift matters. It says what moved, and leaves that to a
     person — some prompt changes cannot affect a given arm, and asserting which is a claim that
     needs its own evidence.
+
+    **A person can record that judgement here** (``drift_reviewed`` in the manifest), and the
+    shape of that record is the whole point. It pins BOTH hashes: the one the answers were
+    measured against and the one it was adjudicated against. So it cannot launder a later
+    change — any further drift produces a third hash, matches no review, and goes STALE again.
+    The original ``prompt_sha256`` is never overwritten.
+
+    That distinction is not pedantry. The obvious alternative — re-hashing the manifest so the
+    check goes quiet — *erases the only signal that the answers are old*, and it is the more
+    tempting option precisely when the drift looks harmless. The alternative in the other
+    direction is just as bad in practice: a check that stays red forever gets ignored, which is
+    how na-og3's seven stale cells went unnoticed in the first place. A pinned adjudication is
+    the only version that leaves the check able to go green AND able to go red again.
     """
     manifest_path = out / "manifest.json"
     if not manifest_path.exists():
@@ -206,8 +219,25 @@ def check_prompts(out: Path, arms: dict[str, WorldView], label: str = "") -> int
         if now == was:
             print(f"{label} {name}: ok")
             continue
+        review = recorded.get("drift_reviewed") or {}
+        if review.get("from") == was and review.get("to") == now:
+            print(
+                f"{label} {name}: ok (drift reviewed {review.get('on', '?')}"
+                f" by {review.get('by', '?')}) — {review.get('reason', 'no reason recorded')}"
+            )
+            continue
         stale += 1
-        print(f"{label} {name}: STALE — measured against {was}, code now produces {now}")
+        if review:
+            # A review that no longer applies is worse than none, because somebody read it and
+            # stopped looking. Name it rather than printing a bare STALE they may assume it
+            # already covers.
+            print(
+                f"{label} {name}: STALE — measured against {was}, code now produces {now}."
+                f" A drift review exists ({review.get('from')} -> {review.get('to')}) and does"
+                " NOT cover this. Re-adjudicate; do not widen the old record."
+            )
+        else:
+            print(f"{label} {name}: STALE — measured against {was}, code now produces {now}")
         committed = out / f"{name}.task.txt"
         if committed.exists():
             diff = list(

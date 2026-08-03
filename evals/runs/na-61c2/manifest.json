@@ -4,17 +4,47 @@
     "nohistory": {
       "prompt_sha256": "08c43802d209",
       "facts_offered": 4,
-      "options": 8
+      "options": 8,
+      "drift_reviewed": {
+        "from": "08c43802d209",
+        "to": "25f1c70f4507",
+        "on": "2026-08-03",
+        "by": "sattler",
+        "reason": "Common-mode inert addition. The drift is byte-identical in every arm of this eval (measured), and adds only: one metric-VOCABULARY line for `turns_to_completion`, a metric absent from every arm's world-view payload (measured); and two null metadata fields, `decision_deadline_ms` and `run_id`. Every finding here is a comparison BETWEEN arms, and an identical inert addition to both sides cannot move it. REASONED from those measurements, NOT re-run against a model \u2014 no arm was re-answered.",
+        "bead": "na-og3",
+        "re_run": false,
+        "evidence": "just eval check; the diff is 3 added lines, identical across arms"
+      }
     },
     "history": {
       "prompt_sha256": "af6854c8a603",
       "facts_offered": 4,
-      "options": 8
+      "options": 8,
+      "drift_reviewed": {
+        "from": "af6854c8a603",
+        "to": "6d14064d136e",
+        "on": "2026-08-03",
+        "by": "sattler",
+        "reason": "Common-mode inert addition. The drift is byte-identical in every arm of this eval (measured), and adds only: one metric-VOCABULARY line for `turns_to_completion`, a metric absent from every arm's world-view payload (measured); and two null metadata fields, `decision_deadline_ms` and `run_id`. Every finding here is a comparison BETWEEN arms, and an identical inert addition to both sides cannot move it. REASONED from those measurements, NOT re-run against a model \u2014 no arm was re-answered.",
+        "bead": "na-og3",
+        "re_run": false,
+        "evidence": "just eval check; the diff is 3 added lines, identical across arms"
+      }
     },
     "changed": {
       "prompt_sha256": "c0990465a0b9",
       "facts_offered": 4,
-      "options": 8
+      "options": 8,
+      "drift_reviewed": {
+        "from": "c0990465a0b9",
+        "to": "0a416f4d9260",
+        "on": "2026-08-03",
+        "by": "sattler",
+        "reason": "Common-mode inert addition. The drift is byte-identical in every arm of this eval (measured), and adds only: one metric-VOCABULARY line for `turns_to_completion`, a metric absent from every arm's world-view payload (measured); and two null metadata fields, `decision_deadline_ms` and `run_id`. Every finding here is a comparison BETWEEN arms, and an identical inert addition to both sides cannot move it. REASONED from those measurements, NOT re-run against a model \u2014 no arm was re-answered.",
+        "bead": "na-og3",
+        "re_run": false,
+        "evidence": "just eval check; the diff is 3 added lines, identical across arms"
+      }
     }
   },
   "answered_by": "claude-haiku-4-5, one independent agent per decision, 2026-08-01"
