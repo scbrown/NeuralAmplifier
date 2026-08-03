@@ -95,14 +95,22 @@ def main(argv: list[str] | None = None) -> int:
         if config.source is None:
             print("\nNo na.toml — every surface the adapter emits is decided.")
         else:
-            from .surfaces import OBSERVED
+            from .surfaces import APPLIED, OBSERVED
 
-            off = sorted(s for s in OBSERVED if not config.surfaces.allows(s))
+            # Computed from APPLIED, not OBSERVED. Only a surface with an apply path CAN be
+            # switched on, so listing an observe-only one as "switched off" invites someone to
+            # go looking for the na.toml line that would enable it — and there isn't one. This
+            # read correctly only while the two sets were identical, which stopped being true
+            # the moment the first observe-only surface landed (na-yd4).
+            off = sorted(s for s in APPLIED if not config.surfaces.allows(s))
+            observe_only = sorted(OBSERVED - APPLIED)
             print(
                 f"\nPolicy ({config.source.name}): "
                 f"surface_default={str(config.surfaces.default).lower()}"
             )
             print(f"  instrumented but switched off: {', '.join(off) if off else 'none'}")
+            if observe_only:
+                print(f"  observed only, no apply path yet: {', '.join(observe_only)}")
         print("\nSee docs/game-surface.md §2.5 for the per-surface matrix.")
         return 0
 

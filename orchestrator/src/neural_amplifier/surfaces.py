@@ -157,6 +157,15 @@ OBSERVED: Final[frozenset[str]] = frozenset(
         "faction.tech",
         "faction.se",
         "base.hurry",
+        # Observed, NOT applied — the first of the 27 ready surfaces (na-yd4), chosen by
+        # decision-inputs.md's own rule: low frequency, high stakes. It fires once per
+        # faction-turn and the ratio it sets divides every base's energy for that whole turn,
+        # so it reaches further per decision than anything else in that bucket.
+        #
+        # Deliberately absent from APPLIED. The adapter records what mod_allocate_energy chose
+        # and what else was legal; nothing applies a brain's answer yet, and adding it here
+        # would move the coverage number for work that has not been done.
+        "econ.energy_sliders",
     }
 )
 
