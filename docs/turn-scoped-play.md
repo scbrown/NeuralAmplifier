@@ -8,9 +8,17 @@ me again once I have moved the units".
 Companion to [agent-play.md](agent-play.md), which describes the mode as **built**; this describes
 what it cannot yet do and what the code actually permits. Tracked as `na-8ja`.
 
-**None of this is built.** Said plainly and up front, in the manner of
+**Status: Phase 1 is built. Phases 2–4 are not.** Said plainly and up front, in the manner of
 [policy-harness.md](policy-harness.md), because a design doc that reads like a feature list is how
-a plan becomes a claim.
+a plan becomes a claim — and a doc that keeps saying "none of this is built" after some of it is
+becomes its own kind of lie.
+
+| phase | what | status |
+| --- | --- | --- |
+| 1 | outcome feedback — the engine reports what it did | **built** (`outcomes.py`, `POST /outcome`) |
+| 2 | order verbs on door 2 — `move` / `skip` / `build` | not built |
+| 3 | turn view announced at `mod_turn_upkeep` | not built |
+| 4 | batching and fog gating on orders | not built |
 
 ---
 
@@ -188,8 +196,28 @@ that never comes.
 
 ## 9. Build order
 
-**Phase 1 — outcome feedback.** Route what both doors already compute. Independent, changes no
-blocking semantics, satisfies requirement 3.
+**Phase 1 — outcome feedback. BUILT.** The adapter now reports what the engine did, and the
+orchestrator keeps it.
+
+- `POST /outcome` — mounted in **every** mode, unlike `/agent/*`. This is the adapter reporting on
+  the engine, which has nothing to do with which brain answered; gating it on `AgentBrain` would
+  mean the measurement lanes could never see a divergence.
+- `GET /outcomes?cursor=` and `GET /outcome/{traceparent}`, plus `POST /agent/outcomes` for an
+  attached agent.
+- Correlation is by **`traceparent`**, not a decision id: the adapter stamps one on every world
+  view for every brain, whereas decision ids exist only when an agent queue is mounted. The
+  adapter formats the traceparent once into `na_last_trace` and stashes it per base, so the
+  divergence check — which runs long after the decide call returned — can still name the decision
+  it diverged from.
+- An unreported decision reads **`unknown`**, never `applied`, and `GET /outcome/{id}` returns 200
+  rather than 404 for one, because a 404 invites a caller to treat "no answer yet" as "nothing
+  went wrong".
+- The adapter's POST is bounded at **250 ms** and its result discarded — deliberately *not*
+  `llm_timeout_ms`. A decision may block the game for as long as an agent needs to think;
+  reporting something that already happened has earned no such licence.
+
+Verified: 491 orchestrator tests pass, the wire format is pinned from the emitters, and the
+adapter's 43-check wire suite still passes under Wine against a live orchestrator.
 
 **Phase 2 — order verbs on door 2.** `move` / `skip` / `build`, engine validators enforced, gated
 on our-turn-and-not-halted. This is what delivers requirement 4, and it delivers it *properly* —

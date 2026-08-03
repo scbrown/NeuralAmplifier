@@ -23,6 +23,7 @@ from .coverage import report
 from .decisions import DecisionLog
 from .directives import DirectiveStore, accept
 from .orchestrator import Orchestrator
+from .outcomes import EngineOutcome, OutcomeStore
 from .pending import NotClaimable, Pending
 from .replay import WorldViewStore
 from .telemetry import OtelSink, Sink
@@ -189,6 +190,11 @@ def create_app(
         policy=config.surfaces,
     )
     app.state.orchestrator = orchestrator
+
+    # Engine-side outcomes (outcomes.py). Distinct from the brain's `publish_outcome`, which
+    # reports what the ORCHESTRATOR applied; this is what the ENGINE did with it afterwards.
+    outcome_store = OutcomeStore()
+    app.state.outcomes = outcome_store
 
     @app.get("/health")
     def health() -> dict[str, object]:
@@ -372,6 +378,25 @@ def create_app(
                 "advisories": outcome.get("advisories") or [],
             }
 
+        @app.post("/agent/outcomes")
+        def agent_outcomes(body: dict[str, object] | None = None) -> dict[str, object]:
+            """Did the orders I gave actually happen?
+
+            An agent knows what it submitted and what the orchestrator applied. Neither answers
+            whether the ENGINE kept it — see outcomes.py. This is the only way to find out, and
+            an unreported decision comes back `unknown` rather than being assumed fine.
+            """
+            raw = (body or {}).get("cursor", 0) or 0
+            cursor = int(raw) if isinstance(raw, int | float | str) and str(raw).isdigit() else 0
+            raw_limit = (body or {}).get("limit", 50) or 50
+            limit = int(raw_limit) if isinstance(raw_limit, int | float) else 50
+            high, fresh = outcome_store.since(cursor=cursor, limit=min(limit, 200))
+            return {
+                "cursor": high,
+                "outcomes": [o.model_dump(exclude_none=True) for o in fresh],
+                "stats": outcome_store.stats(),
+            }
+
         @app.post("/agent/waiting")
         def agent_waiting() -> dict[str, object]:
             return {
@@ -386,6 +411,46 @@ def create_app(
                     for p in queue.waiting()
                 ]
             }
+
+    # ---------------------------------------------------------------- engine outcomes
+    #
+    # Mounted in EVERY mode, unlike /agent/*. This is the adapter reporting what the engine did,
+    # which has nothing to do with which brain answered — a scripted run's divergences are worth
+    # exactly as much as an agent's, and gating this on AgentBrain would mean the measurement
+    # lanes (decision_stability.py, the eval harness) could never see them.
+    @app.post("/outcome")
+    def outcome(body: EngineOutcome) -> dict[str, object]:
+        """The adapter reporting what the engine actually did with an order.
+
+        Returns the sequence number rather than a bare ack so a caller can tell a recorded report
+        from a dropped one. `traceparent` is the correlation key — see outcomes.py for why it is
+        that and not a decision id.
+        """
+        seq = outcome_store.record(body)
+        return {"recorded": seq, "traceparent": body.traceparent}
+
+    @app.get("/outcomes")
+    def outcomes(cursor: int = 0, limit: int = 100) -> dict[str, object]:
+        """Everything reported since `cursor`, with the cursor to use next.
+
+        The cursor advances even when nothing is returned, so a poller cannot get wedged
+        re-reading a tail it has already seen.
+        """
+        high, fresh = outcome_store.since(cursor=cursor, limit=limit)
+        return {
+            "cursor": high,
+            "outcomes": [o.model_dump(exclude_none=True) for o in fresh],
+            "stats": outcome_store.stats(),
+        }
+
+    @app.get("/outcome/{traceparent}")
+    def outcome_for(traceparent: str) -> dict[str, object]:
+        """What is known about one decision.
+
+        `unknown` when nothing has been reported — deliberately a 200 and not a 404, because a
+        404 invites a caller to treat "no answer yet" as "nothing went wrong".
+        """
+        return outcome_store.get(traceparent).model_dump(exclude_none=True)
 
     @app.get("/coverage")
     def coverage() -> dict[str, object]:
