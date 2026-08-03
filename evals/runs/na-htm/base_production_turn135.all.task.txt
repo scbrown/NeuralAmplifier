@@ -1,0 +1,683 @@
+You are playing a faction in Sid Meier's Alpha Centauri.
+
+You will receive a world view as JSON. Choose from `action_space` and return
+orders. Every `action_id` you return MUST appear in the world view's
+`action_space` — the engine is authoritative and an action you invent will be
+rejected. Give a short, concrete reason for each choice.
+
+If the world view carries a `fairness` block with handicaps, those are rule
+advantages you actually hold. Reason about them honestly rather than ignoring
+them.
+
+If the world view carries a `history` list, those are the choices made for this
+same subject on recent turns, oldest first, each with the `tier` that made it —
+`llm` is your own earlier reasoning, `deterministic` is the engine's default.
+
+Production is re-decided every turn, so a plan only happens if you continue one.
+Treat an unfinished item you chose before as the standing answer and stay with it
+unless something in *this* world view actually changed the case — a new option,
+a changed cost, a directive, a threat. "I would rank these differently today" is
+not a change; it is the flip-flop that finishes nothing. Switching away from a
+partly built item usually forfeits the progress, so say what changed when you do.
+
+A `deterministic` entry carries no such weight. Nothing argued for it, so it is a
+default to improve on rather than a decision to respect.
+
+If the world view carries a `grounding` list, each entry is a retrieved fact in
+the form `<id> <text>` — for example
+`unit:colony-pod Colony Pod; founds a new base elsewhere`. These are the game's
+own rules, and a `[house-rule]` tag means the fact comes from a mod rather than
+the base game.
+
+Populate `cited` with the ids of the facts that actually influenced your
+decision. Include a fact if reading it changed your assessment of an option,
+whether it supported the option you chose OR helped you rule one out. Do not
+include a fact that made no difference, and never invent an id you were not
+given — `cited` is how we measure whether retrieval was worth its cost, so
+padding it destroys the measurement it exists for.
+
+## Standing directives
+
+`directives` is the faction's standing plan: decisions made earlier that later
+turns are supposed to serve. Each entry carries the directive, its `priority`
+(1-10, higher matters more), and `current` — what its metric actually reads
+right now — so you can see whether it is being met. `satisfied: null` means the
+metric was not reported this turn and the directive cannot be checked here;
+treat that as missing information, not as compliance.
+
+Each entry also carries `via` and `hop`, which say how it reached you. `hop: 0`
+means this decision directly moves what the directive is about. A higher hop
+means it was reached through another directive — `fund-weather-paradigm →
+fac:the-weather-paradigm` means the plan you are about to affect is itself
+serving that project. Read the chain: it is why the resource you are spending is
+not merely quantity but something already committed.
+
+`tradeoffs` tells you what each option would cost the plan: for an
+`action_id`/`directive_id` pair it gives the `delta` to the metric, the
+`projected` value after acting, whether that `would_violate` a directive
+currently being met, and `setback_turns` where a rate is known.
+
+A directive is not an order. Weigh its `priority` against how much THIS
+decision matters:
+
+- 9-10 survival; overriding needs an immediate, concrete threat.
+- 7-8 a committed plan; break it only for something urgent.
+- 4-6 a preference worth real cost.
+- 1-3 a tie-breaker.
+
+So a priority-7 directive to save energy should lose to stopping a base from
+falling, and beat finishing a Scout Patrol two turns sooner. When you do
+override one, say why in the choice's `reason` — name the directive and what you
+judged more valuable.
+
+Populate `followed` with the ids of directives that changed what you picked, and
+`overrode` with those you knowingly worked against. Overriding is allowed and
+often correct; recording it is how we learn a directive was mispriced. As with
+`cited`, never invent an id.
+
+## Issuing directives
+
+Leave `directives` in your response empty unless this decision genuinely sets
+direction for future turns — a tech path, a social model, a saving plan. Most
+decisions should not issue any.
+
+A directive must be measurable, so `metric` must be one of these names exactly.
+Anything else is discarded, because it could never be checked:
+
+Metrics you may write a directive against:
+  - base_count [bases, faction-scope, higher is better] — Bases owned. The most direct measure of expansion, which is what most long-horizon plans in this game are ultimately about.
+  - drone_total [citizens, faction-scope, lower is better] — Superdrones and drones across all bases; the constraint that usually binds an SE choice.
+  - energy_income [credits/turn, faction-scope, higher is better] — Net energy credits added per turn. Reserves without income is a stock with no flow, and the two justify completely different spending.
+  - energy_reserves [credits, faction-scope, higher is better] — Energy credits banked and spendable now.
+  - labs_output [points/turn, faction-scope, higher is better] — Research points produced per turn.
+  - military_units [units, faction-scope, no direction] — Units with a non-zero attack or defence value. Neither direction is inherently good — it trades against everything else the minerals could have been.
+  - mineral_surplus [minerals/turn, base-scope, higher is better] — Net minerals produced by this base per turn.
+  - minerals_remaining [minerals, base-scope, lower is better] — Minerals still needed to finish what this base is building.
+  - pop_size [citizens, base-scope, higher is better] — Population of this base.
+  - pop_total [citizens, faction-scope, higher is better] — Total population across all bases.
+  - turns_to_completion [turns, base-scope, no direction] — Turns until this base finishes what it is building, at the current mineral surplus. Absent when the base produces no surplus and would never finish.
+
+Use `at_least`/`at_most` with a `target` for an absolute bound, or
+`increase`/`decrease`/`hold` to be measured against the value at the time you
+issue it. Set `horizon_turn` to the turn by which it should be achieved — a plan
+with no deadline cannot fail, and one that cannot fail teaches us nothing. Put
+the reasoning in `intent`, in one sentence, because a later decision will read
+it without the context you have now.
+
+Set `entities` to the grounding fact ids the directive is about — the same ids
+you would put in `cited`, e.g. `fac:the-planetary-transit-system` for a plan to
+fund that project. This is how the directive is found again: a game can carry
+hundreds of them, so a later decision is shown only the ones touching what it is
+deciding on. A directive with no entities is still found through its `metric`,
+which names the resource at stake, but one that is about a specific project and
+does not name it may never be shown to the decision that could serve it.
+
+---
+
+World view:
+
+{
+  "schema_version": "0.1",
+  "engine": "thinker",
+  "scope": "base",
+  "turn": 135,
+  "faction": "University",
+  "surface_id": "base.production",
+  "trace": {
+    "traceparent": "00-6a702830000000030000008e07a1c0de-0000008e00000088-01"
+  },
+  "decision_deadline_ms": null,
+  "run_id": "6a7028b7-05b7d5bf-00ec",
+  "year": null,
+  "fairness": {
+    "slot": "ai",
+    "difficulty": "transcend",
+    "handicaps": []
+  },
+  "action_space": [
+    {
+      "id": "unit:0",
+      "action": "Colony Pod",
+      "effects": null,
+      "category": "unit",
+      "cost": 21,
+      "role": "FOUNDS A NEW BASE elsewhere - does not grow this base",
+      "triad": "land",
+      "turns_if_switched": 11
+    },
+    {
+      "id": "unit:5",
+      "action": "Supply Crawler",
+      "effects": null,
+      "category": "unit",
+      "cost": 28,
+      "role": "ferries minerals or nutrients to another base",
+      "triad": "land",
+      "turns_if_switched": 14
+    },
+    {
+      "id": "unit:6",
+      "action": "Probe Team",
+      "effects": null,
+      "category": "unit",
+      "cost": 21,
+      "role": "infiltrates and sabotages rival factions",
+      "triad": "land",
+      "turns_if_switched": 11
+    },
+    {
+      "id": "unit:8",
+      "action": "Mind Worms",
+      "effects": null,
+      "category": "unit",
+      "cost": 35,
+      "role": "general combat unit",
+      "triad": "land",
+      "turns_if_switched": 18
+    },
+    {
+      "id": "unit:9",
+      "action": "Isle of the Deep",
+      "effects": null,
+      "category": "unit",
+      "cost": 56,
+      "role": "carries land units across water",
+      "triad": "sea",
+      "turns_if_switched": 28
+    },
+    {
+      "id": "unit:15",
+      "action": "Spore Launcher",
+      "effects": null,
+      "category": "unit",
+      "cost": 35,
+      "role": "attacks enemy units and bases",
+      "triad": "land",
+      "turns_if_switched": 18
+    },
+    {
+      "id": "unit:24",
+      "action": "Police Garrison",
+      "effects": null,
+      "category": "unit",
+      "cost": 7,
+      "role": "defends a base or position",
+      "triad": "land",
+      "turns_if_switched": 4
+    },
+    {
+      "id": "unit:194",
+      "action": "AAA Plasma Garrison V2",
+      "effects": null,
+      "category": "unit",
+      "cost": 28,
+      "role": "defends a base or position",
+      "triad": "land",
+      "turns_if_switched": 14
+    },
+    {
+      "id": "unit:196",
+      "action": "Foil Colony Pod",
+      "effects": null,
+      "category": "unit",
+      "cost": 49,
+      "role": "FOUNDS A NEW BASE elsewhere - does not grow this base",
+      "triad": "sea",
+      "turns_if_switched": 25
+    },
+    {
+      "id": "unit:210",
+      "action": "Empath R-Laser Infantry V2",
+      "effects": null,
+      "category": "unit",
+      "cost": 56,
+      "role": "general combat unit",
+      "triad": "land",
+      "turns_if_switched": 28
+    },
+    {
+      "id": "unit:216",
+      "action": "Police Plasma Garrison V2",
+      "effects": null,
+      "category": "unit",
+      "cost": 28,
+      "role": "defends a base or position",
+      "triad": "land",
+      "turns_if_switched": 14
+    },
+    {
+      "id": "unit:222",
+      "action": "Missile Rover Artillery",
+      "effects": null,
+      "category": "unit",
+      "cost": 42,
+      "role": "attacks enemy units and bases",
+      "triad": "land",
+      "turns_if_switched": 21
+    },
+    {
+      "id": "unit:224",
+      "action": "3-Res Cruiser Transport",
+      "effects": null,
+      "category": "unit",
+      "cost": 35,
+      "role": "carries land units across water",
+      "triad": "sea",
+      "turns_if_switched": 18
+    },
+    {
+      "id": "unit:225",
+      "action": "3-Res Missile Invaders",
+      "effects": null,
+      "category": "unit",
+      "cost": 56,
+      "role": "attacks enemy units and bases",
+      "triad": "land",
+      "turns_if_switched": 28
+    },
+    {
+      "id": "unit:226",
+      "action": "Fungicidal Foil Formers",
+      "effects": null,
+      "category": "unit",
+      "cost": 35,
+      "role": "terraforms terrain to improve tile yields",
+      "triad": "sea",
+      "turns_if_switched": 18
+    },
+    {
+      "id": "unit:229",
+      "action": "R-Laser Rover Artillery V2",
+      "effects": null,
+      "category": "unit",
+      "cost": 28,
+      "role": "attacks enemy units and bases",
+      "triad": "land",
+      "turns_if_switched": 14
+    },
+    {
+      "id": "unit:230",
+      "action": "Plasma Cruiser Probe Team",
+      "effects": null,
+      "category": "unit",
+      "cost": 42,
+      "role": "infiltrates and sabotages rival factions",
+      "triad": "sea",
+      "turns_if_continued": 13,
+      "turns_if_switched": 21
+    },
+    {
+      "id": "unit:231",
+      "action": "Foil Colony Pod V2",
+      "effects": null,
+      "category": "unit",
+      "cost": 28,
+      "role": "FOUNDS A NEW BASE elsewhere - does not grow this base",
+      "triad": "sea",
+      "turns_if_switched": 14
+    },
+    {
+      "id": "unit:232",
+      "action": "Foil Probe Team",
+      "effects": null,
+      "category": "unit",
+      "cost": 21,
+      "role": "infiltrates and sabotages rival factions",
+      "triad": "sea",
+      "turns_if_switched": 11
+    },
+    {
+      "id": "unit:233",
+      "action": "AAA Missile Cruiser V2",
+      "effects": null,
+      "category": "unit",
+      "cost": 35,
+      "role": "controls sea zones",
+      "triad": "sea",
+      "turns_if_switched": 18
+    },
+    {
+      "id": "unit:235",
+      "action": "3-Res Cruiser Transport V2",
+      "effects": null,
+      "category": "unit",
+      "cost": 21,
+      "role": "carries land units across water",
+      "triad": "sea",
+      "turns_if_switched": 11
+    },
+    {
+      "id": "unit:236",
+      "action": "3-Res Missile Invaders V2",
+      "effects": null,
+      "category": "unit",
+      "cost": 35,
+      "role": "attacks enemy units and bases",
+      "triad": "land",
+      "turns_if_switched": 18
+    },
+    {
+      "id": "unit:237",
+      "action": "Fungicidal Foil Formers V2",
+      "effects": null,
+      "category": "unit",
+      "cost": 28,
+      "role": "terraforms terrain to improve tile yields",
+      "triad": "sea",
+      "turns_if_switched": 14
+    },
+    {
+      "id": "unit:238",
+      "action": "Missile Battleship V2",
+      "effects": null,
+      "category": "unit",
+      "cost": 49,
+      "role": "controls sea zones",
+      "triad": "sea",
+      "turns_if_switched": 25
+    },
+    {
+      "id": "unit:239",
+      "action": "3-Res Missile Cruiser V2",
+      "effects": null,
+      "category": "unit",
+      "cost": 35,
+      "role": "controls sea zones",
+      "triad": "sea",
+      "turns_if_switched": 18
+    },
+    {
+      "id": "unit:240",
+      "action": "AAA 3-Res Sentinels V2",
+      "effects": null,
+      "category": "unit",
+      "cost": 28,
+      "role": "defends a base or position",
+      "triad": "land",
+      "turns_if_switched": 14
+    },
+    {
+      "id": "unit:241",
+      "action": "AAA Missile Infantry V2",
+      "effects": null,
+      "category": "unit",
+      "cost": 35,
+      "role": "general combat unit",
+      "triad": "land",
+      "turns_if_switched": 18
+    },
+    {
+      "id": "unit:242",
+      "action": "Missile Rover V2",
+      "effects": null,
+      "category": "unit",
+      "cost": 21,
+      "role": "attacks enemy units and bases",
+      "triad": "land",
+      "turns_if_switched": 11
+    },
+    {
+      "id": "unit:243",
+      "action": "AAA 3-Res Gunboat V2",
+      "effects": null,
+      "category": "unit",
+      "cost": 28,
+      "role": "controls sea zones",
+      "triad": "sea",
+      "turns_if_switched": 14
+    },
+    {
+      "id": "unit:244",
+      "action": "Fungicidal Rover Formers V2",
+      "effects": null,
+      "category": "unit",
+      "cost": 28,
+      "role": "terraforms terrain to improve tile yields",
+      "triad": "land",
+      "turns_if_switched": 14
+    },
+    {
+      "id": "unit:245",
+      "action": "Plasma Rover Probe Team",
+      "effects": null,
+      "category": "unit",
+      "cost": 35,
+      "role": "infiltrates and sabotages rival factions",
+      "triad": "land",
+      "turns_if_switched": 18
+    },
+    {
+      "id": "unit:246",
+      "action": "Plasma Missile Battleship V2",
+      "effects": null,
+      "category": "unit",
+      "cost": 63,
+      "role": "controls sea zones",
+      "triad": "sea",
+      "turns_if_switched": 32
+    },
+    {
+      "id": "unit:247",
+      "action": "Rover Formers V2",
+      "effects": null,
+      "category": "unit",
+      "cost": 21,
+      "role": "terraforms terrain to improve tile yields",
+      "triad": "land",
+      "turns_if_switched": 11
+    },
+    {
+      "id": "unit:248",
+      "action": "Plasma Supply V2",
+      "effects": null,
+      "category": "unit",
+      "cost": 35,
+      "role": "ferries minerals or nutrients to another base",
+      "triad": "land",
+      "turns_if_switched": 18
+    },
+    {
+      "id": "unit:249",
+      "action": "Empath Scout Rover V2",
+      "effects": null,
+      "category": "unit",
+      "cost": 35,
+      "role": "explores and scouts terrain",
+      "triad": "land",
+      "turns_if_switched": 18
+    },
+    {
+      "id": "facility:2",
+      "action": "Children's Creche",
+      "effects": null,
+      "category": "facility",
+      "cost": 35,
+      "effect": "Growth/Effic/Morale",
+      "maint": 1,
+      "turns_if_switched": 18
+    },
+    {
+      "id": "facility:4",
+      "action": "Perimeter Defense",
+      "effects": null,
+      "category": "facility",
+      "cost": 35,
+      "effect": "Defense +100%",
+      "maint": 0,
+      "turns_if_switched": 18
+    },
+    {
+      "id": "facility:6",
+      "action": "Recreation Commons",
+      "effects": null,
+      "category": "facility",
+      "cost": 28,
+      "effect": "Fewer Drones",
+      "maint": 1,
+      "turns_if_switched": 14
+    },
+    {
+      "id": "facility:7",
+      "action": "Energy Bank",
+      "effects": null,
+      "category": "facility",
+      "cost": 56,
+      "effect": "Economy Bonus",
+      "maint": 1,
+      "turns_if_switched": 28
+    },
+    {
+      "id": "facility:9",
+      "action": "Biology Lab",
+      "effects": null,
+      "category": "facility",
+      "cost": 42,
+      "effect": "Research and PSI",
+      "maint": 1,
+      "turns_if_switched": 21
+    },
+    {
+      "id": "facility:15",
+      "action": "Fusion Lab",
+      "effects": null,
+      "category": "facility",
+      "cost": 84,
+      "effect": "Econ and Labs Bonus",
+      "maint": 3,
+      "turns_if_switched": 42
+    },
+    {
+      "id": "facility:17",
+      "action": "Research Hospital",
+      "effects": null,
+      "category": "facility",
+      "cost": 84,
+      "effect": "Labs and Psych Bonus",
+      "maint": 3,
+      "turns_if_switched": 42
+    },
+    {
+      "id": "facility:23",
+      "action": "Punishment Sphere",
+      "effects": null,
+      "category": "facility",
+      "cost": 70,
+      "effect": "No Drones/-50% Tech",
+      "maint": 2,
+      "turns_if_switched": 35
+    },
+    {
+      "id": "facility:27",
+      "action": "Command Center",
+      "effects": null,
+      "category": "facility",
+      "cost": 28,
+      "effect": "+2 Morale:Land",
+      "maint": 1,
+      "turns_if_switched": 14
+    },
+    {
+      "id": "facility:28",
+      "action": "Naval Yard",
+      "effects": null,
+      "category": "facility",
+      "cost": 56,
+      "effect": "+2 Morale:Sea",
+      "maint": 2,
+      "turns_if_switched": 28
+    },
+    {
+      "id": "facility:31",
+      "action": "Centauri Preserve",
+      "effects": null,
+      "category": "facility",
+      "cost": 70,
+      "effect": "Ecology Bonus",
+      "maint": 2,
+      "turns_if_switched": 35
+    },
+    {
+      "id": "facility:36",
+      "action": "Aquafarm",
+      "effects": null,
+      "category": "facility",
+      "cost": 56,
+      "effect": "Sea Nutrients",
+      "maint": 1,
+      "turns_if_switched": 28
+    },
+    {
+      "id": "facility:69",
+      "action": "Stockpile Energy",
+      "effects": null,
+      "category": "facility",
+      "cost": 0,
+      "effect": "Minerals to Energy",
+      "maint": 0,
+      "turns_if_switched": 0
+    }
+  ],
+  "memory": null,
+  "history": [],
+  "grounding": [
+    "unit:colony-pod Colony Pod; founds a new base elsewhere; does not grow the base that builds it; [house-rule · src:alphax-txt]",
+    "unit:supply-crawler Supply Crawler; ferries minerals or nutrients to another base; [house-rule · src:alphax-txt]",
+    "unit:probe-team Probe Team; infiltrates and sabotages rival factions; [house-rule · src:alphax-txt]",
+    "unit:mind-worms Mind Worms; general-purpose combat unit; [house-rule · src:alphax-txt]",
+    "unit:isle-of-the-deep Isle of the Deep; carries land units across water; [house-rule · src:alphax-txt]",
+    "unit:spore-launcher Spore Launcher; attacks enemy units and bases; [house-rule · src:alphax-txt]",
+    "unit:police-garrison Police Garrison; defends a base or position; [house-rule · src:alphax-txt]"
+  ],
+  "advisories": null,
+  "contacts": null,
+  "subjects": null,
+  "metrics": {
+    "base_count": 55.0,
+    "drone_total": 0.0,
+    "energy_reserves": 467.0,
+    "military_units": 196.0,
+    "mineral_surplus": 2.0,
+    "minerals_remaining": 25.0,
+    "pop_size": 4.0,
+    "pop_total": 272.0,
+    "turns_to_completion": 13.0
+  },
+  "directives": null,
+  "tradeoffs": null,
+  "scores": null,
+  "economy": null,
+  "map": null,
+  "units": null,
+  "bases": null,
+  "deltas": null,
+  "action_space_size": 48,
+  "base": "Discovery Academy",
+  "base_id": 208,
+  "base_state": {
+    "current_item": 230,
+    "current_item_name": "Plasma Cruiser Probe Team",
+    "eco_damage": 0,
+    "energy_intake": 3,
+    "mineral_intake": 5,
+    "mineral_surplus": 2,
+    "minerals_accumulated": 17,
+    "nutrient_intake": 9,
+    "pop_size": 4,
+    "queue_size": 0,
+    "specialists": 0,
+    "worked_tiles": 17449
+  },
+  "call_seq": 1,
+  "cost_unit": "minerals",
+  "faction_id": 3,
+  "has_gov": 0,
+  "native_choice": 230,
+  "native_choice_name": "Plasma Cruiser Probe Team",
+  "x": 147,
+  "y": 73
+}
+
+---
+
+Respond with ONLY a single JSON object on one line, no prose, no code fence:
+{"choice": "<action_id you pick>", "cited": ["<grounding ids that influenced you>"]}

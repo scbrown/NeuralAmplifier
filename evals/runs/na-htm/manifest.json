@@ -1,0 +1,51 @@
+{
+  "note": "Does ranking predict citation, measured across decisions instead of within one?",
+  "arms": {
+    "base_production_turn135.all": {
+      "prompt_sha256": "e7ec4fcb1470",
+      "facts_offered": 7,
+      "options": 48
+    },
+    "base_production_turn135.ranked": {
+      "prompt_sha256": "01f175782195",
+      "facts_offered": 4,
+      "options": 48
+    },
+    "base_production_turn42.all": {
+      "prompt_sha256": "f64248b1fb4c",
+      "facts_offered": 7,
+      "options": 8
+    },
+    "base_production_turn42.ranked": {
+      "prompt_sha256": "05faafc5a572",
+      "facts_offered": 4,
+      "options": 8
+    },
+    "faction_se_turn135.all": {
+      "prompt_sha256": "c0df13dfee3c",
+      "facts_offered": 8,
+      "options": 9
+    },
+    "faction_se_turn135.ranked": {
+      "prompt_sha256": "e923fe1a5f28",
+      "facts_offered": 4,
+      "options": 9
+    },
+    "faction_tech_turn135.all": {
+      "prompt_sha256": "991f47a7be81",
+      "facts_offered": 5,
+      "options": 5
+    },
+    "faction_tech_turn135.ranked": {
+      "prompt_sha256": "1fbfeec8a03d",
+      "facts_offered": 4,
+      "options": 5
+    }
+  },
+  "answered_by": "NOT RUN \u2014 no answers are committed. See NOTES.md.",
+  "grounding_pinned": {
+    "source": "quipu-server on .quipu/na.db (3987 triples from datalinks/thinker/alphax.ttl)",
+    "harvested": "2026-08-03",
+    "refresh": "just eval harvest na-htm \u2014 prints the diff, does not apply it"
+  }
+}

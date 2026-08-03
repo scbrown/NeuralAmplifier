@@ -1,0 +1,65 @@
+{
+  "base_production_turn135": {
+    "capture": "base_production_turn135.json",
+    "surface_id": "base.production",
+    "turn": 135,
+    "faction": "University",
+    "options": 48,
+    "grounding": [
+      "unit:colony-pod Colony Pod; founds a new base elsewhere; does not grow the base that builds it; [house-rule \u00b7 src:alphax-txt]",
+      "unit:supply-crawler Supply Crawler; ferries minerals or nutrients to another base; [house-rule \u00b7 src:alphax-txt]",
+      "unit:probe-team Probe Team; infiltrates and sabotages rival factions; [house-rule \u00b7 src:alphax-txt]",
+      "unit:mind-worms Mind Worms; general-purpose combat unit; [house-rule \u00b7 src:alphax-txt]",
+      "unit:isle-of-the-deep Isle of the Deep; carries land units across water; [house-rule \u00b7 src:alphax-txt]",
+      "unit:spore-launcher Spore Launcher; attacks enemy units and bases; [house-rule \u00b7 src:alphax-txt]",
+      "unit:police-garrison Police Garrison; defends a base or position; [house-rule \u00b7 src:alphax-txt]"
+    ]
+  },
+  "base_production_turn42": {
+    "capture": "base_production_turn42.json",
+    "surface_id": "base.production",
+    "turn": 42,
+    "faction": "Morganites",
+    "options": 8,
+    "grounding": [
+      "unit:colony-pod Colony Pod; founds a new base elsewhere; does not grow the base that builds it; [house-rule \u00b7 src:alphax-txt]",
+      "unit:formers Formers; terraforms terrain to improve tile yields; [house-rule \u00b7 src:alphax-txt]",
+      "unit:scout-patrol Scout Patrol; explores and scouts terrain; [house-rule \u00b7 src:alphax-txt]",
+      "res:recycling-tanks Recycling Tanks; [house-rule \u00b7 src:alphax-txt]",
+      "fac:network-node Network Node; upkeep 1/turn; Labs Bonus; [house-rule \u00b7 src:alphax-txt]",
+      "fac:the-human-genome-project The Human Genome Project; +1 Talent Each Base; [house-rule \u00b7 src:alphax-txt]",
+      "fac:the-weather-paradigm The Weather Paradigm; Terraform Rate +50%; [house-rule \u00b7 src:alphax-txt]"
+    ]
+  },
+  "faction_se_turn135": {
+    "capture": "faction_se_turn135.json",
+    "surface_id": "faction.se",
+    "turn": 135,
+    "faction": "University",
+    "options": 9,
+    "grounding": [
+      "soc:politics-frontier Frontier; [house-rule \u00b7 src:alphax-txt]",
+      "soc:politics-police-state Police State; police +2, support +2, efficiency -2; [house-rule \u00b7 src:alphax-txt]",
+      "soc:economics-simple Simple; [house-rule \u00b7 src:alphax-txt]",
+      "soc:economics-free-market Free Market; economy +2, planet -3, police -5; [house-rule \u00b7 src:alphax-txt]",
+      "soc:economics-planned Planned; growth +2, industry +1, efficiency -2; [house-rule \u00b7 src:alphax-txt]",
+      "soc:values-survival Survival; [house-rule \u00b7 src:alphax-txt]",
+      "soc:values-power Power; morale +2, support +2, industry -2; [house-rule \u00b7 src:alphax-txt]",
+      "soc:values-wealth Wealth; industry +1, economy +1, morale -2; [house-rule \u00b7 src:alphax-txt]"
+    ]
+  },
+  "faction_tech_turn135": {
+    "capture": "faction_tech_turn135.json",
+    "surface_id": "faction.tech",
+    "turn": 135,
+    "faction": "Hive",
+    "options": 5,
+    "grounding": [
+      "tech:poly Polymorphic Software; [house-rule \u00b7 src:alphax-txt]",
+      "tech:docair Doctrine: Air Power; [house-rule \u00b7 src:alphax-txt]",
+      "tech:brain Secrets of the Human Brain; [house-rule \u00b7 src:alphax-txt]",
+      "tech:cyber Cyberethics; [house-rule \u00b7 src:alphax-txt]",
+      "tech:prpsych Progenitor Psych; [house-rule \u00b7 src:alphax-txt]"
+    ]
+  }
+}

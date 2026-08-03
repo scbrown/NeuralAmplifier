@@ -11,6 +11,13 @@ Three commands, matching the three steps an eval has:
 committed answers quietly become evidence about something we no longer ship, and ``score`` keeps
 printing the same confident table. It has already happened twice here.
 
+Two more commands exist for evals that define them, and both come from na-htm's post-mortem of
+na-373 — a published statistic that was never checked against a case with a known answer, over
+arms that had drifted from what the retriever did:
+
+``selftest <id>``   does the scorer recover results that are arithmetic rather than measured?
+``harvest <id>``    has the eval's pinned input drifted from what the live retriever now serves?
+
 The split is the point. Scoring a committed run works on a fresh checkout with no game, no
 sibling repo and no model, so a finding can be re-derived by anyone who doubts it.
 """
@@ -25,6 +32,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import build_history  # noqa: E402
 import grounding_compaction  # noqa: E402
+import multi_decision_ranking  # noqa: E402
 import retrieval_ranking  # noqa: E402
 from harness import DEFAULT_LINKS, RUNS, check_prompts, write_prompts  # noqa: E402
 
@@ -47,12 +55,19 @@ EVALS = {
         "Can grounding drop what the action space already carries, without moving the choice?",
         "Yes — grounding 43% smaller and the choice held 20/20 vs 19/20 (Fisher p=1.0).",
     ),
+    "na-htm": (
+        multi_decision_ranking,
+        "Does ranking predict citation, measured across decisions instead of within one?",
+        "UNANSWERED — built and self-tested, not yet run. na-373's question, re-posed over four\n"
+        " decisions whose fact pools are near-disjoint, so no single fact can carry the number.\n"
+        " Answering it is a paid run; the design, the dominance gate and the null are in place.",
+    ),
 }
 
 
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("cmd", choices=["list", "prompts", "score", "check"])
+    ap.add_argument("cmd", choices=["list", "prompts", "score", "check", "selftest", "harvest"])
     ap.add_argument("eval_id", nargs="?", help=f"one of: {', '.join(EVALS)}")
     ap.add_argument("--links", type=Path, default=DEFAULT_LINKS)
     ap.add_argument("--out", type=Path, default=None)
@@ -76,8 +91,21 @@ def main() -> None:
     module, question, _ = EVALS[args.eval_id]
     out = args.out or RUNS / args.eval_id
 
+    # Both are optional per eval, and a missing one says so rather than failing: an eval with no
+    # pinned input has nothing to harvest, and saying "not defined" is the honest answer.
+    if args.cmd in {"selftest", "harvest"}:
+        fn = getattr(module, args.cmd, None)
+        if fn is None:
+            print(f"{args.eval_id}: no {args.cmd} defined")
+            return
+        raise SystemExit(fn())
+
     if args.cmd == "prompts":
-        if not args.links.exists():
+        # Not every eval reads the rulebook. na-htm's arms are grounded through Quipu and pinned
+        # to a committed file, so demanding `alphax.txt` would refuse a command that needs
+        # nothing — and the refusal reads as "this eval is unavailable here" rather than as a
+        # guard misfiring.
+        if getattr(module, "NEEDS_LINKS", True) and not args.links.exists():
             ap.error(
                 f"{args.links} not found. Regenerating prompts needs the Thinker fork's"
                 " rulebook; set --links or THINKER_DIR. Scoring the committed run does not."

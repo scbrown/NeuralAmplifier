@@ -37,9 +37,15 @@ def describe(item: Facility, links: Datalinks, compact: bool = False) -> str:
     """One line a model can act on: cost, upkeep, effect, and the gate.
 
     ``compact`` drops the two parts that are redundant *for every option equally* when the fact
-    accompanies an action space. That evenness is the whole point — na-373 showed that cutting
-    retrieval by dropping whole facts under-explains the options it drops and biases the choice,
-    so what is left has to shed the same kinds of content everywhere.
+    accompanies an action space. That evenness is the whole point: cutting retrieval by dropping
+    whole facts under-explains the options it drops, so what is left has to shed the same kinds
+    of content everywhere.
+
+    That rationale used to be credited to na-373 as a measured result. It is not one — na-373
+    was withdrawn, its numbers being one fact's rank on a single near-unanimous world view
+    (``evals/runs/na-htm/NOTES.md``). The evenness argument stands on its own and does not need
+    the citation; what *is* measured here is na-vbe, which found compacting this way left the
+    choice intact, 20/20 against 19/20.
 
     **Cost goes** because the action space already carries an authoritative one: the adapter
     normalises the rulebook's "rows" into minerals with the faction's own cost factor, which

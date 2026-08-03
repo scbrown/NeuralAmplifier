@@ -1,8 +1,16 @@
 """na-373 — does ranking grounding by information value let us offer fewer facts?
 
-**Answered: no.** Ranking then truncating raises utilisation and changes the decision, and the
-ranking rule predicts citation worse than chance. The rule lives here rather than in the
-retriever because of that result; see `docs/quipu-integration.md`.
+**Withdrawn, and superseded by na-htm.** This eval reported that ranking predicts citation
+worse than chance; re-measurement withdrew it, and the reversal was no better. Both numbers
+reduce to one fact's rank — 19 of the 27 baseline citations here are ``fac:network-node``, so
+"citations in the top k" is really "did network-node make the cut". The choice half has the
+same defect from the other side: this world view sits 19/20 for one option, so an arm can only
+move it down.
+
+The rule still lives here rather than in the retriever, but the reason has changed and the
+distinction matters. It is **unmeasured**, not refuted. ``multi_decision_ranking`` re-poses the
+question over four decisions whose fact pools are near-disjoint, which is what one world view
+could never do; see ``runs/na-htm/NOTES.md`` and ``docs/quipu-integration.md``.
 
 Arms:
 
@@ -36,16 +44,20 @@ def _words(text: str) -> list[str]:
 
 
 def information_value(fact: str, label: str) -> float:
-    """What a fact adds beyond the option's own name — the rule under test, and refuted.
+    """What a fact adds beyond the option's own name — the rule under test, still untested.
 
     Deliberately blind to cost and affordability. Ranking by desirability would ground the
     attractive options better than the rest, biasing the choice through retrieval instead of
     informing it, and invisibly: the record shows which facts were offered, never which options
     were left comparatively unargued.
 
-    It fails anyway, for a reason that outlives the rule. Grounding is one fact per option, so
-    dropping a fact removes the argument for a *particular option* rather than removing
-    information — and an unexplained option loses.
+    This used to say the rule fails anyway, and gave the mechanism: grounding is roughly one
+    fact per option, so dropping a fact removes the argument for a *particular option* rather
+    than removing information, and an unexplained option loses. The **mechanism** is still the
+    best account of how truncation could hurt, and it is why ``multi_decision_ranking`` scores
+    choice agreement between the arms. What it is not is a measured result — the run that
+    "showed" it was one near-unanimous world view. Held as a hypothesis with an experiment
+    attached, not as a finding.
     """
     known = set(_words(label))
     fresh = [w for w in _words(fact) if w not in known]
