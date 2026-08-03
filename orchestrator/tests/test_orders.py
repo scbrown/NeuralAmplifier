@@ -207,7 +207,9 @@ def test_unconfigured_is_unavailable_not_a_crash(monkeypatch: pytest.MonkeyPatch
     assert issued["status"] == "unavailable"
 
 
-def test_bad_arity_is_422_addressed_to_the_caller(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+def test_bad_arity_is_422_addressed_to_the_caller(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     monkeypatch.setenv("NA_GAME_DIR", str(tmp_path))
     client = TestClient(create_app())
     resp = client.post("/order", json={"verb": "move", "args": [1]})
