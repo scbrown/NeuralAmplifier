@@ -12,8 +12,22 @@
       "unit:mind-worms Mind Worms; general-purpose combat unit; [house-rule \u00b7 src:alphax-txt]",
       "unit:isle-of-the-deep Isle of the Deep; carries land units across water; [house-rule \u00b7 src:alphax-txt]",
       "unit:spore-launcher Spore Launcher; attacks enemy units and bases; [house-rule \u00b7 src:alphax-txt]",
-      "unit:police-garrison Police Garrison; defends a base or position; [house-rule \u00b7 src:alphax-txt]"
-    ]
+      "unit:police-garrison Police Garrison; defends a base or position; [house-rule \u00b7 src:alphax-txt]",
+      "fac:children-s-creche Children's Creche; upkeep 1/turn; Growth/Effic/Morale; [house-rule \u00b7 src:alphax-txt]",
+      "fac:perimeter-defense Perimeter Defense; Defense +100%; [house-rule \u00b7 src:alphax-txt]",
+      "fac:recreation-commons Recreation Commons; upkeep 1/turn; Fewer Drones; [house-rule \u00b7 src:alphax-txt]",
+      "fac:energy-bank Energy Bank; upkeep 1/turn; Economy Bonus; [house-rule \u00b7 src:alphax-txt]",
+      "fac:biology-lab Biology Lab; upkeep 1/turn; Research and PSI; [house-rule \u00b7 src:alphax-txt]",
+      "fac:fusion-lab Fusion Lab; upkeep 3/turn; Econ and Labs Bonus; [house-rule \u00b7 src:alphax-txt]",
+      "fac:research-hospital Research Hospital; upkeep 3/turn; Labs and Psych Bonus; [house-rule \u00b7 src:alphax-txt]",
+      "fac:punishment-sphere Punishment Sphere; upkeep 2/turn; No Drones/-50% Tech; [house-rule \u00b7 src:alphax-txt]",
+      "fac:command-center Command Center; upkeep 1/turn; +2 Morale:Land; [house-rule \u00b7 src:alphax-txt]",
+      "fac:naval-yard Naval Yard; upkeep 2/turn; +2 Morale:Sea, Sea Def +100%; [house-rule \u00b7 src:alphax-txt]",
+      "fac:centauri-preserve Centauri Preserve; upkeep 2/turn; Ecology Bonus; [house-rule \u00b7 src:alphax-txt]",
+      "fac:aquafarm Aquafarm; upkeep 1/turn; Sea Nutrients; [house-rule \u00b7 src:alphax-txt]",
+      "fac:stockpile-energy Stockpile Energy; Minerals to Energy; [house-rule \u00b7 src:alphax-txt]"
+    ],
+    "unmatched_options": 28
   },
   "base_production_turn42": {
     "capture": "base_production_turn42.json",
@@ -29,7 +43,8 @@
       "fac:network-node Network Node; upkeep 1/turn; Labs Bonus; [house-rule \u00b7 src:alphax-txt]",
       "fac:the-human-genome-project The Human Genome Project; +1 Talent Each Base; [house-rule \u00b7 src:alphax-txt]",
       "fac:the-weather-paradigm The Weather Paradigm; Terraform Rate +50%; [house-rule \u00b7 src:alphax-txt]"
-    ]
+    ],
+    "unmatched_options": 1
   },
   "faction_se_turn135": {
     "capture": "faction_se_turn135.json",
@@ -46,7 +61,8 @@
       "soc:values-survival Survival; [house-rule \u00b7 src:alphax-txt]",
       "soc:values-power Power; morale +2, support +2, industry -2; [house-rule \u00b7 src:alphax-txt]",
       "soc:values-wealth Wealth; industry +1, economy +1, morale -2; [house-rule \u00b7 src:alphax-txt]"
-    ]
+    ],
+    "unmatched_options": 1
   },
   "faction_tech_turn135": {
     "capture": "faction_tech_turn135.json",
@@ -60,6 +76,7 @@
       "tech:brain Secrets of the Human Brain; [house-rule \u00b7 src:alphax-txt]",
       "tech:cyber Cyberethics; [house-rule \u00b7 src:alphax-txt]",
       "tech:prpsych Progenitor Psych; [house-rule \u00b7 src:alphax-txt]"
-    ]
+    ],
+    "unmatched_options": 0
   }
 }

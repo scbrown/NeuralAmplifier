@@ -130,6 +130,16 @@ class FakeQuipu(QuipuRetriever):
         return self.rows
 
 
+@pytest.fixture
+def fake_rows() -> list[dict[str, object]]:
+    """Three options the store knows about, so a dropped one is a BOUND and not a gap."""
+    return [
+        {"label": "A", "effect": "alpha"},
+        {"label": "B", "effect": "beta"},
+        {"label": "C", "effect": "gamma"},
+    ]
+
+
 def test_retrieval_is_bounded_to_the_action_space() -> None:
     """Budget discipline: the prompt grows with the choices on offer, not with
     the rulebook."""
@@ -147,10 +157,46 @@ def test_one_batched_query_per_decision() -> None:
     assert len(retriever.queries) == 1
 
 
-def test_the_limit_caps_the_query_not_just_the_result() -> None:
-    retriever = FakeQuipu([], limit=2)
-    retriever.retrieve(view("A", "B", "C"))
-    assert retriever.queries[0].count("?label = ") == 2
+def test_the_limit_caps_the_result_not_the_query(fake_rows: list[dict[str, object]]) -> None:
+    """na-dhs. This test asserted the OPPOSITE, and carried no reason for it.
+
+    Capping the candidate labels looks like the same saving and is not, because an action
+    space is ORDERED BY CATEGORY: the engine lists units before facilities, so a cap of 12 on
+    a 48-option `base.production` decision asked about seven units and not one facility — on
+    a decision that is about facilities. Measured against the real store, the cap cost 13 of
+    the 20 available facts and bought nothing: 12, 24 and 48 labels all returned in ~1151 ms.
+
+    So the query asks about everything and the limit falls on what came back.
+    """
+    retriever = FakeQuipu(fake_rows, limit=2)
+    grounding = retriever.retrieve(view("A", "B", "C"))
+    assert retriever.queries[0].count("?label = ") == 3, "every option must be asked about"
+    assert grounding.hits == 2, "the limit still bounds what reaches the prompt"
+
+
+def test_what_the_limit_drops_is_recorded_not_discarded(
+    fake_rows: list[dict[str, object]],
+) -> None:
+    """`budget.py` promises "nothing is dropped silently"; the count cap broke that promise.
+
+    It dropped upstream of the budget layer, so nothing could report it and a decision record
+    could not tell a truncated grounding from a complete one.
+    """
+    grounding = FakeQuipu(fake_rows, limit=2).retrieve(view("A", "B", "C"))
+    assert grounding.shed == ("C",)
+    assert grounding.ungrounded == 1
+
+
+def test_a_shed_option_and_an_unknown_option_are_different_findings() -> None:
+    """Opposite remedies: one bound is ours to raise, the other is a gap in the graph.
+
+    Collapsing them hides a self-inflicted truncation inside what reads as an incomplete
+    rulebook — and an option nobody has a rule for is not a bug at all.
+    """
+    rows: list[dict[str, object]] = [{"label": "A", "effect": "x"}, {"label": "B", "effect": "y"}]
+    grounding = FakeQuipu(rows, limit=1).retrieve(view("A", "B", "C"))
+    assert grounding.shed == ("B",), "had a fact, dropped by our bound"
+    assert grounding.unmatched == ("C",), "the store has no rule for it"
 
 
 def test_facts_keep_action_space_order() -> None:
@@ -211,17 +257,24 @@ def test_a_surface_whose_actions_are_not_entities_retrieves_via_its_subject() ->
     assert '?label = "Colony Pod"' in retriever.queries[0]
 
 
-def test_the_subject_is_asked_for_before_the_action_labels() -> None:
+def test_the_subject_survives_a_limit_that_drops_everything_else() -> None:
     """Order matters under a limit or a token budget.
 
     On a surface that names a subject, every option is about that one entity, so the subject is
     the least droppable fact in the payload — not the most.
+
+    That intent is unchanged; only where the limit bites moved (na-dhs). It used to be checked
+    by counting labels in the QUERY, which could only ever confirm that the subject was asked
+    about first. Now it is checked on the GROUNDING, which is the thing the claim is actually
+    about — the subject is what survives.
     """
-    retriever = FakeQuipu([], limit=1)
-    retriever.retrieve(_hurry_view(["Colony Pod"]))
-    query = retriever.queries[0]
-    assert '?label = "Colony Pod"' in query
-    assert query.count("?label = ") == 1
+    rows: list[dict[str, object]] = [
+        {"label": "Colony Pod", "effect": "founds a new base"},
+        {"label": "Hurry production", "effect": "spend energy"},
+    ]
+    grounding = FakeQuipu(rows, limit=1).retrieve(_hurry_view(["Colony Pod"]))
+    assert grounding.facts[0].startswith("Colony Pod")
+    assert "Hurry production" in grounding.shed
 
 
 def test_no_subject_leaves_retrieval_exactly_as_it_was() -> None:

@@ -53,10 +53,23 @@ class Grounding:
     degraded: bool = False
     reason: str | None = None
     latency_ms: int = 0
+    #: Options the store knew nothing about. The decision saw them UNARGUED, and that is
+    #: not a retrieval failure — the graph genuinely has no rule for them.
+    unmatched: tuple[str, ...] = ()
+    #: Options retrieval had a fact for and dropped anyway, to stay inside a count or query
+    #: bound. Separate from ``unmatched`` because the remedies are opposite: this one is
+    #: ours to raise, that one is a gap in the graph. Collapsing them hides a self-inflicted
+    #: truncation inside what looks like an incomplete rulebook (na-dhs).
+    shed: tuple[str, ...] = ()
 
     @property
     def hits(self) -> int:
         return len(self.facts)
+
+    @property
+    def ungrounded(self) -> int:
+        """Options that reached the model with no fact beside them, however that happened."""
+        return len(self.unmatched) + len(self.shed)
 
 
 @dataclass(frozen=True)
@@ -254,13 +267,40 @@ def summarise(
         quipu_absent=grounding.reason == "no retriever configured",
         hank_verdict=ruling.verdict if guarded else None,
         stripped=list(ruling.stripped),
-        advisories=list(ruling.advisories),
+        advisories=list(ruling.advisories) + _retrieval_advisories(grounding),
         quipu_degraded=grounding.degraded,
         hank_degraded=ruling.degraded,
         hank_absent=not guarded,
         quipu_latency_ms=grounding.latency_ms,
         hank_latency_ms=ruling.latency_ms,
     )
+
+
+def _retrieval_advisories(grounding: Grounding) -> list[str]:
+    """Say when options reached the model unargued, and say which KIND of unargued.
+
+    Retrieval had no channel onto the record before this: the guard's advisories were the
+    only ones assembled, so an option dropped by a retrieval bound was indistinguishable in
+    a decision record from an option the graph has no rule for — and both were
+    indistinguishable from a fully grounded decision. That is how na-dhs went unnoticed while
+    a 48-option decision grounded seven.
+
+    The two are reported separately because they are not the same finding and do not have the
+    same fix. ``shed`` is ours and we can raise it; ``unmatched`` is a gap in the graph and
+    raising anything will not touch it.
+    """
+    notes: list[str] = []
+    if grounding.shed:
+        notes.append(
+            f"{len(grounding.shed)} option(s) had a fact and were dropped by a retrieval "
+            f"bound: {', '.join(grounding.shed[:5])}" + (" …" if len(grounding.shed) > 5 else "")
+        )
+    if grounding.unmatched:
+        notes.append(
+            f"{len(grounding.unmatched)} option(s) the store has no rule for: "
+            f"{', '.join(grounding.unmatched[:5])}" + (" …" if len(grounding.unmatched) > 5 else "")
+        )
+    return notes
 
 
 def _elapsed(started: float) -> int:

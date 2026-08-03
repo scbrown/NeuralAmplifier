@@ -176,13 +176,23 @@ class QuipuRetriever:
         self,
         base_url: str = "http://127.0.0.1:3030",
         engine: str = "thinker",
-        limit: int = 12,
+        limit: int = 0,
         timeout: float = 2.0,
         token_budget: int = 0,
+        query_labels: int = 64,
     ) -> None:
         self.base_url = base_url.rstrip("/")
         self.engine = engine
+        #: Ceiling on facts KEPT, applied to what the store returned. 0 disables it, which is
+        #: now the default: `token_budget` is the bound this layer is designed to have (it
+        #: bounds prompt SIZE, which is the thing that actually costs, and it records what it
+        #: shed). A count cap was doing that job in a place where nothing could see it.
         self.limit = limit
+        #: Ceiling on labels put into ONE SPARQL disjunction — a guard on query shape, not on
+        #: how much grounding a decision may have. Deliberately generous: no realistic action
+        #: space reaches it, and when it does bite, the labels land in ``Grounding.shed``
+        #: rather than vanishing.
+        self.query_labels = query_labels
         #: Approximate token ceiling for grounding, 0 to disable. Bounding
         #: the count alone says nothing about prompt size when one fact is
         #: a paragraph (``budget.py``).
@@ -215,14 +225,30 @@ class QuipuRetriever:
         # limit has to drop something, the subject is the last thing to go. Surfaces that name
         # no subject are unaffected, which is every surface that predates this.
         candidates = list(world_view.subjects or []) + [a.action for a in world_view.action_space]
-        labels = list(dict.fromkeys(candidates))[: self.limit]
-        if not labels:
+        labels = list(dict.fromkeys(candidates))
+        # The query bound is a guard against an unbounded SPARQL disjunction, NOT the fact
+        # limit — those were the same number until na-dhs, and conflating them cost 13 of 20
+        # available facts on a 48-option decision while buying no latency at all (measured:
+        # 12, 24 and 48 labels all returned in ~1151 ms against the same store).
+        asked = labels[: self.query_labels]
+        unasked = labels[self.query_labels :]
+        if not asked:
             return Grounding()
-        rows = self.query(build_query(labels, self.engine))
+        rows = self.query(build_query(asked, self.engine))
         # Preserve action-space order so the prompt reads in the order the
         # engine offered the choices, not in whatever order the store returns.
         by_label = {str(r.get("label")): r for r in rows}
-        matched = [label for label in labels if label in by_label]
+        found = [label for label in asked if label in by_label]
+        # The count limit applies HERE, to what the store actually returned — not upstream to
+        # what we were willing to ask about. Applied to candidates it silently excluded whole
+        # CATEGORIES rather than a tail: action spaces list units before facilities, so a cap
+        # of 12 on a 48-option base.production decision grounded seven units and not one
+        # facility, on a decision that is about facilities.
+        matched = found[: self.limit] if self.limit else found
+        # Two ways an option arrives unargued, and they are kept apart because the remedies
+        # are opposite: `unmatched` is a gap in the graph, `shed` is a bound of ours.
+        unmatched = tuple(label for label in asked if label not in by_label)
+        shed = tuple(found[self.limit :]) + tuple(unasked) if self.limit else tuple(unasked)
         node_of = {label: str(by_label[label].get("f", "")) for label in matched}
         facts = [Fact(format_row(by_label[label]), kind="rule") for label in matched]
 
@@ -238,9 +264,11 @@ class QuipuRetriever:
                 for label, fact in zip(matched, facts, strict=True)
                 if fact.text in kept
             )
-            return replace(grounding, fact_ids=ids)
+            return replace(grounding, fact_ids=ids, unmatched=unmatched, shed=shed)
 
         return Grounding(
             facts=tuple(f.text for f in facts),
             fact_ids=tuple(fact_id(node_of[label]) for label in matched),
+            unmatched=unmatched,
+            shed=shed,
         )

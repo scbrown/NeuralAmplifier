@@ -5,5 +5,18 @@
   "unit:mind-worms",
   "unit:isle-of-the-deep",
   "unit:spore-launcher",
-  "unit:police-garrison"
+  "unit:police-garrison",
+  "fac:children-s-creche",
+  "fac:perimeter-defense",
+  "fac:recreation-commons",
+  "fac:energy-bank",
+  "fac:biology-lab",
+  "fac:fusion-lab",
+  "fac:research-hospital",
+  "fac:punishment-sphere",
+  "fac:command-center",
+  "fac:naval-yard",
+  "fac:centauri-preserve",
+  "fac:aquafarm",
+  "fac:stockpile-energy"
 ]

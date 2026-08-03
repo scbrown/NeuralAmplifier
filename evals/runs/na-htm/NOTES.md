@@ -21,10 +21,17 @@ One world view cannot measure a ranking rule. That is the finding na-373 actuall
 
 | decision | surface | turn | faction | options | facts |
 | --- | --- | --- | --- | --- | --- |
-| `base_production_turn135` | `base.production` | 135 | University | 48 | 7 (`unit:`) |
+| `base_production_turn135` | `base.production` | 135 | University | 48 | 20 (`fac:`/`unit:`) |
 | `base_production_turn42` | `base.production` | 42 | Morganites | 8 | 7 (`fac:`/`res:`/`unit:`) |
 | `faction_se_turn135` | `faction.se` | 135 | University | 9 | 8 (`soc:`) |
 | `faction_tech_turn135` | `faction.tech` | 135 | Hive | 5 | 5 (`tech:`) |
+
+**Re-pinned once, before any spend, when na-dhs was fixed.** The first pin gave
+`base_production_turn135` **7** facts; the retriever was capping candidate labels rather than
+results, so it asked about 12 of 48 options and — because action spaces list units before
+facilities — grounded seven units and not one facility on a decision about facilities. `harvest`
+caught the drift and named all 13 new facts, which is exactly what it is for. Re-pinning cost
+nothing here because no answers were committed yet; after a paid run it would cost the run.
 
 The fact pools are near-disjoint — **one** id (`unit:colony-pod`) appears in two decisions, and
 no other is shared. That is what stops a single fact from owning the pooled number, and it is
@@ -87,14 +94,18 @@ a committed run.
 
 ## Two things observed while building this, worth their own attention
 
-**The 48-option decision grounds 7 of its options.** `QuipuRetriever` truncates to `limit=12`
-*labels before querying* (`quipu.py`: `labels = [...][: self.limit]`), so on
-`base_production_turn135` only the first 12 of 48 options are asked about and 7 resolve. The
-`all` arm there is already a heavy truncation of the action space, and the `ranked` arm
-truncates a truncation. It does not invalidate the rank measurement — every citation is still
-scored against the ranking of what was actually offered — but "every fact the action space
-pulls" is not what happens on a large action space, and na-373's stated mechanism for why
-truncation hurts (an unexplained option loses) applies to 41 options there before any arm acts.
+**The 48-option decision grounded 7 of its options — FIXED, na-dhs.** `QuipuRetriever` applied
+`limit=12` to candidate *labels before querying*, so only the first 12 of 48 options were asked
+about. Measured against the real store: the cap cost **13 of the 20 available facts** and bought
+no latency whatever (12, 24 and 48 labels all returned in ~1151 ms). Worse than a tail-drop,
+because action spaces are ordered by category: all 13 lost facts were facilities. The limit now
+falls on results, `token_budget` is the real bound, and what a bound drops lands in
+`Grounding.shed` — kept apart from `Grounding.unmatched`, since 28 of those 48 options are
+options the store has no rule for, which is a gap in the graph and not a truncation.
+
+Even fixed, 28 of 48 options reach the model unargued on that decision. That is now *visible*
+on the record rather than inferred, and na-373's stated mechanism (an unexplained option loses)
+still applies to them before any arm acts.
 
 **`just eval check` already exits 1 on the three older evals.** Their committed answers were
 measured against a system prompt that has since gained `turns_to_completion`, and a contract

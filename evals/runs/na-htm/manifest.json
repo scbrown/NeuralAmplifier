@@ -2,8 +2,8 @@
   "note": "Does ranking predict citation, measured across decisions instead of within one?",
   "arms": {
     "base_production_turn135.all": {
-      "prompt_sha256": "e7ec4fcb1470",
-      "facts_offered": 7,
+      "prompt_sha256": "e264f724d467",
+      "facts_offered": 20,
       "options": 48
     },
     "base_production_turn135.ranked": {
@@ -46,6 +46,7 @@
   "grounding_pinned": {
     "source": "quipu-server on .quipu/na.db (3987 triples from datalinks/thinker/alphax.ttl)",
     "harvested": "2026-08-03",
+    "repinned": "2026-08-03 after na-dhs \u2014 base.production t135 went 7 -> 20 facts",
     "refresh": "just eval harvest na-htm \u2014 prints the diff, does not apply it"
   }
 }
