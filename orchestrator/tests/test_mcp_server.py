@@ -31,7 +31,19 @@ class FakeClient(OrchestratorClient):
         self.submitted: list[tuple[str, str, str | None]] = []
         self.extras: list[dict[str, Any]] = []
         self.directives: list[dict[str, Any]] = []
+        self.orders: list[dict[str, Any]] = []
         self.raises: Exception | None = None
+
+    def order(self, payload: dict[str, Any]) -> dict[str, Any]:
+        if self.raises:
+            raise self.raises
+        self.orders.append(payload)
+        return {"status": "ok", "command": "skip 3", "detail": "veh 3 ends its turn"}
+
+    def outcomes(self, cursor: int) -> dict[str, Any]:
+        if self.raises:
+            raise self.raises
+        return {"cursor": cursor, "outcomes": [], "stats": {"decisions": 0}}
 
     def next_decision(self, wait: float) -> dict[str, Any]:
         if self.raises:
@@ -102,18 +114,45 @@ def call(server: Any, name: str, **kwargs: Any) -> str:
     return text
 
 
-def test_the_surface_is_the_four_things_a_decision_needs() -> None:
-    """Find out, read, answer — plus setting a plan that outlives the turn.
+def test_the_surface_is_answering_plus_acting_and_nothing_that_reads_the_board() -> None:
+    """Find out, read, answer, plan — plus act, and learn what the act did.
 
-    Anything beyond these invites the model to go looking for game state instead of reading the
-    world view it was handed.
+    This test used to assert exactly four tools, on the grounds that anything more "invites the
+    model to go looking for game state instead of reading the world view it was handed". That
+    rationale is right and it is NOT a count: the invariant is **no second source of board
+    state**, and `issue_order` / `order_outcomes` do not offer one.
+
+    `issue_order` acts rather than reads — a different axis entirely, and the one that lets an
+    agent chain a dependent move instead of taking whatever the engine offers next.
+    `order_outcomes` reports what the ENGINE did with an order afterwards, which is information
+    the world view structurally cannot carry because it did not exist when the world view was
+    built.
+
+    So the guard below is the one that actually protects the principle: no tool may offer to read
+    the board. Keeping the count instead would have blocked a safe addition while permitting an
+    unsafe one with a familiar name.
     """
-    assert set(tools(build_server(FakeClient()))) == {
+    named = tools(build_server(FakeClient()))
+    assert set(named) == {
         "next_decision",
         "submit_orders",
         "decisions_waiting",
         "issue_directive",
+        "issue_order",
+        "order_outcomes",
     }
+
+
+def test_no_tool_offers_to_read_game_state() -> None:
+    """The invariant behind the surface, asserted directly rather than via a count.
+
+    A tool that hands back the board — tiles, units, a map, another faction's bases — would let a
+    model reason from something the orchestrator never fog-gated and never recorded, and every
+    measurement here assumes the world view is what the brain saw.
+    """
+    forbidden = ("read_map", "get_board", "list_units", "inspect_base", "map_tiles", "scan")
+    named = tools(build_server(FakeClient()))
+    assert not (set(named) & set(forbidden))
 
 
 def test_tool_descriptions_state_the_legality_rule() -> None:

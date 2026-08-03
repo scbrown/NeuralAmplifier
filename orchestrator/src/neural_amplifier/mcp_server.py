@@ -92,6 +92,12 @@ class OrchestratorClient:
     def waiting(self) -> dict[str, Any]:
         return self._call("/agent/waiting")
 
+    def order(self, payload: dict[str, Any]) -> dict[str, Any]:
+        return self._call("/order", payload)
+
+    def outcomes(self, cursor: int) -> dict[str, Any]:
+        return self._call("/agent/outcomes", {"cursor": cursor})
+
 
 class AgentError(RuntimeError):
     """Something the model should read and respond to, not a crash."""
@@ -240,6 +246,44 @@ def build_server(client: OrchestratorClient) -> Any:
         answered something, this is how to find out without guessing.
         """
         return json.dumps(client.waiting(), indent=2)
+
+    @server.tool()
+    def issue_order(verb: str, args: list[int]) -> str:
+        """Command a unit or base DIRECTLY, without waiting to be asked.
+
+        `next_decision` gives you what the engine chose to ask about, one at a time, in its order.
+        This is the other door: pick the unit or base you care about and order it now. It is what
+        makes a dependent move possible — order the move that has to happen first, then the one
+        that depends on it.
+
+            issue_order("move",  [veh_id, x, y])     send a unit to a tile
+            issue_order("skip",  [veh_id])           end that unit's turn
+            issue_order("build", [base_id, item_id]) set a base's production
+
+        READ THE STATUS. `ok` means the game did it. `refused` means the game ran your order and
+        declined it — the detail says why, and retrying the same thing will fail the same way.
+        `unknown` means **the order may or may not have happened**: it is not a failure and it is
+        not a success, and re-issuing may double-apply. Check the board before you retry.
+        `unavailable` means this game was not launched with ordering configured.
+
+        Legality is the engine's call, not this tool's — an illegal move comes back `refused` with
+        the engine's own reason rather than being guessed at here.
+        """
+        return json.dumps(client.order({"verb": verb, "args": args}), indent=2)
+
+    @server.tool()
+    def order_outcomes(cursor: int = 0) -> str:
+        """Did the orders you gave actually take effect?
+
+        You know what you submitted and what the orchestrator applied. Neither answers whether the
+        ENGINE kept it: an order can pass every check and still be overwritten by a later engine
+        path. This reports what the game did, including divergences — where the base is building
+        something other than what was decided.
+
+        Pass back the `cursor` you were given to see only what is new. A decision you have not
+        heard about reads `unknown`, never `applied`.
+        """
+        return json.dumps(client.outcomes(cursor), indent=2)
 
     return server
 
