@@ -1,0 +1,127 @@
+#
+# Turn and decision mechanics — how the engine actually offers and applies orders.
+#
+# HAND-AUTHORED. Unlike thinker/alphax.ttl this is not generated: there is no data file to
+# parse, because these facts are behaviour rather than rows. Edit this file directly; do not
+# point an ingester at it.
+#
+# Why they are in the graph at all: they are the facts a *playing* agent needs and cannot read
+# off a world view. "Hurrying spends credits irreversibly" is not in the action space; it is the
+# reason an agent should think twice before choosing it. See ../docs/turn-scoped-play.md.
+#
+# Every node carries the three provenance predicates RuleProvenanceShape requires
+# (appliesToEngine, ruleTier, sourcedFrom). Tiers are used strictly:
+#   canonical       stock SMAC behaviour, true of any engine playing the game
+#   house-rule      a Thinker override or addition
+#   engine-observed read out of engine C++; carries smac:computedBy
+#
+# NOTE on smac:computedBy targets: these name the implementing functions, but those symbols are
+# NOT yet Hank-promoted — promotion is gated on Hank Phase 4 (docs/policy-harness.md). The
+# predicate is recorded now so the bridge resolves the moment promotion lands, rather than being
+# retrofitted later. Until then treat the object as an identifier, not a dereferenceable node.
+#
+
+@prefix smac:   <http://neuralamplifier.local/ontology/smac/> .
+@prefix mech:   <http://neuralamplifier.local/ontology/smac/mechanic/> .
+@prefix src:    <http://neuralamplifier.local/ontology/smac/source/> .
+@prefix bobbin: <http://aegis.gastown.local/ontology/> .
+@prefix rdfs:   <http://www.w3.org/2000/01/rdf-schema#> .
+
+src:thinker-neural-cpp a smac:Source ;
+    rdfs:label "thinker src/neural.cpp" ;
+    rdfs:comment "The Neural Amplifier adapter inside the Thinker fork." .
+
+src:smac-player-ui a smac:Source ;
+    rdfs:label "SMAC player interface" ;
+    rdfs:comment "Stock behaviour available to any human player; not engine-specific." .
+
+# --- How orders are offered -------------------------------------------------------------
+
+mech:unit-activation-cycle a smac:TurnMechanic ;
+    rdfs:label "Units awaiting orders are offered in a cycle" ;
+    rdfs:comment """During a faction's turn the engine cycles through units that still have
+movement, presenting each in turn for orders. The cycle is the DEFAULT path, not the only one:
+it is an offer, and skipping or ignoring it does not forfeit the order.""" ;
+    smac:appliesToEngine "smac" ;
+    smac:ruleTier "canonical" ;
+    smac:sourcedFrom src:smac-player-ui .
+
+mech:direct-unit-addressing a smac:TurnMechanic ;
+    rdfs:label "Any unit or base can be commanded directly, out of cycle" ;
+    rdfs:comment """A player may select any owned unit or base at any point in their turn and
+issue orders to it, without waiting for the activation cycle to reach it. This is what makes
+DEPENDENT MOVES possible: a chain whose second step depends on the first can be ordered in that
+order, rather than in whatever order the engine happens to offer.
+
+Operationally this is the most important mechanic on this list for an agent, because the
+one-at-a-time decision hook makes the cycle look mandatory when it is not.""" ;
+    smac:appliesToEngine "smac" ;
+    smac:ruleTier "canonical" ;
+    smac:sourcedFrom src:smac-player-ui ;
+    smac:enables mech:dependent-move-chaining .
+
+mech:dependent-move-chaining a smac:TurnMechanic ;
+    rdfs:label "Dependent moves can be chained within one turn" ;
+    rdfs:comment """Because units can be addressed directly and in any order, a move whose
+sensible choice depends on another unit having already moved can simply be ordered second. No
+deferral mechanism is required; the ordering is the agent's to choose.""" ;
+    smac:appliesToEngine "smac" ;
+    smac:ruleTier "canonical" ;
+    smac:sourcedFrom src:smac-player-ui .
+
+# --- How production choices are applied -------------------------------------------------
+
+mech:base-build-reasked-per-turn a smac:TurnMechanic ;
+    rdfs:label "A base's production is asked several times per turn; the last answer wins" ;
+    rdfs:comment """mod_base_reset is hooked at eleven call sites and each runs mod_base_build
+followed by mod_base_change, so every call APPLIES its own answer and the last one to run is
+what the base actually builds.
+
+Measured in real play: 21 of 24 base-turns fired twice, 11 of those pairs disagreeing on the
+choice. Three of the 24 fired only ONCE — so a plan that relies on getting a second chance at a
+given base is relying on something that does not always happen.""" ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "engine-observed" ;
+    smac:sourcedFrom src:thinker-neural-cpp ;
+    smac:computedBy bobbin:thinker.mod_base_build .
+
+mech:build-queue-revisable a smac:TurnMechanic ;
+    rdfs:label "A base's production item can be changed before it completes" ;
+    rdfs:comment """Production is a queue setting rather than a committed act: accumulated
+minerals stay with the base and the item may be changed on a later turn. Changing between
+categories can incur the engine's retooling penalty, so revisable does not mean free.""" ;
+    smac:appliesToEngine "smac" ;
+    smac:ruleTier "canonical" ;
+    smac:sourcedFrom src:smac-player-ui ;
+    smac:reversible true .
+
+mech:hurry-irreversible a smac:TurnMechanic ;
+    rdfs:label "Hurrying production spends energy credits irreversibly" ;
+    rdfs:comment """Hurrying deducts energy credits at the moment it applies and there is no
+refund, no undo, and no later turn in which the decision can be revisited. It is the one
+instrumented surface that spends something unrecoverable, which is why na.toml singles it out
+as the first toggle to reach for if a run starts burning reserves.
+
+Consequence for a planning agent: an irreversible action should be ordered LAST in a turn,
+after the reversible ones have settled, because every earlier choice can still be revised in
+light of it but not the other way round.""" ;
+    smac:appliesToEngine "smac" ;
+    smac:ruleTier "canonical" ;
+    smac:sourcedFrom src:smac-player-ui ;
+    smac:reversible false .
+
+# --- What the engine does with an answer ------------------------------------------------
+
+mech:engine-is-authoritative a smac:TurnMechanic ;
+    rdfs:label "The engine may silently decline an order it accepted" ;
+    rdfs:comment """An order can pass every availability test and still not survive: a later
+engine path may overwrite the base's queue, a retool interaction may intervene, or a rule nobody
+encoded may apply. The adapter therefore reads state back AFTER the apply and records a
+divergence event when what the base holds differs from what was decided.
+
+The mechanic to carry into planning: an accepted order is not an applied one, and only a
+read-back distinguishes them.""" ;
+    smac:appliesToEngine "thinker" ;
+    smac:ruleTier "engine-observed" ;
+    smac:sourcedFrom src:thinker-neural-cpp ;
+    smac:computedBy bobbin:thinker.na_verify_base_production .

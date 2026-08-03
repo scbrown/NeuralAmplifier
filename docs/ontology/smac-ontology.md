@@ -183,6 +183,57 @@ file, so those predicates carry `sourcedFrom` pointing at the faction file, not
 the `alphax.txt` roster node — e.g. `GAIANS` → `socialPreference` Green,
 `socialAversion` Free Market.
 
+### `smac:TurnMechanic` — **not** from `alphax.txt`
+
+Every class above is a row in a data file. This one is not: it is **how the engine offers and
+applies orders**, which no section of `alphax.txt` describes and no world view can carry.
+
+It exists because those facts are exactly what a *playing* agent needs and cannot read off the
+board. "Hurrying spends credits irreversibly" never appears in an action space — the action space
+offers `hurry:now` and `hurry:none` and says nothing about which one you can take back. That
+asymmetry is the fact, and it belongs where a decision can retrieve it.
+
+Facts live in [`../../datalinks/mechanics.ttl`](../../datalinks/mechanics.ttl), which is
+**hand-authored** — there is no file to parse, because these are behaviour rather than rows.
+Contrast `thinker/alphax.ttl`, which is generated and must be regenerated rather than edited.
+
+Predicates beyond the provenance three:
+
+- **`smac:reversible`** (boolean) — can this be taken back within the game? `base.production` is
+  a queue setting and true; hurrying is false. This is the predicate a planner orders its turn by:
+  do the reversible things first, the irreversible ones last, because every earlier choice can
+  still be revised in light of a later one but not the other way round.
+- **`smac:enables`** (IRI) — one mechanic making another possible. Direct unit addressing
+  `enables` dependent-move chaining; without the first the second is not merely harder, it is
+  unavailable.
+
+Worked example, and the one with the most operational consequence:
+
+```turtle
+mech:direct-unit-addressing a smac:TurnMechanic ;
+    rdfs:label "Any unit or base can be commanded directly, out of cycle" ;
+    smac:appliesToEngine "smac" ;
+    smac:ruleTier        "canonical" ;
+    smac:sourcedFrom     src:smac-player-ui ;
+    smac:enables         mech:dependent-move-chaining .
+```
+
+A player has always been able to select any unit and order it without waiting for the activation
+cycle. The cycle is an *offer*, not a queue you must drain in order. That is easy to lose sight
+of from inside a one-decision-at-a-time harness, where the cycle looks mandatory — see
+[../turn-scoped-play.md](../turn-scoped-play.md), which is the design this class was written for.
+
+Thinker-specific mechanics take `ruleTier "engine-observed"` and carry `smac:computedBy`, per the
+"Engine-observed via Hank" section below — for example that a base's production is asked several
+times per turn with the last answer winning, which is a Thinker hooking behaviour and not stock
+SMAC.
+
+> **Honest gap.** The `computedBy` objects in `mechanics.ttl` name real functions but those
+> symbols are **not yet Hank-promoted** (gated on Hank Phase 4). The predicate is recorded now so
+> the bridge resolves when promotion lands; until then the object is an identifier, not a
+> dereferenceable node. Recorded rather than omitted because a missing edge would have to be
+> rediscovered; a stated one only has to be resolved.
+
 ## The tech graph as SPARQL
 
 Because `smac:requiresTech` is a real edge on every class, the whole dependency

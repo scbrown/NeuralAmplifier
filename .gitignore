@@ -69,6 +69,11 @@ CLAUDE.local.md
 # Root-anchored so it cannot swallow orchestrator/src/neural_amplifier/datalinks/.
 /datalinks/*
 !/datalinks/thinker/
+# mechanics.ttl is hand-authored by this project and carries NO game data: it
+# describes how the engine offers and applies orders, which no alphax.txt row
+# states. It is not a derived copy of anything, so the copyright rule above does
+# not reach it — and unlike thinker/, it must not be regenerated.
+!/datalinks/mechanics.ttl
 
 # Local Quipu store — rebuildable with `just quipu-load`.
 /.quipu/

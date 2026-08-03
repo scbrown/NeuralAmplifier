@@ -195,6 +195,64 @@ parsing. `computedBy` is `sh:class bobbin:CodeSymbol` (the sanctioned
 `smac:`→`bobbin:` crossing) with `maxCount 1` and no `minCount` — optional,
 because most SPs are grounded in `alphax.txt` prose, not engine C++.
 
+### (4) `smac:TurnMechanicShape` — reversibility is not optional
+
+A `TurnMechanic` is retrieved to answer "can I take this back?", so the one predicate that must
+never be absent is the one that answers it.
+
+```turtle
+# ── TurnMechanic ───────────────────────────────────────────────
+#
+# Behaviour rather than a data-file row (../../datalinks/mechanics.ttl).
+# Strict on `reversible` for the same reason SecretProject is strict on
+# its five ints: the fact is retrieved precisely to answer "can this be
+# undone", and a mechanic that is silent on it does not merely say less
+# — it reads as "no constraint" at the moment an agent is deciding
+# whether to spend something it cannot recover.
+#
+# Deliberately NOT minCount 1, because most mechanics are neither
+# reversible nor irreversible in any useful sense (a cycle is not an
+# act). It is maxCount 1 and typed: state it once, or not at all.
+
+smac:TurnMechanicShape a sh:NodeShape ;
+    sh:targetClass smac:TurnMechanic ;
+    sh:property [
+        sh:path rdfs:label ;
+        sh:datatype xsd:string ;
+        sh:minCount 1 ; sh:maxCount 1 ;
+    ] ;
+    sh:property [
+        sh:path smac:reversible ;
+        sh:datatype xsd:boolean ;
+        sh:maxCount 1 ;
+    ] ;
+    sh:property [
+        sh:path smac:enables ;
+        sh:class smac:TurnMechanic ;
+    ] ;
+    sh:property [
+        sh:path smac:computedBy ;
+        sh:class bobbin:CodeSymbol ;
+        sh:maxCount 1 ;
+    ] .
+```
+
+Rationale, and one deliberate omission worth defending. `reversible` is **`maxCount 1` without a
+`minCount`** rather than required. Most mechanics are not acts at all — the activation cycle is
+not something you can "take back" — and forcing a boolean onto them would mean writing `false`
+where the truthful answer is "not applicable", which is how a vocabulary starts lying. What the
+shape does enforce is that a mechanic which *does* state reversibility states it once and as a
+boolean, so a retrieval can branch on it without parsing prose.
+
+`enables` is `sh:class smac:TurnMechanic` — a mechanic can only enable another mechanic, which
+keeps it from drifting into a general-purpose "related to" edge. No `maxCount`: one mechanic may
+enable several.
+
+`computedBy` matches the SecretProject treatment exactly — optional, `maxCount 1`, and the only
+sanctioned `smac:`→`bobbin:` crossing. It is present on the Thinker-specific mechanics
+(`engine-observed`) and absent on the stock ones, which are player-interface behaviour with no
+single function behind them.
+
 ## Loading and validation
 
 These shapes load into the datalinks graph the same way `code-entities.ttl` does
