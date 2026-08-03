@@ -1,0 +1,123 @@
+{
+  "action_space": [
+    {
+      "action": "Polymorphic Software",
+      "ai_weights": {
+        "growth": 0,
+        "power": 2,
+        "tech": 3,
+        "wealth": 1
+      },
+      "category": "tech",
+      "cost": 855,
+      "effects": null,
+      "id": "tech:22",
+      "turns_to_complete": 1
+    },
+    {
+      "action": "Doctrine: Air Power",
+      "ai_weights": {
+        "growth": 4,
+        "power": 3,
+        "tech": 0,
+        "wealth": 3
+      },
+      "category": "tech",
+      "cost": 2387,
+      "effects": null,
+      "id": "tech:39",
+      "turns_to_complete": 1
+    },
+    {
+      "action": "Secrets of the Human Brain",
+      "ai_weights": {
+        "growth": 3,
+        "power": 1,
+        "tech": 5,
+        "wealth": 0
+      },
+      "category": "tech",
+      "cost": 808,
+      "effects": null,
+      "id": "tech:48",
+      "turns_to_complete": 1
+    },
+    {
+      "action": "Cyberethics",
+      "ai_weights": {
+        "growth": 0,
+        "power": 1,
+        "tech": 3,
+        "wealth": 4
+      },
+      "category": "tech",
+      "cost": 1472,
+      "effects": null,
+      "id": "tech:53",
+      "turns_to_complete": 1
+    },
+    {
+      "action": "Progenitor Psych",
+      "ai_weights": {
+        "growth": 4,
+        "power": 0,
+        "tech": 2,
+        "wealth": 3
+      },
+      "category": "tech",
+      "cost": 625,
+      "effects": null,
+      "id": "tech:78",
+      "turns_to_complete": 1
+    }
+  ],
+  "action_space_size": 5,
+  "advisories": null,
+  "bases": null,
+  "contacts": null,
+  "decision_deadline_ms": null,
+  "deltas": null,
+  "directives": null,
+  "economy": null,
+  "engine": "thinker",
+  "faction": "Hive",
+  "faction_id": 2,
+  "fairness": {
+    "difficulty": "transcend",
+    "handicaps": [],
+    "slot": "ai"
+  },
+  "grounding": null,
+  "history": null,
+  "map": null,
+  "memory": null,
+  "metrics": {
+    "base_count": 49.0,
+    "drone_total": 2.0,
+    "energy_income": 6.0,
+    "energy_reserves": 700.0,
+    "labs_output": 25.0,
+    "military_units": 261.0,
+    "pop_total": 164.0
+  },
+  "native_choice": 39,
+  "native_choice_name": "Doctrine: Air Power",
+  "research_state": "idle",
+  "run_id": "6a702696-05af84ae-00e8",
+  "schema_version": "0.1",
+  "scope": "turn",
+  "scores": null,
+  "subjects": null,
+  "surface_id": "faction.tech",
+  "tech_accumulated": 0,
+  "tech_cost": 2387,
+  "tech_rate": 2387,
+  "trace": {
+    "traceparent": "00-6a702611000000020000004407a1c0de-0000004400000088-01"
+  },
+  "tradeoffs": null,
+  "turn": 135,
+  "turns_to_complete": 1,
+  "units": null,
+  "year": null
+}

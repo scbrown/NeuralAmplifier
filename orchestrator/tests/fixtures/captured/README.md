@@ -19,6 +19,20 @@ NA_BRAIN=agent NA_WORLD_VIEW_STORE=/tmp/wv \
 # play a few turns, answering decisions, then copy the newest capture per surface
 ```
 
-Provenance of the current set: Thinker adapter, turn 42, Morganites/Gaians,
-captured 2026-08-02 while running na-1wu. `base_production_turn42.json` is the
-useful one — eight legal builds with costs, roles and both turn estimates.
+Provenance: Thinker adapter.
+
+- `base_production_turn42.json`, `faction_se_turn42.json` — turn 42,
+  Morganites/Gaians, captured 2026-08-02 running na-1wu. `base_production` is the
+  useful one — eight legal builds with costs, roles and both turn estimates.
+- `faction_tech_turn135.json` — turn 135, Hive, captured 2026-08-03 running the
+  na-1g7 live exercise. A far more developed game (49 bases), so its faction-scope
+  metrics are non-trivial rather than early-game zeros.
+
+**faction.tech had no capture at all until 2026-08-03**, despite being probed live
+during na-b4v and na-1wu: it was harvested to a `/tmp` store and never committed,
+and `/tmp` was cleared. That is what na-ibh exists to stop — copy the newest capture
+for EVERY surface that fired, not just the one the current task needed.
+
+`base.hurry` is still uncaptured. It fires only when a base can actually be hurried
+and the engine asks, which did not happen in the na-1g7 run. na-qu8 stays blocked on
+it.
