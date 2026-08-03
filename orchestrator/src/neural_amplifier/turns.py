@@ -21,8 +21,9 @@ side by side and never collapsed into one.
 
 from __future__ import annotations
 
+import logging
 import threading
-from typing import Literal
+from typing import Literal, TypeVar
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -32,15 +33,48 @@ from .outcomes import EngineOutcome
 Status = Literal["expected", "raised", "answered", "applied", "diverged"]
 
 
-def _extra(world_view: WorldView, name: str) -> object | None:
-    """Read a field the contract keeps in pydantic *extras*.
+_log = logging.getLogger(__name__)
+
+T = TypeVar("T")
+
+
+def _extra(world_view: WorldView, name: str, kind: type[T]) -> T | None:
+    """Read a field the contract keeps in pydantic *extras*, as the type the caller needs.
 
     `WorldView` is ``extra="allow"``, and pydantic raises AttributeError for an extra that is
     absent rather than returning None — so plain attribute access works on every adapter record
     and explodes on the hand-written fixtures that omit the field. That asymmetry is why this
     exists: the failure only shows up on the inputs least like production.
+
+    ``kind`` is CHECKED, not asserted. This returned a bare ``object | None`` when it landed,
+    which every caller then fed straight into a narrower field — `DecisionSlot.base_id` is
+    ``int | None``, and the key tuple is ``tuple[str, int | None]``. mypy caught it as eight
+    errors, but the type checker was reporting a real hole rather than being fussy: extras come
+    off the wire from an adapter with no schema at this seam, so a `base_id` arriving as a string
+    would have been stored in a field declaring it an int, and every later read of that field
+    would have been quietly wrong. Casting to silence mypy would have kept exactly that hole and
+    hidden the evidence of it.
+
+    So a present-but-wrong-typed extra becomes ``None`` — the same answer as absent, because
+    neither yields a usable value — and it is LOGGED, because the two have very different causes
+    and a silent coercion would leave a misbehaving adapter undiagnosable.
+
+    (`bool` passes ``isinstance(x, int)``; that is Python, not a decision made here. No caller
+    reads a boolean extra as an int, and a JSON `true` for `base_id` would be a far larger
+    problem upstream.)
     """
-    return getattr(world_view, name, None)
+    value = getattr(world_view, name, None)
+    if value is None or isinstance(value, kind):
+        return value
+    _log.warning(
+        "world_view extra %r is %s, expected %s — treating as absent (surface_id=%r, turn=%r)",
+        name,
+        type(value).__name__,
+        kind.__name__,
+        getattr(world_view, "surface_id", None),
+        getattr(world_view, "turn", None),
+    )
+    return None
 
 
 #: Turn history to retain. Small on purpose: this is a live view of the turn being played, and
@@ -151,7 +185,7 @@ class TurnStore:
         if turn is None:
             return
         trace = world_view.traceparent()
-        key = (world_view.surface_id or "", _extra(world_view, "base_id"))
+        key = (world_view.surface_id or "", _extra(world_view, "base_id", int))
         with self._lock:
             slots = self._turns.setdefault(turn, {})
             if turn not in self._meta:
@@ -162,9 +196,9 @@ class TurnStore:
             if slot is None:
                 slot = DecisionSlot(
                     surface_id=key[0],
-                    faction_id=_extra(world_view, "faction_id"),
+                    faction_id=_extra(world_view, "faction_id", int),
                     base_id=key[1],
-                    base=_extra(world_view, "base"),
+                    base=_extra(world_view, "base", str),
                 )
                 slots[key] = slot
             # Never walk a slot BACKWARDS. A base is asked several times per turn, and a replay
@@ -182,7 +216,7 @@ class TurnStore:
         turn = world_view.turn
         if turn is None:
             return
-        key = (world_view.surface_id or "", _extra(world_view, "base_id"))
+        key = (world_view.surface_id or "", _extra(world_view, "base_id", int))
         with self._lock:
             slot = self._turns.get(turn, {}).get(key)
             if slot is not None and slot.status in ("expected", "raised"):

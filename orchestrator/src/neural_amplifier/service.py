@@ -562,7 +562,7 @@ def create_app(
             if not isinstance(raw_args, list):
                 raise HTTPException(422, "args must be a list of integers")
             try:
-                args = [int(a) for a in raw_args]  # type: ignore[arg-type]
+                args = [int(a) for a in raw_args]
             except (TypeError, ValueError) as exc:
                 raise HTTPException(422, f"args must be integers: {exc}") from exc
             try:

@@ -8,6 +8,9 @@ as success.
 
 from __future__ import annotations
 
+import logging
+
+import pytest
 from fastapi.testclient import TestClient
 
 from neural_amplifier.contract import WorldView
@@ -184,3 +187,50 @@ def test_turn_view_is_available_without_an_agent_brain() -> None:
     client = TestClient(create_app())
     assert client.get("/health").json()["brain"] != "agent"
     assert client.get("/turn").status_code == 200
+
+
+# --- extras arrive off the wire, so their types are not guaranteed ------------
+
+
+def wrong_typed_view(base_id: object) -> WorldView:
+    """A world view whose `base_id` extra is whatever an adapter actually sent."""
+    payload = world_view().model_dump()
+    payload["base_id"] = base_id
+    return WorldView.model_validate(payload)
+
+
+def test_a_correctly_typed_extra_is_read_through_unchanged() -> None:
+    """The positive control. Without it, the two tests below would pass just as well against an
+    `_extra` that returned None for everything."""
+    store = TurnStore()
+    store.note_raised(world_view(base_id=7))
+    slot = store.view().decisions[0]
+    assert slot.base_id == 7
+    assert slot.base == "Base 7"
+
+
+def test_a_WRONG_typed_extra_is_treated_as_absent_never_stored_in_a_typed_field() -> None:
+    """`DecisionSlot.base_id` declares `int | None`. Extras come off the wire from an adapter
+    with no schema at this seam, so nothing upstream stops a string arriving — and pydantic will
+    not coerce it here because `base_id` is an *extra* on WorldView, not a declared field.
+
+    Storing "12" in a field that says int would not raise; it would just make every later read
+    quietly wrong, which is the shape mypy was reporting as eight errors. Absent is the honest
+    answer: a value that is not an int yields no usable base id.
+    """
+    store = TurnStore()
+    store.note_raised(wrong_typed_view("twelve"))
+    slot = store.view().decisions[0]
+    assert slot.base_id is None
+    assert isinstance(slot.base_id, type(None))
+
+
+def test_a_wrong_typed_extra_is_LOGGED_so_a_bad_adapter_is_diagnosable(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Absent and present-but-malformed produce the same value and have completely different
+    causes. Silently coercing would leave a misbehaving adapter undiagnosable."""
+    with caplog.at_level(logging.WARNING, logger="neural_amplifier.turns"):
+        TurnStore().note_raised(wrong_typed_view("twelve"))
+    messages = [r.getMessage() for r in caplog.records]
+    assert any("base_id" in m and "str" in m for m in messages), messages
