@@ -69,12 +69,24 @@ Per-unit orders fire separately as the engine iterates units (`mod_enemy_turn`
 
 ---
 
-## 2.5 Instrumentation status — measured 2026-07-29, amended 2026-08-01
+## 2.5 Instrumentation status — measured 2026-07-29, amended 2026-08-03
 
-**4 of 77 surfaces the brain can actually decide.** All four apply: the choice executes, and it
-is validated against the engine's own availability tests first, so an illegal order is rejected
-rather than applied. A surface is not covered until its decision can be applied — `just
-surfaces` reports it from the frozen registry rather than from this paragraph.
+**4 of 77 surfaces the brain can actually decide**, plus **1 observed only**. The four apply:
+the choice executes, validated against the engine's own availability tests first, so an illegal
+order is rejected rather than applied. A surface is not covered until its decision can be applied
+— `just surfaces` reports it from the frozen registry rather than from this paragraph.
+
+`econ.energy_sliders` is the observed-only one (na-yd4): the adapter records what
+`mod_allocate_energy` chose and every split that was legal, and nothing applies a brain's answer
+yet. It is deliberately in `OBSERVED` and not `APPLIED`, because the applied count is what says
+how much of the game the brain drives and moving it for an observation would overstate the one
+number kept honest.
+
+**The surface count is no longer the whole story.** Since na-8ja an agent can also command any
+unit or base *directly* — `move` / `skip` / `build` on the command channel, outside the engine's
+ask-and-answer cycle entirely. Those verbs cut across this registry rather than adding to it, and
+they reach territory the 25 unit-scope surfaces below were deferred over. See
+[turn-scoped-play.md](turn-scoped-play.md); this table counts only what the engine *asks* about.
 
 The registry is frozen at 77 (`orchestrator/surfaces.py`), partitioned by contract scope:
 `base` 25, `unit` 32, `turn` 20.
@@ -210,8 +222,18 @@ enforces that they do.
 - **25 `unit`-scope with a native path**, most of which should stay deterministic on volume
   grounds — see the `unit.move` entry in [decision-inputs.md](decision-inputs.md) §5 for why, and
   why a revisit should decide *operations* rather than tile moves.
-- **27 base and faction decisions with an existing native path**, so they can be instrumented
-  incrementally with a safe fallback already in place. This is the bucket to work through.
+- **26 base and faction decisions with an existing native path** (was 27; `econ.energy_sliders`
+  is now observed), so they can be instrumented incrementally with a safe fallback already in
+  place. This is the bucket to work through.
+
+  Two cautions learned instrumenting the first one, both on `na-yd4`. **"Ready" means "has a
+  native path and is not unit-scope"**, which reads as "cheap" and is not the same claim:
+  `base.specialists` is base-scope and therefore counted ready, while `best_specialist()` fires
+  per specialist beyond the 16th, per base, inside a block that runs several times per base-turn.
+  And **the seam is most of the per-surface work** — `econ.energy_sliders` needed
+  `mod_allocate_energy` read end to end to learn that `SE_alloc_labs` is narrowed four times and
+  only the last value is real. A grep sweep across ten surfaces produced nothing usable, because
+  "where does the engine decide X" is not a textual question. These 26 are not a batch job.
 
 One known limitation, recorded because it is invisible otherwise: **`faction.se` never fires for
 a human-slot faction.** `mod_social_ai` returns immediately for humans, so in the recommended
