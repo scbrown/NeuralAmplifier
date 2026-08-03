@@ -1,0 +1,27 @@
+{
+  "note": "Does asking a model to decide AND set direction make it do either worse?",
+  "verdict": "unmeasured — the treatment never occurred (0 directives issued in either arm)",
+  "surface": "faction.tech",
+  "world_view": {"faction": "University", "turn": 135, "options": 7, "grounding": "none"},
+  "arms": {
+    "issuing": {
+      "brain": "claude-code",
+      "runs": 10,
+      "stability": 0.40,
+      "distinct": 4,
+      "modal": "tech:81",
+      "directives_issued": 0,
+      "cost_usd": 1.03
+    },
+    "ablated": {
+      "brain": "claude-code-no-directives",
+      "runs": 10,
+      "stability": 0.60,
+      "distinct": 3,
+      "modal": "tech:12",
+      "directives_issued": 0,
+      "cost_usd": 0.74
+    }
+  },
+  "answered_by": "claude -p, one fresh process per run"
+}

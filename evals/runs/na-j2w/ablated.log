@@ -1,0 +1,14 @@
+surface        faction.tech
+base/faction   University · turn 135
+options        7
+brain          claude-code · 10 runs
+
+  tech:12                        6  ######
+  tech:81                        3  ###
+  tech:59                        1  #
+
+stability      0.60  (modal answer 'tech:12')
+distinct       3 of 10 runs
+utilisation    n/a  (no grounding — pass --quipu to measure it)
+directives     0 issued across 10 runs
+cost           $0.74 total, $0.074 per run
