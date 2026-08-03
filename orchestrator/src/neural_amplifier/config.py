@@ -102,6 +102,15 @@ class Run:
     world_view_store: str | None = None
     plan: str | None = None
     otel: bool = False
+    #: The game's own directory — where `na-command` and `na-command-result` live. Required only
+    #: to ISSUE orders (`/order`); every other path works without it, and absent means the order
+    #: endpoint reports itself unavailable rather than the service refusing to start. Ordering is
+    #: an addition to a run, not a precondition for one.
+    #:
+    #: It is a local path because the command channel is a FILE the adapter polls, so the
+    #: orchestrator must share a filesystem with the game. Stated here because nothing else in
+    #: this config implies co-location, and a remote orchestrator will silently order nothing.
+    game_dir: str | None = None
 
 
 @dataclass(frozen=True)
@@ -165,6 +174,7 @@ def load(path: Path | None = None) -> Config:
             world_view_store=_text(env("NA_WORLD_VIEW_STORE"), run.get("world_view_store"), None),
             plan=_text(env("NA_PLAN"), run.get("plan"), None),
             otel=_flag(env("NA_OTEL"), run.get("otel"), False),
+            game_dir=_text(env("NA_GAME_DIR"), run.get("game_dir"), None),
         ),
         surfaces=parse_surfaces(_table(data, "surfaces"), data.get("surface_default"), source),
         source=source,

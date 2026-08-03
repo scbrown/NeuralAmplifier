@@ -16,9 +16,12 @@ becomes its own kind of lie.
 | phase | what | status |
 | --- | --- | --- |
 | 1 | outcome feedback — the engine reports what it did | **built** (`outcomes.py`, `POST /outcome`) |
-| 2 | order verbs on door 2 — `move` / `skip` / `build` | not built |
+| 2 | order verbs on door 2 — `move` / `skip` / `build` | **built** (adapter `na_order_command`, `orders.py`, `POST /order`) |
 | 3 | turn view announced at `mod_turn_upkeep` | not built |
-| 4 | batching and fog gating on orders | not built |
+| 4 | batching, and tile-visibility gating | not built — see the corrected fog note in §5 |
+
+Phase 2 is end-to-end: an agent can command any unit or base directly. What it cannot yet do is
+see the whole turn at once (phase 3), and orders are still one-at-a-time at 4 Hz (phase 4).
 
 ---
 
@@ -138,9 +141,19 @@ one place in this design capable of corrupting a game.
 - **Throughput.** 4 Hz, and `na_command_tick` reads the file with a single `fgets` — **one command
   per file**. Fifty units is twelve seconds of round trips. Batching (multiple lines, or a
   newline-delimited body) is a real change to the intake, not a tuning knob.
-- **Fog.** A world view is fog-gated by the orchestrator before an agent sees it. A direct order
-  does not travel that path, so an agent could command a unit toward a tile it should not know
-  about. Fair play is a project invariant; ordering must be gated too, not just seeing.
+- **Fog — and this document previously got it wrong.** It said a world view is fog-gated and an
+  order bypasses that path. Measured: `fog.py` gates the **foreign-diplomacy feed only** — deltas
+  naming a faction we have not contacted — and there is **no tile-visibility model anywhere in the
+  orchestrator**. So orders do not slip past a map gate; that gate has never existed, for orders
+  or for world views.
+
+  The correction matters because it moves the work. "Route orders through the existing gate" is
+  not a task — there is nothing to route through. The real question is whether the *engine* should
+  refuse a move to a tile the faction has not explored, which is an adapter-side check against
+  engine visibility state, and separately whether the world view leaks tile knowledge in the first
+  place. Fair play remains a project invariant; what changed is that this is a gap to build rather
+  than a bypass to close, and stating it the old way would have sent someone looking for a gate to
+  reuse.
 - **Whose turn it is.** Commands run whenever the window pumps, including during another
   faction's turn. An order must be refused unless it is our faction's turn and the game is not
   halted — the result record already carries `turn` and `halted`, which is the check half-built.
@@ -219,9 +232,31 @@ orchestrator keeps it.
 Verified: 491 orchestrator tests pass, the wire format is pinned from the emitters, and the
 adapter's 43-check wire suite still passes under Wine against a live orchestrator.
 
-**Phase 2 — order verbs on door 2.** `move` / `skip` / `build`, engine validators enforced, gated
-on our-turn-and-not-halted. This is what delivers requirement 4, and it delivers it *properly* —
-by giving the agent the affordance a human has, rather than by bending the decision cycle.
+**Phase 2 — order verbs on door 2. BUILT.** `move <veh_id> <x> <y>`, `skip <veh_id>`,
+`build <base_id> <item_id>`, wrapping `set_move_to` / `mod_veh_skip` / `mod_base_change`. This is
+what delivers requirement 4, and it delivers it *properly* — by giving the agent the affordance a
+human has, rather than by bending the decision cycle.
+
+- Adapter side (`na_order_command`) gates on **halted / routed / whose turn**, three distinct
+  refusals because "refused" alone cannot tell an agent whether to fix something or simply wait.
+  `build` **reads the item back** after `mod_base_change` rather than trusting the setter, and
+  refreshes the per-base cache so a replay cannot quietly undo an order the agent was told
+  succeeded.
+- Orchestrator side (`orders.py`, `POST /order`) serialises orders under a lock — the channel is
+  one command file and one result slot, so concurrency here does not go slowly wrong, it goes
+  *silently* wrong — and **clears the result slot before writing**, or the previous order's
+  success would be returned instantly and attributed to this one.
+- **An unobserved result is `unknown`, never `ok`.** The adapter consumes the command *before*
+  acting so a crash cannot replay it, which means "the file is gone" is evidence the order was
+  read and never that it was carried out. Both the consumed and never-read cases report `unknown`,
+  with different detail.
+- `GET /order` says whether ordering is available and why not, so an agent need not issue an order
+  to discover it cannot.
+
+The orchestrator must share a filesystem with the game, because the channel is a file. Nothing
+else in this service requires co-location; a remote orchestrator will order nothing while looking
+healthy, which is why `NA_GAME_DIR` is unset by default and reports `unavailable` rather than
+pretending.
 
 **Phase 3 — turn view.** Announce at `mod_turn_upkeep`, with `expected` vs `raised`.
 

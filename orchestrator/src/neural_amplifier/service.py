@@ -23,6 +23,7 @@ from .coverage import report
 from .decisions import DecisionLog
 from .directives import DirectiveStore, accept
 from .orchestrator import Orchestrator
+from .orders import OrderChannel, build_command
 from .outcomes import EngineOutcome, OutcomeStore
 from .pending import NotClaimable, Pending
 from .replay import WorldViewStore
@@ -195,6 +196,12 @@ def create_app(
     # reports what the ORCHESTRATOR applied; this is what the ENGINE did with it afterwards.
     outcome_store = OutcomeStore()
     app.state.outcomes = outcome_store
+
+    # The agent's own initiative (orders.py). Unconfigured is a legitimate way to run: the
+    # endpoint reports itself unavailable rather than the service refusing to start, because
+    # ordering is an addition to a run and not a precondition for one.
+    order_channel = OrderChannel(config.run.game_dir)
+    app.state.orders = order_channel
 
     @app.get("/health")
     def health() -> dict[str, object]:
@@ -451,6 +458,61 @@ def create_app(
         404 invites a caller to treat "no answer yet" as "nothing went wrong".
         """
         return outcome_store.get(traceparent).model_dump(exclude_none=True)
+
+    # ---------------------------------------------------------------- orders (door 2)
+    #
+    # Issuing, as opposed to answering. Mounted in every mode for the same reason /outcome is:
+    # this is about the adapter and the game, not about which brain is attached.
+    @app.post("/order")
+    def order(body: dict[str, object]) -> dict[str, object]:
+        """Command a unit or base directly, without waiting for the engine to ask.
+
+        `{"verb": "move", "args": [12, 40, 21]}` or `{"command": "move 12 40 21"}`.
+
+        Whether the order is *legal* is the engine's question and is asked there — the adapter
+        wraps the engine's own functions and its own validators. What this refuses is a shape the
+        adapter could only reject anyway.
+
+        A `status` of `unknown` means exactly that: the order may or may not have happened. It is
+        never reported as applied on the strength of not having heard otherwise.
+        """
+        raw_command = body.get("command")
+        if isinstance(raw_command, str) and raw_command.strip():
+            command = raw_command.strip()
+        else:
+            verb = str(body.get("verb") or "")
+            raw_args = body.get("args") or []
+            if not isinstance(raw_args, list):
+                raise HTTPException(422, "args must be a list of integers")
+            try:
+                args = [int(a) for a in raw_args]  # type: ignore[arg-type]
+            except (TypeError, ValueError) as exc:
+                raise HTTPException(422, f"args must be integers: {exc}") from exc
+            try:
+                command = build_command(verb, args)
+            except ValueError as exc:
+                raise HTTPException(422, str(exc)) from exc
+
+        raw_timeout = body.get("timeout_s")
+        timeout_s = float(raw_timeout) if isinstance(raw_timeout, int | float) else None
+        return order_channel.issue(command, timeout_s=timeout_s).as_dict()
+
+    @app.get("/order")
+    def order_status() -> dict[str, object]:
+        """Can orders be issued at all, and if not, why not.
+
+        Worth its own route: an agent that finds `/order` returning `unavailable` on every call
+        should be able to learn *why* without issuing an order to find out.
+        """
+        return {
+            "available": order_channel.available,
+            "reason": order_channel.why_unavailable() or None,
+            "verbs": {
+                "move": "move <veh_id> <x> <y>",
+                "skip": "skip <veh_id>",
+                "build": "build <base_id> <item_id>",
+            },
+        }
 
     @app.get("/coverage")
     def coverage() -> dict[str, object]:
