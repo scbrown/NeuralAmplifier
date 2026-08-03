@@ -43,6 +43,25 @@ during na-b4v and na-1wu: it was harvested to a `/tmp` store and never committed
 and `/tmp` was cleared. That is what na-ibh exists to stop — copy the newest capture
 for EVERY surface that fired, not just the one the current task needed.
 
-`base.hurry` is still uncaptured. It fires only when a base can actually be hurried
-and the engine asks, which did not happen in the na-1g7 run. na-qu8 stays blocked on
-it.
+- `base_hurry_turn42.json` — turn 42, Gaians, Gaia's Landing hurrying a Colony Pod.
+  Recovered 2026-08-03 (na-qu8). Carries `subjects: ["Colony Pod"]`, the two-option
+  action space, and `native_choice: "hurry:none"` — the deterministic tier's answer,
+  which is what an eval on this surface compares against.
+
+**Two things this one corrects, and both are about where you look.**
+
+`base.hurry` was recorded as uncaptured, on the reasoning that it fires only when a base
+can actually be hurried *and the engine asks*. That is true of the ORGANIC path and it is
+not the only path: the adapter has a **serialiser-only probe**, `observe-hurry <base_id>`
+(`thinker/src/neural.cpp:4127`), which emits the full surface for any base on demand,
+reading live numbers with `native_hurried = 0` so it never spends credits. A surface that
+is hard to catch organically is not therefore hard to capture.
+
+And it was not lost. It was in the play directory's `na-observations.jsonl` the whole time
+— the adapter's own log, which lives in the SMAC install and not in this repo. Two separate
+sweeps concluded "no base.hurry capture survives anywhere on disk" after searching the repo
+and `/tmp`, which is where a world-view STORE lives; the adapter log is a different sink in
+a different tree. **When harvesting, check both: the `NA_WORLD_VIEW_STORE` directory AND
+`$PLAY_DIR/na-observations.jsonl`.** `harvest-world-views.py` reads only the former, so a
+surface that reached the log and not the store is invisible to it (na-ibh's script cannot
+see this file — see na-qu8).

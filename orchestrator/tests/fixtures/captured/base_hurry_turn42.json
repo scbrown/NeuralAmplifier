@@ -1,0 +1,68 @@
+{
+  "schema_version": "0.1",
+  "engine": "thinker",
+  "scope": "base",
+  "surface_id": "base.hurry",
+  "turn": 42,
+  "faction_id": 1,
+  "faction": "Gaians",
+  "trace": {
+    "traceparent": "00-6a6e9980000000010000000607a1c0de-000000060000002b-01"
+  },
+  "fairness": {
+    "slot": "ai",
+    "difficulty": "talent",
+    "handicaps": []
+  },
+  "base_id": 0,
+  "base": "Gaia's Landing",
+  "item": "Colony Pod",
+  "subjects": [
+    "Colony Pod"
+  ],
+  "base_state": {
+    "minerals_accumulated": 25,
+    "mineral_cost_total": 33,
+    "minerals_remaining": 8,
+    "mineral_surplus": 4,
+    "turns_if_waiting": 2,
+    "energy_reserves": 171,
+    "pop_size": 3
+  },
+  "metrics": {
+    "energy_reserves": 171,
+    "energy_income": 14,
+    "labs_output": 9,
+    "base_count": 5,
+    "pop_total": 11,
+    "military_units": 8,
+    "drone_total": 0,
+    "mineral_surplus": 4,
+    "minerals_remaining": 8,
+    "pop_size": 3,
+    "turns_to_completion": 2
+  },
+  "action_space": [
+    {
+      "id": "hurry:none",
+      "action": "Do not hurry",
+      "cost": 0,
+      "cost_unit": "credits"
+    },
+    {
+      "id": "hurry:now",
+      "action": "Hurry production",
+      "cost": 19,
+      "cost_unit": "credits",
+      "saves_turns": 2,
+      "effects": {
+        "energy_reserves": -19,
+        "minerals_remaining": -8
+      }
+    }
+  ],
+  "action_space_size": 2,
+  "native_choice": "hurry:none",
+  "tier": "deterministic",
+  "applied": "native"
+}
