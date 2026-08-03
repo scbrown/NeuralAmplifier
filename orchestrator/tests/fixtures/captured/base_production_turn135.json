@@ -1,0 +1,552 @@
+{
+  "action_space": [
+    {
+      "action": "Colony Pod",
+      "category": "unit",
+      "cost": 21,
+      "effects": null,
+      "id": "unit:0",
+      "role": "FOUNDS A NEW BASE elsewhere - does not grow this base",
+      "triad": "land",
+      "turns_if_switched": 11
+    },
+    {
+      "action": "Supply Crawler",
+      "category": "unit",
+      "cost": 28,
+      "effects": null,
+      "id": "unit:5",
+      "role": "ferries minerals or nutrients to another base",
+      "triad": "land",
+      "turns_if_switched": 14
+    },
+    {
+      "action": "Probe Team",
+      "category": "unit",
+      "cost": 21,
+      "effects": null,
+      "id": "unit:6",
+      "role": "infiltrates and sabotages rival factions",
+      "triad": "land",
+      "turns_if_switched": 11
+    },
+    {
+      "action": "Mind Worms",
+      "category": "unit",
+      "cost": 35,
+      "effects": null,
+      "id": "unit:8",
+      "role": "general combat unit",
+      "triad": "land",
+      "turns_if_switched": 18
+    },
+    {
+      "action": "Isle of the Deep",
+      "category": "unit",
+      "cost": 56,
+      "effects": null,
+      "id": "unit:9",
+      "role": "carries land units across water",
+      "triad": "sea",
+      "turns_if_switched": 28
+    },
+    {
+      "action": "Spore Launcher",
+      "category": "unit",
+      "cost": 35,
+      "effects": null,
+      "id": "unit:15",
+      "role": "attacks enemy units and bases",
+      "triad": "land",
+      "turns_if_switched": 18
+    },
+    {
+      "action": "Police Garrison",
+      "category": "unit",
+      "cost": 7,
+      "effects": null,
+      "id": "unit:24",
+      "role": "defends a base or position",
+      "triad": "land",
+      "turns_if_switched": 4
+    },
+    {
+      "action": "AAA Plasma Garrison V2",
+      "category": "unit",
+      "cost": 28,
+      "effects": null,
+      "id": "unit:194",
+      "role": "defends a base or position",
+      "triad": "land",
+      "turns_if_switched": 14
+    },
+    {
+      "action": "Foil Colony Pod",
+      "category": "unit",
+      "cost": 49,
+      "effects": null,
+      "id": "unit:196",
+      "role": "FOUNDS A NEW BASE elsewhere - does not grow this base",
+      "triad": "sea",
+      "turns_if_switched": 25
+    },
+    {
+      "action": "Empath R-Laser Infantry V2",
+      "category": "unit",
+      "cost": 56,
+      "effects": null,
+      "id": "unit:210",
+      "role": "general combat unit",
+      "triad": "land",
+      "turns_if_switched": 28
+    },
+    {
+      "action": "Police Plasma Garrison V2",
+      "category": "unit",
+      "cost": 28,
+      "effects": null,
+      "id": "unit:216",
+      "role": "defends a base or position",
+      "triad": "land",
+      "turns_if_switched": 14
+    },
+    {
+      "action": "Missile Rover Artillery",
+      "category": "unit",
+      "cost": 42,
+      "effects": null,
+      "id": "unit:222",
+      "role": "attacks enemy units and bases",
+      "triad": "land",
+      "turns_if_switched": 21
+    },
+    {
+      "action": "3-Res Cruiser Transport",
+      "category": "unit",
+      "cost": 35,
+      "effects": null,
+      "id": "unit:224",
+      "role": "carries land units across water",
+      "triad": "sea",
+      "turns_if_switched": 18
+    },
+    {
+      "action": "3-Res Missile Invaders",
+      "category": "unit",
+      "cost": 56,
+      "effects": null,
+      "id": "unit:225",
+      "role": "attacks enemy units and bases",
+      "triad": "land",
+      "turns_if_switched": 28
+    },
+    {
+      "action": "Fungicidal Foil Formers",
+      "category": "unit",
+      "cost": 35,
+      "effects": null,
+      "id": "unit:226",
+      "role": "terraforms terrain to improve tile yields",
+      "triad": "sea",
+      "turns_if_switched": 18
+    },
+    {
+      "action": "R-Laser Rover Artillery V2",
+      "category": "unit",
+      "cost": 28,
+      "effects": null,
+      "id": "unit:229",
+      "role": "attacks enemy units and bases",
+      "triad": "land",
+      "turns_if_switched": 14
+    },
+    {
+      "action": "Plasma Cruiser Probe Team",
+      "category": "unit",
+      "cost": 42,
+      "effects": null,
+      "id": "unit:230",
+      "role": "infiltrates and sabotages rival factions",
+      "triad": "sea",
+      "turns_if_continued": 13,
+      "turns_if_switched": 21
+    },
+    {
+      "action": "Foil Colony Pod V2",
+      "category": "unit",
+      "cost": 28,
+      "effects": null,
+      "id": "unit:231",
+      "role": "FOUNDS A NEW BASE elsewhere - does not grow this base",
+      "triad": "sea",
+      "turns_if_switched": 14
+    },
+    {
+      "action": "Foil Probe Team",
+      "category": "unit",
+      "cost": 21,
+      "effects": null,
+      "id": "unit:232",
+      "role": "infiltrates and sabotages rival factions",
+      "triad": "sea",
+      "turns_if_switched": 11
+    },
+    {
+      "action": "AAA Missile Cruiser V2",
+      "category": "unit",
+      "cost": 35,
+      "effects": null,
+      "id": "unit:233",
+      "role": "controls sea zones",
+      "triad": "sea",
+      "turns_if_switched": 18
+    },
+    {
+      "action": "3-Res Cruiser Transport V2",
+      "category": "unit",
+      "cost": 21,
+      "effects": null,
+      "id": "unit:235",
+      "role": "carries land units across water",
+      "triad": "sea",
+      "turns_if_switched": 11
+    },
+    {
+      "action": "3-Res Missile Invaders V2",
+      "category": "unit",
+      "cost": 35,
+      "effects": null,
+      "id": "unit:236",
+      "role": "attacks enemy units and bases",
+      "triad": "land",
+      "turns_if_switched": 18
+    },
+    {
+      "action": "Fungicidal Foil Formers V2",
+      "category": "unit",
+      "cost": 28,
+      "effects": null,
+      "id": "unit:237",
+      "role": "terraforms terrain to improve tile yields",
+      "triad": "sea",
+      "turns_if_switched": 14
+    },
+    {
+      "action": "Missile Battleship V2",
+      "category": "unit",
+      "cost": 49,
+      "effects": null,
+      "id": "unit:238",
+      "role": "controls sea zones",
+      "triad": "sea",
+      "turns_if_switched": 25
+    },
+    {
+      "action": "3-Res Missile Cruiser V2",
+      "category": "unit",
+      "cost": 35,
+      "effects": null,
+      "id": "unit:239",
+      "role": "controls sea zones",
+      "triad": "sea",
+      "turns_if_switched": 18
+    },
+    {
+      "action": "AAA 3-Res Sentinels V2",
+      "category": "unit",
+      "cost": 28,
+      "effects": null,
+      "id": "unit:240",
+      "role": "defends a base or position",
+      "triad": "land",
+      "turns_if_switched": 14
+    },
+    {
+      "action": "AAA Missile Infantry V2",
+      "category": "unit",
+      "cost": 35,
+      "effects": null,
+      "id": "unit:241",
+      "role": "general combat unit",
+      "triad": "land",
+      "turns_if_switched": 18
+    },
+    {
+      "action": "Missile Rover V2",
+      "category": "unit",
+      "cost": 21,
+      "effects": null,
+      "id": "unit:242",
+      "role": "attacks enemy units and bases",
+      "triad": "land",
+      "turns_if_switched": 11
+    },
+    {
+      "action": "AAA 3-Res Gunboat V2",
+      "category": "unit",
+      "cost": 28,
+      "effects": null,
+      "id": "unit:243",
+      "role": "controls sea zones",
+      "triad": "sea",
+      "turns_if_switched": 14
+    },
+    {
+      "action": "Fungicidal Rover Formers V2",
+      "category": "unit",
+      "cost": 28,
+      "effects": null,
+      "id": "unit:244",
+      "role": "terraforms terrain to improve tile yields",
+      "triad": "land",
+      "turns_if_switched": 14
+    },
+    {
+      "action": "Plasma Rover Probe Team",
+      "category": "unit",
+      "cost": 35,
+      "effects": null,
+      "id": "unit:245",
+      "role": "infiltrates and sabotages rival factions",
+      "triad": "land",
+      "turns_if_switched": 18
+    },
+    {
+      "action": "Plasma Missile Battleship V2",
+      "category": "unit",
+      "cost": 63,
+      "effects": null,
+      "id": "unit:246",
+      "role": "controls sea zones",
+      "triad": "sea",
+      "turns_if_switched": 32
+    },
+    {
+      "action": "Rover Formers V2",
+      "category": "unit",
+      "cost": 21,
+      "effects": null,
+      "id": "unit:247",
+      "role": "terraforms terrain to improve tile yields",
+      "triad": "land",
+      "turns_if_switched": 11
+    },
+    {
+      "action": "Plasma Supply V2",
+      "category": "unit",
+      "cost": 35,
+      "effects": null,
+      "id": "unit:248",
+      "role": "ferries minerals or nutrients to another base",
+      "triad": "land",
+      "turns_if_switched": 18
+    },
+    {
+      "action": "Empath Scout Rover V2",
+      "category": "unit",
+      "cost": 35,
+      "effects": null,
+      "id": "unit:249",
+      "role": "explores and scouts terrain",
+      "triad": "land",
+      "turns_if_switched": 18
+    },
+    {
+      "action": "Children's Creche",
+      "category": "facility",
+      "cost": 35,
+      "effect": "Growth/Effic/Morale",
+      "effects": null,
+      "id": "facility:2",
+      "maint": 1,
+      "turns_if_switched": 18
+    },
+    {
+      "action": "Perimeter Defense",
+      "category": "facility",
+      "cost": 35,
+      "effect": "Defense +100%",
+      "effects": null,
+      "id": "facility:4",
+      "maint": 0,
+      "turns_if_switched": 18
+    },
+    {
+      "action": "Recreation Commons",
+      "category": "facility",
+      "cost": 28,
+      "effect": "Fewer Drones",
+      "effects": null,
+      "id": "facility:6",
+      "maint": 1,
+      "turns_if_switched": 14
+    },
+    {
+      "action": "Energy Bank",
+      "category": "facility",
+      "cost": 56,
+      "effect": "Economy Bonus",
+      "effects": null,
+      "id": "facility:7",
+      "maint": 1,
+      "turns_if_switched": 28
+    },
+    {
+      "action": "Biology Lab",
+      "category": "facility",
+      "cost": 42,
+      "effect": "Research and PSI",
+      "effects": null,
+      "id": "facility:9",
+      "maint": 1,
+      "turns_if_switched": 21
+    },
+    {
+      "action": "Fusion Lab",
+      "category": "facility",
+      "cost": 84,
+      "effect": "Econ and Labs Bonus",
+      "effects": null,
+      "id": "facility:15",
+      "maint": 3,
+      "turns_if_switched": 42
+    },
+    {
+      "action": "Research Hospital",
+      "category": "facility",
+      "cost": 84,
+      "effect": "Labs and Psych Bonus",
+      "effects": null,
+      "id": "facility:17",
+      "maint": 3,
+      "turns_if_switched": 42
+    },
+    {
+      "action": "Punishment Sphere",
+      "category": "facility",
+      "cost": 70,
+      "effect": "No Drones/-50% Tech",
+      "effects": null,
+      "id": "facility:23",
+      "maint": 2,
+      "turns_if_switched": 35
+    },
+    {
+      "action": "Command Center",
+      "category": "facility",
+      "cost": 28,
+      "effect": "+2 Morale:Land",
+      "effects": null,
+      "id": "facility:27",
+      "maint": 1,
+      "turns_if_switched": 14
+    },
+    {
+      "action": "Naval Yard",
+      "category": "facility",
+      "cost": 56,
+      "effect": "+2 Morale:Sea",
+      "effects": null,
+      "id": "facility:28",
+      "maint": 2,
+      "turns_if_switched": 28
+    },
+    {
+      "action": "Centauri Preserve",
+      "category": "facility",
+      "cost": 70,
+      "effect": "Ecology Bonus",
+      "effects": null,
+      "id": "facility:31",
+      "maint": 2,
+      "turns_if_switched": 35
+    },
+    {
+      "action": "Aquafarm",
+      "category": "facility",
+      "cost": 56,
+      "effect": "Sea Nutrients",
+      "effects": null,
+      "id": "facility:36",
+      "maint": 1,
+      "turns_if_switched": 28
+    },
+    {
+      "action": "Stockpile Energy",
+      "category": "facility",
+      "cost": 0,
+      "effect": "Minerals to Energy",
+      "effects": null,
+      "id": "facility:69",
+      "maint": 0,
+      "turns_if_switched": 0
+    }
+  ],
+  "action_space_size": 48,
+  "advisories": null,
+  "base": "Discovery Academy",
+  "base_id": 208,
+  "base_state": {
+    "current_item": 230,
+    "current_item_name": "Plasma Cruiser Probe Team",
+    "eco_damage": 0,
+    "energy_intake": 3,
+    "mineral_intake": 5,
+    "mineral_surplus": 2,
+    "minerals_accumulated": 17,
+    "nutrient_intake": 9,
+    "pop_size": 4,
+    "queue_size": 0,
+    "specialists": 0,
+    "worked_tiles": 17449
+  },
+  "bases": null,
+  "call_seq": 1,
+  "contacts": null,
+  "cost_unit": "minerals",
+  "decision_deadline_ms": null,
+  "deltas": null,
+  "directives": null,
+  "economy": null,
+  "engine": "thinker",
+  "faction": "University",
+  "faction_id": 3,
+  "fairness": {
+    "difficulty": "transcend",
+    "handicaps": [],
+    "slot": "ai"
+  },
+  "grounding": null,
+  "has_gov": 0,
+  "history": [],
+  "map": null,
+  "memory": null,
+  "metrics": {
+    "base_count": 55.0,
+    "drone_total": 0.0,
+    "energy_reserves": 467.0,
+    "military_units": 196.0,
+    "mineral_surplus": 2.0,
+    "minerals_remaining": 25.0,
+    "pop_size": 4.0,
+    "pop_total": 272.0,
+    "turns_to_completion": 13.0
+  },
+  "native_choice": 230,
+  "native_choice_name": "Plasma Cruiser Probe Team",
+  "run_id": "6a7028b7-05b7d5bf-00ec",
+  "schema_version": "0.1",
+  "scope": "base",
+  "scores": null,
+  "subjects": null,
+  "surface_id": "base.production",
+  "trace": {
+    "traceparent": "00-6a702830000000030000008e07a1c0de-0000008e00000088-01"
+  },
+  "tradeoffs": null,
+  "turn": 135,
+  "units": null,
+  "x": 147,
+  "y": 73,
+  "year": null
+}

@@ -16,8 +16,18 @@ Refresh:
 ```bash
 NA_BRAIN=agent NA_WORLD_VIEW_STORE=/tmp/wv \
   uv run --directory orchestrator neural-amplifier serve
-# play a few turns, answering decisions, then copy the newest capture per surface
+# ... play a few turns, then:
+scripts/harvest-world-views.py /tmp/wv            # what would change
+scripts/harvest-world-views.py /tmp/wv --write    # do it
 ```
+
+**Use the script, not a manual copy.** The manual step is how `faction.tech` and `base.hurry`
+were lost twice: it is a judgement call made at the end of a long session, about surfaces the
+session was not working on. The script copies EVERY surface present and reports the ones it did
+not see, so a rare capture cannot be dropped by being forgotten (na-ibh).
+
+It never prunes a fixture whose surface is absent from the store — a run that did not reach
+`base.hurry` says nothing about the `base.hurry` capture you already have.
 
 Provenance: Thinker adapter.
 

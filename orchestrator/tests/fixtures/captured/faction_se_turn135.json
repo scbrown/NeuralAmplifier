@@ -1,0 +1,161 @@
+{
+  "action_space": [
+    {
+      "action": "No change",
+      "category": "se",
+      "effects": null,
+      "id": "se:none"
+    },
+    {
+      "action": "Frontier",
+      "affordable": true,
+      "category": "se",
+      "cost": 24,
+      "cost_unit": "credits",
+      "effects": {},
+      "field": "Politics",
+      "id": "se:0:0"
+    },
+    {
+      "action": "Police State",
+      "affordable": true,
+      "category": "se",
+      "cost": 24,
+      "cost_unit": "credits",
+      "effects": {
+        "efficiency": -2.0,
+        "police": 2.0,
+        "support": 2.0
+      },
+      "field": "Politics",
+      "id": "se:0:1"
+    },
+    {
+      "action": "Simple",
+      "affordable": true,
+      "category": "se",
+      "cost": 24,
+      "cost_unit": "credits",
+      "effects": {},
+      "field": "Economics",
+      "id": "se:1:0"
+    },
+    {
+      "action": "Free Market",
+      "affordable": true,
+      "category": "se",
+      "cost": 24,
+      "cost_unit": "credits",
+      "effects": {
+        "economy": 2.0,
+        "planet": -3.0,
+        "police": -5.0
+      },
+      "field": "Economics",
+      "id": "se:1:1"
+    },
+    {
+      "action": "Planned",
+      "affordable": true,
+      "category": "se",
+      "cost": 24,
+      "cost_unit": "credits",
+      "effects": {
+        "efficiency": -2.0,
+        "growth": 2.0,
+        "industry": 1.0
+      },
+      "field": "Economics",
+      "id": "se:1:2"
+    },
+    {
+      "action": "Survival",
+      "affordable": true,
+      "category": "se",
+      "cost": 24,
+      "cost_unit": "credits",
+      "effects": {},
+      "field": "Values",
+      "id": "se:2:0"
+    },
+    {
+      "action": "Power",
+      "affordable": true,
+      "category": "se",
+      "cost": 24,
+      "cost_unit": "credits",
+      "effects": {
+        "industry": -2.0,
+        "morale": 2.0,
+        "support": 2.0
+      },
+      "field": "Values",
+      "id": "se:2:1"
+    },
+    {
+      "action": "Wealth",
+      "affordable": true,
+      "category": "se",
+      "cost": 24,
+      "cost_unit": "credits",
+      "effects": {
+        "economy": 1.0,
+        "industry": 1.0,
+        "morale": -2.0
+      },
+      "field": "Values",
+      "id": "se:2:3"
+    }
+  ],
+  "action_space_size": 9,
+  "advisories": null,
+  "bases": null,
+  "contacts": null,
+  "current": {
+    "Economics": "Green",
+    "Future Society": "None",
+    "Politics": "Democratic",
+    "Values": "Knowledge"
+  },
+  "decision_deadline_ms": null,
+  "deltas": null,
+  "directives": null,
+  "economy": null,
+  "engine": "thinker",
+  "faction": "University",
+  "faction_id": 3,
+  "fairness": {
+    "difficulty": "transcend",
+    "handicaps": [],
+    "slot": "ai"
+  },
+  "grounding": null,
+  "history": null,
+  "map": null,
+  "memory": null,
+  "metrics": {
+    "base_count": 55.0,
+    "drone_total": 0.0,
+    "energy_income": 340.0,
+    "energy_reserves": 575.0,
+    "labs_output": 592.0,
+    "military_units": 196.0,
+    "pop_total": 253.0
+  },
+  "native_choice": "se:none",
+  "native_choice_name": "No change",
+  "run_id": "6a7028b7-05b7d5bf-00ec",
+  "schema_version": "0.1",
+  "scope": "turn",
+  "scores": null,
+  "subjects": null,
+  "surface_id": "faction.se",
+  "trace": {
+    "traceparent": "00-6a70283000000003000000a207a1c0de-000000a200000088-01"
+  },
+  "tradeoffs": null,
+  "turn": 135,
+  "units": null,
+  "upheaval_cost": 0,
+  "year": null
+}
