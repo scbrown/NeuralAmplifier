@@ -531,6 +531,28 @@ def create_app(
         A `status` of `unknown` means exactly that: the order may or may not have happened. It is
         never reported as applied on the strength of not having heard otherwise.
         """
+        # A batch: [{"verb": ..., "args": [...]}, ...] or ["move 1 2 3", ...]
+        raw_orders = body.get("orders")
+        if isinstance(raw_orders, list) and raw_orders:
+            lines: list[str] = []
+            for entry in raw_orders:
+                if isinstance(entry, str):
+                    lines.append(entry)
+                    continue
+                if not isinstance(entry, dict):
+                    raise HTTPException(422, "each order must be a string or {verb, args}")
+                try:
+                    lines.append(
+                        build_command(
+                            str(entry.get("verb") or ""), [int(a) for a in entry.get("args") or []]
+                        )
+                    )
+                except (TypeError, ValueError) as exc:
+                    raise HTTPException(422, str(exc)) from exc
+            raw_timeout_b = body.get("timeout_s")
+            timeout_b = float(raw_timeout_b) if isinstance(raw_timeout_b, int | float) else None
+            return order_channel.issue_batch(lines, timeout_s=timeout_b).as_dict()
+
         raw_command = body.get("command")
         if isinstance(raw_command, str) and raw_command.strip():
             command = raw_command.strip()

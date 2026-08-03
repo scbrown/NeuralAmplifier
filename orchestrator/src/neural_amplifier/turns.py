@@ -42,6 +42,7 @@ def _extra(world_view: WorldView, name: str) -> object | None:
     """
     return getattr(world_view, name, None)
 
+
 #: Turn history to retain. Small on purpose: this is a live view of the turn being played, and
 #: the decision log is where a run's history belongs.
 DEFAULT_TURNS = 4
@@ -214,7 +215,8 @@ class TurnStore:
             slots = self._turns[target]
             meta = self._meta.get(target)
             decisions = sorted(
-                slots.values(), key=lambda s: (s.surface_id, s.base_id if s.base_id is not None else -1)
+                slots.values(),
+                key=lambda s: (s.surface_id, s.base_id if s.base_id is not None else -1),
             )
             counts: dict[str, int] = {}
             for slot in decisions:

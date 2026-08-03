@@ -272,6 +272,23 @@ def build_server(client: OrchestratorClient) -> Any:
         return json.dumps(client.order({"verb": verb, "args": args}), indent=2)
 
     @server.tool()
+    def issue_orders(orders: list[dict[str, Any]]) -> str:
+        """Issue SEVERAL orders in one round trip — use this to move an army.
+
+            issue_orders([{"verb": "move", "args": [12, 40, 21]},
+                          {"verb": "skip", "args": [13]}])
+
+        The channel costs about a quarter-second per order, so fifty units ordered one at a time
+        is twelve seconds of your turn. This sends them together.
+
+        **Read `results`, not just `status`.** The envelope is `ok` only when EVERY order
+        succeeded; a batch that half-worked reports `refused`, and the per-order entries are the
+        only place that says which ones. `dropped` is non-zero if you sent more than the adapter
+        will run in one tick — those were not executed.
+        """
+        return json.dumps(client.order({"orders": orders}), indent=2)
+
+    @server.tool()
     def order_outcomes(cursor: int = 0) -> str:
         """Did the orders you gave actually take effect?
 

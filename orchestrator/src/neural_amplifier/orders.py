@@ -35,7 +35,7 @@ from __future__ import annotations
 import json
 import threading
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Literal
 
@@ -68,6 +68,11 @@ class OrderResult:
     turn: int | None = None
     halted: int | None = None
     waited_s: float = 0.0
+    #: Per-order outcomes when this was a batch. Empty for a single order — the caller reads
+    #: `status`/`detail` then. Never collapsed into the envelope's `ok`, because a batch that
+    #: half-worked is not a success and flattening it is how a partial failure goes unseen.
+    results: list[dict[str, object]] = field(default_factory=list)
+    dropped: int = 0
 
     def as_dict(self) -> dict[str, object]:
         out: dict[str, object] = {
@@ -80,6 +85,10 @@ class OrderResult:
             out["turn"] = self.turn
         if self.halted is not None:
             out["halted"] = self.halted
+        if self.results:
+            out["results"] = self.results
+        if self.dropped:
+            out["dropped"] = self.dropped
         return out
 
 
@@ -103,6 +112,22 @@ class OrderChannel:
         if not self._dir.is_dir():
             return f"game directory {self._dir} does not exist"
         return ""
+
+    def issue_batch(self, commands: list[str], timeout_s: float | None = None) -> OrderResult:
+        """Send several orders in one round trip.
+
+        The channel costs a quarter-second per order, so fifty units is twelve seconds of a turn.
+        The adapter runs a batch in one tick and answers with a single envelope carrying every
+        outcome — one file per order would be pointless, because the result slot is overwritten
+        and all but the last would be destroyed before anyone read them.
+
+        `status` is `ok` only when EVERY order succeeded. A batch that half-worked is not a
+        success, and the per-order entries in `results` are what a caller must actually read.
+        """
+        lines = [c.strip() for c in commands if c and c.strip()]
+        if not lines:
+            return OrderResult(status="refused", command="", detail="no orders")
+        return self.issue("\n".join(lines), timeout_s=timeout_s)
 
     def issue(self, command: str, timeout_s: float | None = None) -> OrderResult:
         """Send one order and wait for the adapter's result.
@@ -151,13 +176,29 @@ class OrderChannel:
                 if payload is not None:
                     waited = time.monotonic() - started
                     ok = bool(payload.get("ok"))
+                    raw_results = payload.get("results")
+                    results = (
+                        [r for r in raw_results if isinstance(r, dict)]
+                        if isinstance(raw_results, list)
+                        else []
+                    )
+                    detail = str(payload.get("detail") or "")
+                    if results and not detail:
+                        failed = [r for r in results if not r.get("ok")]
+                        detail = (
+                            f"{len(results) - len(failed)}/{len(results)} orders succeeded"
+                            if failed
+                            else f"all {len(results)} orders succeeded"
+                        )
                     return OrderResult(
                         status="ok" if ok else "refused",
                         command=str(payload.get("command") or command),
-                        detail=str(payload.get("detail") or ""),
+                        detail=detail,
                         turn=_as_int(payload.get("turn")),
                         halted=_as_int(payload.get("halted")),
                         waited_s=waited,
+                        results=results,
+                        dropped=_as_int(payload.get("dropped")) or 0,
                     )
                 time.sleep(POLL_S)
 

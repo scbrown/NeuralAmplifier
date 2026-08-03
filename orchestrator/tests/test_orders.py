@@ -215,3 +215,99 @@ def test_bad_arity_is_422_addressed_to_the_caller(
     resp = client.post("/order", json={"verb": "move", "args": [1]})
     assert resp.status_code == 422
     assert "move <veh_id> <x> <y>" in resp.json()["detail"]
+
+
+# --- batching -----------------------------------------------------------------
+
+
+def batch_adapter(game_dir: Path, results: list[dict[str, object]], dropped: int = 0):
+    """Stand in for na_order_batch: one envelope carrying every order's outcome."""
+
+    def run() -> None:
+        cmd = game_dir / "na-command"
+        for _ in range(400):
+            if cmd.exists():
+                cmd.read_text(encoding="utf-8")
+                cmd.unlink()
+                (game_dir / "na-command-result").write_text(
+                    json.dumps(
+                        {
+                            "command": "batch",
+                            "results": results,
+                            "count": len(results),
+                            "dropped": dropped,
+                            "ok": all(r.get("ok") for r in results) and dropped == 0,
+                            "turn": 42,
+                            "halted": 0,
+                        }
+                    ),
+                    encoding="utf-8",
+                )
+                return
+            time.sleep(0.01)
+
+    threading.Thread(target=run, daemon=True).start()
+
+
+def test_a_batch_goes_as_one_round_trip(tmp_path: Path) -> None:
+    seen: list[str] = []
+
+    def adapter() -> None:
+        cmd = tmp_path / "na-command"
+        for _ in range(400):
+            if cmd.exists():
+                seen.append(cmd.read_text(encoding="utf-8"))
+                cmd.unlink()
+                (tmp_path / "na-command-result").write_text(
+                    json.dumps({"command": "batch", "results": [{"ok": True}], "ok": True}),
+                    encoding="utf-8",
+                )
+                return
+            time.sleep(0.01)
+
+    threading.Thread(target=adapter, daemon=True).start()
+    OrderChannel(tmp_path).issue_batch(["move 1 2 3", "skip 4"], timeout_s=3.0)
+    assert len(seen) == 1, "one file, not one per order"
+    assert seen[0].strip().splitlines() == ["move 1 2 3", "skip 4"]
+
+
+def test_a_half_working_batch_is_not_ok(tmp_path: Path) -> None:
+    """Flattening a partial failure into one boolean is how it goes unseen."""
+    batch_adapter(
+        tmp_path,
+        [
+            {"command": "move", "detail": "veh 1 -> (2,3) rc=1", "ok": True},
+            {"command": "move", "detail": "faction 1 has not explored tile (9,9)", "ok": False},
+        ],
+    )
+    result = OrderChannel(tmp_path).issue_batch(["move 1 2 3", "move 2 9 9"], timeout_s=3.0)
+    assert result.status == "refused"
+    assert len(result.results) == 2
+    assert result.detail == "1/2 orders succeeded"
+
+
+def test_dropped_orders_are_surfaced(tmp_path: Path) -> None:
+    """Orders past the adapter's per-tick cap were NOT executed, and must not read as if they
+    were merely unremarkable."""
+    batch_adapter(tmp_path, [{"command": "skip", "ok": True}], dropped=3)
+    result = OrderChannel(tmp_path).issue_batch(["skip 1"], timeout_s=3.0)
+    assert result.dropped == 3
+    assert result.status == "refused", "a batch that dropped orders is not a success"
+
+
+def test_empty_batch_is_refused_without_touching_the_channel(tmp_path: Path) -> None:
+    result = OrderChannel(tmp_path).issue_batch([], timeout_s=0.2)
+    assert result.status == "refused"
+    assert not (tmp_path / "na-command").exists()
+
+
+def test_batch_over_http(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("NA_GAME_DIR", str(tmp_path))
+    client = TestClient(create_app())
+    batch_adapter(tmp_path, [{"command": "move", "ok": True}, {"command": "skip", "ok": True}])
+    got = client.post(
+        "/order",
+        json={"orders": [{"verb": "move", "args": [1, 2, 3]}, {"verb": "skip", "args": [4]}]},
+    ).json()
+    assert got["status"] == "ok"
+    assert len(got["results"]) == 2

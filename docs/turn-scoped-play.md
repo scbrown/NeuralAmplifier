@@ -8,7 +8,7 @@ me again once I have moved the units".
 Companion to [agent-play.md](agent-play.md), which describes the mode as **built**; this describes
 what it cannot yet do and what the code actually permits. Tracked as `na-8ja`.
 
-**Status: phases 1–3 are built. Phase 4 is not.** Said plainly and up front, in the manner of
+**Status: phases 1–4 are built.** Said plainly and up front, in the manner of
 [policy-harness.md](policy-harness.md), because a design doc that reads like a feature list is how
 a plan becomes a claim — and a doc that keeps saying "none of this is built" after some of it is
 becomes its own kind of lie.
@@ -23,11 +23,11 @@ back. That is not the same as a turn having been played through them.
 | 1 | outcome feedback — the engine reports what it did | **built** (`outcomes.py`, `POST /outcome`) |
 | 2 | order verbs on door 2 — `move` / `skip` / `build` | **built** (adapter `na_order_command`, `orders.py`, `POST /order`) |
 | 3 | turn view announced at `mod_turn_upkeep` | **built** (`turns.py`, `POST /turn`, `GET /turn`) |
-| 4 | batching, and tile-visibility gating | not built — see the corrected fog note in §5 |
+| 4 | batching, and tile-visibility gating | **built** (`na_order_batch`, `is_known` gate, `issue_batch`) |
 
-Phases 1–3 are end-to-end: an agent can see the whole turn, command any unit or base directly,
-and learn what the engine did with each order. What remains is throughput (orders are
-one-at-a-time at 4 Hz) and tile-visibility gating — phase 4.
+All four phases are end-to-end: an agent can see the whole turn, command any unit or base
+directly, batch orders into one round trip, and learn what the engine did with each. Ordering a
+unit onto an unexplored tile is refused by the engine's own `is_known`.
 
 ---
 
@@ -286,8 +286,21 @@ true without anyone maintaining it.
   forecast entry that never arrives is indistinguishable from a stuck adapter. A wrong forecast is
   worse than a short one.
 
-**Phase 4 — batching and fog gating on orders.** Both are correctness work that only matters once
-Phase 2 is real.
+**Phase 4 — batching and tile-visibility gating. BUILT.**
+
+- **Batching.** `na_order_batch` runs up to 32 order lines in one tick and answers with ONE
+  envelope carrying every outcome. One result file per order would be pointless: the slot is
+  overwritten, so all but the last would be destroyed before anyone read them. The envelope's
+  `ok` is true only when *every* order succeeded — a batch that half-worked is not a success, and
+  flattening it to one boolean is how a partial failure goes unseen, so `results` carries the
+  per-order entries and `dropped` reports anything past the cap that was never executed. Only
+  order verbs batch; `shot` / `click` / `key` / `load` stay one-per-file, because for an operator
+  command a second line is far likelier to be a mistake than an intent.
+- **Tile visibility.** `move` now refuses a destination the faction has not explored, using the
+  engine's own `is_known(x, y, faction_id)`. Per the correction in §5 this is not a second line
+  behind an orchestrator gate — for tiles it is the only gate there is. It does not make an
+  agent's *knowledge* fog-clean (that is the world view's problem); it stops the concrete cheat
+  available through this door.
 
 Door 1's no-cache revision (§3) is deliberately **not** on this list. Once an agent can command
 units and bases directly, revising a build inside the engine's cycle is a second way to do

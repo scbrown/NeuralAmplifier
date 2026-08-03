@@ -139,6 +139,7 @@ def test_the_surface_is_answering_plus_acting_and_nothing_that_reads_the_board()
         "decisions_waiting",
         "issue_directive",
         "issue_order",
+        "issue_orders",
         "order_outcomes",
     }
 

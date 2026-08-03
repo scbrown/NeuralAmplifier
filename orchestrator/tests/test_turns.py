@@ -24,7 +24,9 @@ def announcement(turn: int = 43, bases: int = 3) -> TurnAnnouncement:
         run_id="run-1",
         faction_id=1,
         expected=[
-            ExpectedDecision(surface_id="base.production", faction_id=1, base_id=i, base=f"Base {i}")
+            ExpectedDecision(
+                surface_id="base.production", faction_id=1, base_id=i, base=f"Base {i}"
+            )
             for i in range(bases)
         ],
     )
@@ -60,7 +62,7 @@ def test_a_forecast_decision_starts_expected_not_raised() -> None:
 
 
 def test_unraised_names_what_is_missing() -> None:
-    """"51 expected, 47 raised" says something is missing but not which — and which is exactly
+    """ "51 expected, 47 raised" says something is missing but not which — and which is exactly
     what an agent waiting on one of them needs."""
     store = TurnStore()
     store.announce(announcement(bases=3))
