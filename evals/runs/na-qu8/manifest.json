@@ -1,0 +1,24 @@
+{
+  "note": "Does grounding base.hurry's subject move its stability, and toward what?",
+  "arms": {
+    "bare": {
+      "prompt_sha256": "e02c262ccd10",
+      "facts_offered": 0,
+      "options": 2
+    },
+    "subject": {
+      "prompt_sha256": "d3de458f28c5",
+      "facts_offered": 1,
+      "options": 2
+    }
+  },
+  "answered_by": "NOT RUN \u2014 no answers are committed.",
+  "stripped_from_capture": {
+    "fields": [
+      "native_choice",
+      "tier",
+      "applied"
+    ],
+    "why": "observation-record outcome fields; na_decide_base_hurry passes native_hurried=-1 so the decision request omits native_choice (thinker neural.cpp:2288/:2235)"
+  }
+}

@@ -29,6 +29,7 @@ clone by whoever doubts it. `prompts` is the only command that needs `THINKER_DI
 | `na-373` | Can we offer fewer grounding facts by ranking them? | **Withdrawn.** The refutation was fixture-bound, and the reversal is no better — both numbers are one fact's rank. Ranking stays out as *unmeasured*. See its `NOTES.md`. |
 | `na-61c2` | Does recent build history stop a base flip-flopping? | **Yes**, 0.10 → 1.00 continued — and 0.00 when the case actually changed, so it is not an anchor. |
 | `na-vbe` | Can grounding drop what the action space already carries? | **Yes.** Grounding 43% smaller, choice held 20/20 vs 19/20 (Fisher p=1.0). The first run measured a fixture bug — see its `NOTES.md`. |
+| `na-qu8` | Does grounding base.hurry's subject move its stability, and toward what? | **Unanswered — built, self-tested, not run.** Stability is never reported alone: this surface spends credits, so it is read beside agreement with the deterministic tier. |
 | `na-htm` | Does ranking predict citation, pooled across decisions instead of within one? | **Unanswered — built, self-tested, not run.** na-373's question over four decisions with near-disjoint fact pools, so no single fact can carry the number. See its `NOTES.md`. |
 
 Write-ups: [quipu-integration.md](../docs/quipu-integration.md) and
@@ -127,6 +128,15 @@ in both directions, was that fact's rank wearing a finding's clothes — and not
 could say so, because it never counted how concentrated its own pool was. `na-htm` pools across
 four decisions with near-disjoint fact pools, *measures* the concentration, and refuses to print
 a headline past 0.50. An eval that cannot detect this failure in itself will publish it.
+
+**An observation record is not a decision request.** They are the same bytes apart from the
+outcome fields appended after the call returns, and for `base.hurry` those include
+`native_choice` — the deterministic tier's answer. A capture harvested from
+`na-observations.jsonl` therefore carries the answer key, and using it unmodified would put it in
+front of a model you are about to ask for an independent choice. `na-qu8` strips
+`native_choice`/`tier`/`applied` and asserts their absence in its selftest. This is the same
+family as the fixture failures above, and the sharpest instance: the difference between the
+fixture and the payload *was the answer*.
 
 **Three states, not two.** No answers, answers that cite nothing, and a real measurement are
 different things, and a scorer that renders the first two identically to "no effect" is the same

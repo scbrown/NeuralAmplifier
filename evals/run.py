@@ -32,6 +32,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import build_history  # noqa: E402
 import grounding_compaction  # noqa: E402
+import hurry_grounding  # noqa: E402
 import multi_decision_ranking  # noqa: E402
 import retrieval_ranking  # noqa: E402
 from harness import DEFAULT_LINKS, RUNS, check_prompts, write_prompts  # noqa: E402
@@ -54,6 +55,14 @@ EVALS = {
         grounding_compaction,
         "Can grounding drop what the action space already carries, without moving the choice?",
         "Yes — grounding 43% smaller and the choice held 20/20 vs 19/20 (Fisher p=1.0).",
+    ),
+    "na-qu8": (
+        hurry_grounding,
+        "Does grounding base.hurry's subject move its stability, and toward what?",
+        "UNANSWERED — built and self-tested, not run. The capture was recovered and the\n"
+        " treatment verified (the subject grounds, both action labels do not). Stability is\n"
+        " never reported alone here: this surface spends credits, so 'more stable' is not\n"
+        " 'better' unless tier agreement holds too.",
     ),
     "na-htm": (
         multi_decision_ranking,
