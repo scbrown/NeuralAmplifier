@@ -245,10 +245,10 @@ World view:
   "memory": null,
   "history": null,
   "grounding": [
-    "soc:politics-frontier Frontier; [house-rule · src:alphax-txt]",
-    "soc:politics-police-state Police State; police +2, support +2, efficiency -2; [house-rule · src:alphax-txt]",
-    "soc:economics-simple Simple; [house-rule · src:alphax-txt]",
-    "soc:economics-free-market Free Market; economy +2, planet -3, police -5; [house-rule · src:alphax-txt]"
+    "soc:economics-free-market Free Market; economy +2, planet -3, police -5; [house-rule · src:alphax-txt]",
+    "soc:economics-planned Planned; growth +2, industry +1, efficiency -2; [house-rule · src:alphax-txt]",
+    "soc:values-power Power; morale +2, support +2, industry -2; [house-rule · src:alphax-txt]",
+    "soc:values-wealth Wealth; industry +1, economy +1, morale -2; [house-rule · src:alphax-txt]"
   ],
   "advisories": null,
   "contacts": null,

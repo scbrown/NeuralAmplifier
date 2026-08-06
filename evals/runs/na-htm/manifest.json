@@ -7,7 +7,7 @@
       "options": 48
     },
     "base_production_turn135.ranked": {
-      "prompt_sha256": "01f175782195",
+      "prompt_sha256": "6daeafc6f0fa",
       "facts_offered": 4,
       "options": 48
     },
@@ -17,7 +17,7 @@
       "options": 8
     },
     "base_production_turn42.ranked": {
-      "prompt_sha256": "05faafc5a572",
+      "prompt_sha256": "e01329dc4a5a",
       "facts_offered": 4,
       "options": 8
     },
@@ -27,7 +27,7 @@
       "options": 9
     },
     "faction_se_turn135.ranked": {
-      "prompt_sha256": "e923fe1a5f28",
+      "prompt_sha256": "e53cc9d173de",
       "facts_offered": 4,
       "options": 9
     },

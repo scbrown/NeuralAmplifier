@@ -127,3 +127,38 @@ work it out, and the `_needed` line prints the n that would settle the observed 
 
 Whether to spend it is a decision for a human. What is no longer true is that spending it buys a
 debugging session: the arms, the pin, the scorer and its controls all run today, for free.
+
+## The ranking rule was flat when this was pinned — fixed before any spend (na-5to, 2026-08-06)
+
+The `ranked` arm of the four prompts committed here was **not** "the 4 most informative facts".
+It was "the first 4 in retriever order", and nothing in the run said so.
+
+`information_value` scores a fact by what it adds beyond the option's own name; `label_of`
+derived that name by splitting on an em dash, the separator used only by na-373's hand-written
+VERBOSE fixture. Every fact a real retriever emits separates with `"; "` — both
+`QuipuRetriever.format_row` and `DatalinksRetriever.describe(compact=True)`. So the whole fact
+came back as the "name", every content word counted as already-known, and the only words left
+to score were the id tokens. Measured over the 40 facts pinned here: **2 distinct scores**
+(score 2 ×36, score 1 ×4). `sorted` is stable, so ties keep input order and the arm returned a
+ranking-shaped list that carried no ranking.
+
+Both halves of this eval would have degraded to measuring action-space POSITION: the choice half
+comparing a truncation against its own prefix, the citation-rank half asking where citations sat
+in an order carrying no information.
+
+**The dominance gate would not have caught it**, and that is the part worth keeping. The gate
+checks that no single fact or decision owns the citation pool; the pool would have been properly
+spread across four decisions and measuring the wrong thing anyway. A guard catches the failure it
+was built for. The same applies to the ranking check in `selftest`, which passed throughout —
+it used the em-dash fixture format, the one format the bug did not affect.
+
+Fixed by ending the name at the earliest separator of either kind. The check that would have
+caught this now runs in `selftest`: it asserts the score DISTRIBUTION over these pinned facts
+(now **12** distinct scores over 40 facts, up from 2), exercises both fact formats, and both of
+its arms were verified — reverting the fix turns it red.
+
+**Cost: none.** No answers were committed, so the re-pin is free; after a paid run it would have
+cost the run. Prompts were regenerated — only the three `ranked` hashes moved, the four `all`
+arms are byte-identical, and `faction_tech_turn135.ranked` happens to be unchanged because with
+5 facts the new order kept the same top 4. na-uwp remains the spend decision, and it is now
+measuring the rule it claims to.

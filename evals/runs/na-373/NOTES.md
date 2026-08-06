@@ -68,3 +68,31 @@ its own bead.
 
 `all` is byte-identical to na-vbe's `compact` arm — the same prompt, so the same 20 answers serve
 both, and `just eval check` verifies that rather than trusting it. `ranked` was re-run.
+
+## The ranking rule changed under this run (na-5to, 2026-08-06)
+
+`ranked`'s committed answers are **no longer evidence about the rule the code now runs**, and
+`just eval check` says so on its own: it reports `ranked` STALE, notes that the existing drift
+review does not cover this hash pair, and refuses to widen it. Recorded here rather than
+adjudicated, because re-adjudicating would launder a change that genuinely alters the arm.
+
+`information_value` scores a fact by the words it adds beyond the option's own name, and
+`label_of` derived that name by splitting on an em dash — the separator used by *this* eval's
+hand-written VERBOSE fixture and by nothing else. Every fact a real retriever emits separates
+with `"; "`. So on real grounding the whole fact came back as the "name", `known` swallowed
+every content word, and the only words left to score were the id tokens. Over the 40 facts
+pinned for na-htm the rule produced **2 distinct scores** (score 2 ×36, score 1 ×4); `sorted` is
+stable,
+so the `ranked` arm was silently returning retriever order and looking like a ranking. The fix
+ends the name at the earliest separator of *either* kind, which takes that to 12 distinct
+scores and reorders all four of na-htm's decisions.
+
+Why this eval is affected at all, given its fixture uses the em dash: its `all` arm is
+byte-identical to na-vbe's `compact` arm, whose facts are **semicolon-separated**. So na-373's
+`ranked` arm was ranking compact-format lines with an em-dash-only rule — the defect's home
+ground. `all` is unaffected and still `ok`; only `ranked` moved.
+
+This costs nothing that was not already withdrawn. The conclusions above rest on one
+near-unanimous world view and were withdrawn on those grounds, not on the ranking's details;
+na-og3 had already marked the cells stale. It is noted because a rule changing under a
+committed run is exactly the thing this directory exists to make visible.

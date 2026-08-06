@@ -237,9 +237,9 @@ World view:
   "history": [],
   "grounding": [
     "unit:colony-pod Colony Pod; founds a new base elsewhere; does not grow the base that builds it; [house-rule · src:alphax-txt]",
-    "unit:scout-patrol Scout Patrol; explores and scouts terrain; [house-rule · src:alphax-txt]",
-    "res:recycling-tanks Recycling Tanks; [house-rule · src:alphax-txt]",
-    "fac:network-node Network Node; upkeep 1/turn; Labs Bonus; [house-rule · src:alphax-txt]"
+    "fac:network-node Network Node; upkeep 1/turn; Labs Bonus; [house-rule · src:alphax-txt]",
+    "fac:the-human-genome-project The Human Genome Project; +1 Talent Each Base; [house-rule · src:alphax-txt]",
+    "unit:formers Formers; terraforms terrain to improve tile yields; [house-rule · src:alphax-txt]"
   ],
   "advisories": null,
   "contacts": null,

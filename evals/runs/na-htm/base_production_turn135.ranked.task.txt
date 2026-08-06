@@ -621,9 +621,9 @@ World view:
   "history": [],
   "grounding": [
     "unit:colony-pod Colony Pod; founds a new base elsewhere; does not grow the base that builds it; [house-rule · src:alphax-txt]",
-    "unit:supply-crawler Supply Crawler; ferries minerals or nutrients to another base; [house-rule · src:alphax-txt]",
-    "unit:probe-team Probe Team; infiltrates and sabotages rival factions; [house-rule · src:alphax-txt]",
-    "unit:isle-of-the-deep Isle of the Deep; carries land units across water; [house-rule · src:alphax-txt]"
+    "fac:naval-yard Naval Yard; upkeep 2/turn; +2 Morale:Sea, Sea Def +100%; [house-rule · src:alphax-txt]",
+    "fac:punishment-sphere Punishment Sphere; upkeep 2/turn; No Drones/-50% Tech; [house-rule · src:alphax-txt]",
+    "fac:command-center Command Center; upkeep 1/turn; +2 Morale:Land; [house-rule · src:alphax-txt]"
   ],
   "advisories": null,
   "contacts": null,

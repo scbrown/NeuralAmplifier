@@ -64,19 +64,62 @@ def information_value(fact: str, label: str) -> float:
     return len(fresh) + sum(1.0 for w in fresh if any(c.isdigit() for c in w))
 
 
+#: Separators that end an option's name. Order here is irrelevant — the EARLIEST match in the
+#: line wins, never the first one listed (na-5to).
+_NAME_ENDS = (" — ", "; ")
+
+
+def label_of(line: str) -> str:
+    """The option's own name: the text between the fact id and the first separator.
+
+    Module-level, and deliberately so. This lived inside :func:`rank_lines` as a closure, which
+    made the rule's own output distribution unreachable from outside — so the only way to check
+    it was to re-type the derivation in the checking script, and a checking script holding its
+    own copy of the thing under test reports on the copy. That is exactly how na-5to survived:
+    the scoring looked verifiable and was not.
+
+    Two fact formats reach this and the name ends at whichever separator comes FIRST. na-373's
+    VERBOSE fixture separates with " — "; every fact a real retriever emits separates with "; "
+    — both ``QuipuRetriever.format_row`` and ``DatalinksRetriever.describe(compact=True)``.
+    Splitting on the em dash alone returned the WHOLE fact as the name on real grounding, so
+    ``known`` swallowed every content word and the only "fresh" words left were the id tokens.
+    Splitting on "; " first would be wrong the other way: it yields "Recycling Tanks — cost 4"
+    on the verbose format and quietly changes na-373's ranking.
+    """
+    if " " not in line:
+        return ""
+    rest = line.split(" ", 1)[1]
+    cuts = [i for i in (rest.find(sep) for sep in _NAME_ENDS) if i >= 0]
+    return rest[: min(cuts)] if cuts else rest
+
+
 def rank_lines(lines: list[str]) -> list[str]:
     """Order grounding lines by information value, most informative first.
 
     Takes the lines rather than a world view so scoring a committed run needs nothing but the
-    committed run — the option's name is the text between the id and the em dash, which is all
-    the rule reads. Re-deriving this from the rulebook would make every published number
-    depend on a sibling checkout being present and unchanged.
+    committed run — :func:`label_of` is all the rule reads. Re-deriving this from the rulebook
+    would make every published number depend on a sibling checkout being present and unchanged.
+
+    ``sorted`` is stable, so lines that tie keep retriever order. That is the right tie-break,
+    but it also means a rule that scores everything the same is INVISIBLE here: the arm still
+    returns a plausible ranking, just the input one. Check the score distribution, not the
+    output shape — see :func:`score_distribution`.
     """
-
-    def label_of(line: str) -> str:
-        return line.split(" ", 1)[1].split(" — ")[0] if " " in line else ""
-
     return sorted(lines, key=lambda ln: -information_value(ln, label_of(ln)))
+
+
+def score_distribution(lines: list[str]) -> dict[float, int]:
+    """How many facts landed on each score — the rule's discrimination, as a number.
+
+    A ranking rule that returns two distinct values over 40 facts has not ranked them, and
+    nothing downstream can tell: the arm looks ordered because ``sorted`` is stable. This is the
+    check na-5to's fix has to pass, so it lives beside the rule rather than in a scratch script.
+    """
+    counts: dict[float, int] = {}
+    for ln in lines:
+        s = information_value(ln, label_of(ln))
+        counts[s] = counts.get(s, 0) + 1
+    return counts
 
 
 def _ranked(view: Any, retriever: Any, keep: int | None) -> Any:

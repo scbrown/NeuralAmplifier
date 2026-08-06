@@ -151,29 +151,57 @@ def task_text(world_view: WorldView) -> str:
     )
 
 
+#: What ``write_prompts`` derives from the code and may freely overwrite. Everything else in a
+#: manifest was typed by a person, and regeneration must carry it through untouched.
+_DERIVED_TOP = frozenset({"note", "arms"})
+_DERIVED_ARM = frozenset({"prompt_sha256", "facts_offered", "options"})
+
+
 def write_prompts(out: Path, arms: dict[str, WorldView], note: str = "") -> None:
     """Write one task file per arm, plus the offered-fact set and a manifest.
 
     The manifest carries a hash of each prompt. Answers committed beside a prompt that has since
     changed are not evidence about the current prompt, and without the hash nobody can tell.
+
+    **Human-authored manifest keys survive regeneration; derived ones do not.** This used to
+    carry exactly one key forward by name (``answered_by``) and silently drop every other, which
+    meant a routine ``just eval prompts`` destroyed the two records that exist precisely to
+    outlive a regeneration: ``grounding_pinned`` at the top level (where the pin came from, when
+    it was harvested, why it was re-pinned) and each arm's ``drift_reviewed`` — the pinned
+    adjudication :func:`check_prompts` documents at length as the only thing that lets the
+    staleness check go green *and* be able to go red again. Both were destroyed by the writer
+    while the reader's docstring told people to put them there. Found na-5to, 2026-08-06, by
+    regenerating na-htm and reading the diff.
+
+    An allowlist is the wrong shape for this and is why it broke: it has to be extended every
+    time somebody records something new, and forgetting is silent. The rule is inverted here —
+    name what the code OWNS, preserve the rest — so a key nobody anticipated is kept by default.
     """
     out.mkdir(parents=True, exist_ok=True)
+    existing = (
+        json.loads((out / "manifest.json").read_text()) if (out / "manifest.json").exists() else {}
+    )
+    existing_arms = existing.get("arms", {})
     manifest: dict[str, Any] = {"note": note, "arms": {}}
     for name, view in arms.items():
         text = task_text(view)
         (out / f"{name}.task.txt").write_text(text)
         offered = [line.split(" ", 1)[0] for line in view.grounding or []]
         (out / f"{name}.offered.json").write_text(json.dumps(offered, indent=2))
-        manifest["arms"][name] = {
+        entry: dict[str, Any] = {
             "prompt_sha256": hashlib.sha256(text.encode()).hexdigest()[:12],
             "facts_offered": len(offered),
             "options": len(view.action_space),
         }
+        for key, value in existing_arms.get(name, {}).items():
+            if key not in _DERIVED_ARM:
+                entry.setdefault(key, value)
+        manifest["arms"][name] = entry
         print(f"  {name}: {len(offered)} facts offered")
-    existing = (
-        json.loads((out / "manifest.json").read_text()) if (out / "manifest.json").exists() else {}
-    )
     manifest["answered_by"] = existing.get("answered_by", "unrecorded")
+    for key, value in existing.items():
+        if key not in _DERIVED_TOP:
+            manifest.setdefault(key, value)
     (out / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
 
 

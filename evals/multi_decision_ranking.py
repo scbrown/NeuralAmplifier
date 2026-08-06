@@ -48,7 +48,7 @@ from pathlib import Path
 from typing import Any
 
 from harness import RUNS, load_answers, spread, tally
-from retrieval_ranking import KEEP, rank_lines
+from retrieval_ranking import KEEP, label_of, rank_lines, score_distribution
 
 #: This eval reads no rulebook: its decisions are captured world views and its grounding is
 #: pinned, so ``prompts`` needs neither the Thinker checkout nor a live Quipu.
@@ -412,6 +412,43 @@ def selftest() -> int:
         ]
     )
     check("the informative line ranks first", ordered[0].split(" ", 1)[0], "a:one")
+
+    # ...and the same case in the format a REAL retriever emits. The check above uses na-373's
+    # em-dash fixture, and passing it is what let na-5to hide: `label_of` split on " — " only, so
+    # on semicolon-separated facts it returned the whole line as the option's name, `known`
+    # swallowed every content word, and the score collapsed to the id tokens. It scored the 40
+    # facts pinned below into TWO distinct values while this check stayed green. A guard catches
+    # the failure it was built for — so both formats are exercised, and the name is asserted
+    # directly rather than inferred from an ordering that a flat rule still produces.
+    check("name ends at the em dash", label_of("a:one One — cost 8; Labs Bonus"), "One")
+    check("name ends at the semicolon", label_of("a:one One; cost 8; Labs Bonus"), "One")
+    check(
+        "the earliest separator wins, not the first listed",
+        label_of("fac:rt Recycling Tanks — cost 4; Bonus Resources"),
+        "Recycling Tanks",
+    )
+    ordered_real = rank_lines(
+        [
+            "a:one One; cost 8; upkeep 1/turn; Labs Bonus",
+            "b:two Two",
+        ]
+    )
+    check("the informative line ranks first on real grounding", ordered_real[0][:5], "a:one")
+
+    # The rule's DISCRIMINATION, measured on the real pinned facts rather than on a fixture.
+    # This is the check that would have caught na-5to, and the only one that can: `sorted` is
+    # stable, so a rule scoring everything alike still returns a plausible-looking ranking — the
+    # arm silently degrades to retriever order and nothing downstream can tell. Assert on the
+    # score distribution, never on the output shape.
+    pinned = [ln for spec in decisions().values() for ln in spec["grounding"]]
+    spread_scores = score_distribution(pinned)
+    check("the pinned facts are the ones na-htm measures", len(pinned) > 30, True)
+    check(
+        f"the ranking rule discriminates ({len(spread_scores)} distinct scores over "
+        f"{len(pinned)} facts)",
+        len(spread_scores) > 2,
+        True,
+    )
 
     # Sample-size arithmetic: a bigger gap must need fewer observations, never more.
     check(

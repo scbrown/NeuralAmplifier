@@ -1,6 +1,6 @@
 [
   "unit:colony-pod",
-  "unit:scout-patrol",
-  "res:recycling-tanks",
-  "fac:network-node"
+  "fac:network-node",
+  "fac:the-human-genome-project",
+  "unit:formers"
 ]
