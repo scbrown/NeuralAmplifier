@@ -289,8 +289,6 @@ World view:
   "cost_unit": "minerals",
   "faction_id": 4,
   "has_gov": 0,
-  "native_choice": 0,
-  "native_choice_name": "Colony Pod",
   "x": 51,
   "y": 69
 }

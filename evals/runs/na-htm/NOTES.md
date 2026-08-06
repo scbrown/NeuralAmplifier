@@ -162,3 +162,30 @@ cost the run. Prompts were regenerated — only the three `ranked` hashes moved,
 arms are byte-identical, and `faction_tech_turn135.ranked` happens to be unchanged because with
 5 facts the new order kept the same top 4. na-uwp remains the spend decision, and it is now
 measuring the rule it claims to.
+
+## The prompts stopped carrying the answer key (na-glk, 2026-08-06)
+
+All 8 prompts were regenerated again, and this time the `all` arms moved too: every one of them
+carried `native_choice` and `native_choice_name`, and faction.se also carried `upheaval_cost`.
+
+Those are OBSERVATION fields. The captures under `fixtures/captured/` are adapter *records*, and
+a record carries the deterministic tier's answer deliberately — it is what "llm chose X, applied
+Y" is measured against. A request must not. Until na-glk the adapter built both from one buffer,
+so **three of the four decide surfaces genuinely shipped the native answer to the model**
+(base.production, faction.tech, faction.se; base.hurry withholds via a sentinel and always did).
+The unstripped prompts were therefore *faithful* to a production that anchored the brain.
+
+na-glk fixed the adapter on all three, which inverts the conclusion the na-5to write-up would
+have suggested: the unstripped prompt is now the unfaithful one. Hence `OBSERVE_ONLY` here, and
+a selftest that asserts it on the PROMPT TEXT rather than on the stripped dict — `contract._Model`
+sets `extra="allow"`, so a field survives `model_validate` and still reaches the model through
+`model_dump_json`. Checking the dict would have passed while the prompt still carried it.
+
+One detail worth keeping: the guard first matched bare substrings and failed on `tier`, which
+occurs inside `soc:politics-frontier`. It matches JSON keys now. A guard that cries wolf on a
+clean prompt gets switched off, which costs more than the check was worth.
+
+This still costs nothing — no answers are committed. But it is the second re-pin, and after a
+paid run either one would have cost the run. **na-uwp was right to be blocked on this**: both of
+the readings its bead described (faithful vs artifact) were resolved by measuring the adapter
+rather than by arguing from the prompt.

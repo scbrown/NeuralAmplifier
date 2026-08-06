@@ -2,42 +2,42 @@
   "note": "Does ranking predict citation, measured across decisions instead of within one?",
   "arms": {
     "base_production_turn135.all": {
-      "prompt_sha256": "e264f724d467",
+      "prompt_sha256": "fc8c8ca338fe",
       "facts_offered": 20,
       "options": 48
     },
     "base_production_turn135.ranked": {
-      "prompt_sha256": "6daeafc6f0fa",
+      "prompt_sha256": "e588de569d20",
       "facts_offered": 4,
       "options": 48
     },
     "base_production_turn42.all": {
-      "prompt_sha256": "f64248b1fb4c",
+      "prompt_sha256": "80f1840ff687",
       "facts_offered": 7,
       "options": 8
     },
     "base_production_turn42.ranked": {
-      "prompt_sha256": "e01329dc4a5a",
+      "prompt_sha256": "764a8a08f96e",
       "facts_offered": 4,
       "options": 8
     },
     "faction_se_turn135.all": {
-      "prompt_sha256": "c0df13dfee3c",
+      "prompt_sha256": "9be09f1f5e94",
       "facts_offered": 8,
       "options": 9
     },
     "faction_se_turn135.ranked": {
-      "prompt_sha256": "e53cc9d173de",
+      "prompt_sha256": "5996a4823739",
       "facts_offered": 4,
       "options": 9
     },
     "faction_tech_turn135.all": {
-      "prompt_sha256": "991f47a7be81",
+      "prompt_sha256": "72f04ca44ee0",
       "facts_offered": 5,
       "options": 5
     },
     "faction_tech_turn135.ranked": {
-      "prompt_sha256": "1fbfeec8a03d",
+      "prompt_sha256": "119542badcf9",
       "facts_offered": 4,
       "options": 5
     }

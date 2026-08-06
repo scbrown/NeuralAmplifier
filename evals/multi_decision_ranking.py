@@ -79,6 +79,22 @@ def decisions() -> dict[str, dict[str, Any]]:
     return json.loads(PINNED.read_text())
 
 
+#: Fields the OBSERVATION carries and the DECISION REQUEST does not — stripped here for the
+#: same reason ``hurry_grounding.OBSERVE_ONLY`` exists, and now for the same surfaces.
+#:
+#: The captures under ``fixtures/captured/`` are adapter *records*, and a record carries the
+#: deterministic tier's answer on purpose: it is what "llm chose X, applied Y" is measured
+#: against. A request must not carry it. Until na-glk the adapter built both from one buffer
+#: and every decide surface but base.hurry sent the native answer to the model, so these
+#: prompts were faithful to a production that anchored the brain. na-glk fixed the adapter on
+#: all three (base.production, faction.tech, faction.se), which makes the unstripped prompt
+#: the unfaithful one — hence this strip, not despite the fix but because of it.
+#:
+#: ``upheaval_cost`` goes with faction.se's pair: it prices the native move specifically, so
+#: keeping it would leave a priced hint at the answer the rest of this tuple removes.
+OBSERVE_ONLY = ("native_choice", "native_choice_name", "upheaval_cost", "tier", "applied")
+
+
 def _world_view(spec: dict[str, Any], grounding: list[str]) -> Any:
     """The captured world view with grounding injected, as ``orchestrator.decide`` injects it."""
     import sys
@@ -86,7 +102,10 @@ def _world_view(spec: dict[str, Any], grounding: list[str]) -> Any:
     sys.path.insert(0, str(CAPTURED.parents[3] / "orchestrator" / "src"))
     from neural_amplifier.contract import WorldView  # noqa: PLC0415
 
-    view = WorldView.model_validate(json.loads((CAPTURED / spec["capture"]).read_text()))
+    raw = json.loads((CAPTURED / spec["capture"]).read_text())
+    # Strip before validate, not after: `contract._Model` sets extra="allow", so an unknown
+    # key survives model_validate and reaches the prompt through model_dump_json.
+    view = WorldView.model_validate({k: v for k, v in raw.items() if k not in OBSERVE_ONLY})
     return view.model_copy(update={"grounding": grounding})
 
 
@@ -454,6 +473,20 @@ def selftest() -> int:
     check(
         "a wide gap needs less data than a narrow one", _needed(0.9, 0.5) < _needed(0.55, 0.5), True
     )
+
+    # The answer key must not be in the prompt that asks the question. Asserted on the PROMPT
+    # TEXT, not on the stripped dict: `contract._Model` sets extra="allow", so a field survives
+    # model_validate and reaches the model through model_dump_json — checking the dict would
+    # pass while the prompt still carried it. Same check hurry_grounding makes, now that na-glk
+    # has made all three of these surfaces withhold it in production too.
+    from harness import task_text  # noqa: PLC0415
+
+    # Matched as a JSON KEY (`"tier":`), not as a bare substring: "tier" occurs inside
+    # `soc:politics-frontier`, so the substring form failed on a prompt that was already clean.
+    for name, view in arms().items():
+        text = task_text(view)
+        for field in OBSERVE_ONLY:
+            check(f'{name} prompt has no "{field}" key', f'"{field}":' in text, False)
 
     # The pin must describe decisions that can actually carry the measurement.
     specs = decisions()

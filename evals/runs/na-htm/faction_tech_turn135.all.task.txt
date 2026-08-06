@@ -237,8 +237,6 @@ World view:
   "deltas": null,
   "action_space_size": 5,
   "faction_id": 2,
-  "native_choice": 39,
-  "native_choice_name": "Doctrine: Air Power",
   "research_state": "idle",
   "tech_accumulated": 0,
   "tech_cost": 2387,

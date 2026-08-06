@@ -668,8 +668,6 @@ World view:
   "cost_unit": "minerals",
   "faction_id": 3,
   "has_gov": 0,
-  "native_choice": 230,
-  "native_choice_name": "Plasma Cruiser Probe Team",
   "x": 147,
   "y": 73
 }
