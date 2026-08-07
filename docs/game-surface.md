@@ -338,7 +338,7 @@ LLM drills down.
 | `diplo.treaty_offer` | ❌ | opaque executable `propose_pact` / `propose_treaty` procedures; two faction-like ints are named only by inference and return/commit semantics are unknown | **gated** |
 | `diplo.surrender` | ❌ | surrender choice remains inside executable diplomacy; Thinker only throttles repeated post-capture conversations | **gated** |
 | `diplo.tribute` | ❌ | no identified engine symbol or Thinker wrapper; nearby withdrawal-demand procedures are a different diplomatic action | **gated** |
-| `diplo.map_trade` | ❌ | `trade_maps` engine.cpp:747 — pure engine | L |
+| `diplo.map_trade` | ❌ | `trade_maps` is the apply step; opaque `propose_trade_maps` has an unnamed two-int ABI and no source caller | **gated** |
 | `council.call` | ⚠️ | `call_council` game.cpp:1636 — **AI-only**; human gets only "COUNCILOPEN" :1633 | L |
 | `council.vote` | ❌ | opaque executable function `council_get_vote` at `0x52BE60`; three-int ABI is declared but its argument meanings and internal callers are unknown | **gated** |
 | `council.buy_vote` | ❌ | opaque executable procedure `buy_council_vote` at `0x53EB50`; four-int ABI and transaction boundary are unnamed | **gated** |
@@ -608,6 +608,24 @@ disassembly must first identify the tribute branch, its amount and payer/payee s
 domain, and the exact `net_energy` commit. A side-effect-free probe then stops before that transfer.
 Until the operation itself is mapped, there is no honest function to wrap or deterministic answer
 to score.
+
+### 4.15 `diplo.map_trade` has an executor but no proposal seam
+
+`net_maps` exposes the application boundary: outside multiplayer it calls `trade_maps(a1, a2)`,
+which updates map knowledge, while the synchronized path sends the equivalent network message.
+That is useful evidence for where an accepted exchange commits, but it is not a place to decide
+whether either faction should offer or accept the exchange.
+
+The only proposal-shaped symbol is the raw executable pointer `propose_trade_maps` at `0x545D60`.
+Its declaration is `void(int, int)`, with unnamed arguments, no source callers, no return value and
+no visible separation between proposing, answering and applying the exchange. Calling or hooking it
+from its name alone could execute diplomacy during an observation probe, and a void return supplies
+no response domain for a deterministic fallback.
+
+This surface is therefore gated on fixture-backed tracing or disassembly that names both faction
+arguments, identifies every proposal/response branch, and proves the handoff to `net_maps` or the
+equivalent commit. Until that seam is recovered, `trade_maps` remains an executor and cannot stand
+in for map-trade policy.
 
 ---
 
