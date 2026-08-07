@@ -91,8 +91,8 @@ they reach territory the 25 unit-scope surfaces below were deferred over. See
 The registry is frozen at 77 (`orchestrator/surfaces.py`), partitioned by contract scope:
 `base` 25, `unit` 32, `turn` 20.
 
-Six further surfaces — `base.governor_config`, `base.abandon`, `base.hq_escape`,
-`unit.odp_attack`, `diplo.tech_trade` and `diplo.energy_loan` — are
+Seven further surfaces — `base.governor_config`, `base.abandon`, `base.hq_escape`,
+`unit.odp_attack`, `diplo.tech_trade`, `diplo.energy_loan` and `diplo.base_swap` — are
 **instrumented but not brain-decidable**, and are deliberately not in the four. Each has a
 deterministic tier in the fork and a probe, and no decide or apply path at all — which is the
 intended first step for the 21 `NO_AI_PATH` surfaces (na-2mn): give them a native answer
@@ -119,6 +119,7 @@ not worth changing.
 | `unit.odp_attack` | unit | faction upkeep → `action_sat_attack` | one strike / hold, with vendetta-only targets and the available orbital assets | `observe-odp-attack <faction_id>` |
 | `diplo.tech_trade` | turn | `mod_buy_tech` response path | accept / decline an offered technology at Thinker's engine-derived price | `observe-tech-trade <buyer> <seller> <tech> <high_price>` |
 | `diplo.energy_loan` | turn | `mod_energy_trade` loan response | accept / decline Thinker's offered terms using repayment capacity | `observe-energy-loan <borrower> <lender>` |
+| `diplo.base_swap` | turn | `mod_base_swap` priced-purchase response | accept / decline Thinker's base valuation without consuming committed hurry credits | `observe-base-swap <buyer> <seller> <base_id>` |
 
 Each of the four has an apply command, and each validates with the engine's own test rather
 than with a reconstruction of it:
@@ -165,12 +166,13 @@ toggle per surface, and one switched off is recorded at `deterministic` tier —
 degraded, because the brain was never asked. That is how a surface gets rolled out one step at a
 time: instrument it, watch it observe, then let it decide.
 
-All six instrumented `NO_AI_PATH` surfaces are at the first of those steps with an extra one in front of it. A
+All seven instrumented `NO_AI_PATH` surfaces are at the first of those steps with an extra one in front of it. A
 `NO_AI_PATH` surface has a rollout one longer than the others — **native answer, instrument,
 observe, then decide** — because the usual first step assumes a deterministic tier already
 exists to observe, and on these 21 it does not. Each therefore has a `thinker.ini` option
 (`na_governor_policy`, `na_abandon_policy`, `na_hq_escape_policy`, `na_odp_attack_policy`,
-`na_tech_trade_policy`, `na_energy_loan_policy`; all default off) and no `na.toml` toggle,
+`na_tech_trade_policy`, `na_energy_loan_policy`, `na_base_swap_policy`; all default off) and no
+`na.toml` toggle,
 there being no brain answer yet to switch on.
 
 It is also the reason that list is worth working through rather than routing straight to the
@@ -332,7 +334,7 @@ LLM drills down.
 | `diplo.ai_to_ai` | ⚠️ | `enemy_diplomacy` engine.cpp:808 — **opaque engine fn, never overridden** | observe only |
 | `diplo.tech_trade` | ❌ | initiation remains human-only; **deterministic response tier added** in `mod_buy_tech` (`na_tech_trade_policy`) for an offered technology | D+L |
 | `diplo.energy_loan` | ❌ | initiation remains human-only; **deterministic response tier added** in `mod_energy_trade` (`na_energy_loan_policy`) for offered loan terms | D+L |
-| `diplo.base_swap` | ❌ | `mod_base_swap` gui_dialog.cpp:207 — same assert | L |
+| `diplo.base_swap` | ❌ | initiation remains human-only; **deterministic priced-purchase response added** in `mod_base_swap` (`na_base_swap_policy`) | D+L |
 | `diplo.treaty_offer` | ❌ | `propose_pact`/`propose_treaty` engine.cpp:748-749 — raw ptrs, no override | **L** |
 | `diplo.surrender` | ❌ | no AI function; Thinker only throttles the dialog base.cpp:950-970 | L |
 | `diplo.tribute` | ❌ | `demand_withdrawal` engine.cpp:755 etc. — no Thinker logic | L |
@@ -540,6 +542,26 @@ term calculation and records repayment capacity without creating debt or moving 
 As with technology trading, this is a managed-human response baseline, not symmetric AI diplomacy.
 It does not decide to seek financing or choose a lender; those remain initiation-policy work and are
 not counted as delivered by this tier.
+
+### 4.11 `diplo.base_swap` has a reserved purchase response
+
+`mod_base_swap` already supplies a detailed seller-side valuation. `base_trade_value` prices
+population, facilities, secret projects, supported and stationed units, nearby friendly bases,
+landmarks and bonuses, headquarters distance, objective status, assimilation, relationship,
+faction rankings and difficulty. In the energy-payment branch, the human buyer's confirmation sits
+immediately before `net_cede_base` and `net_energy`; those engine routines remain the ownership and
+credit transaction boundary.
+
+Default-off `na_base_swap_policy` accepts that priced purchase only when the buyer can pay without
+consuming `hurry_cost_total`, credits already committed during the current production phase and
+debited later in faction upkeep. This is a concrete reservation rather than an invented percentage:
+an "affordable" purchase that spends credits already promised to production would otherwise be
+accepted and then force the later debit to zero the treasury. `observe-base-swap` shares the exact
+valuation and response without transferring the base or credits.
+
+The baseline covers only the priced-purchase confirmation. Base-for-base offers already pass the
+seller's deterministic value checks, while choosing a target base, seller, or bid and initiating the
+conversation remain upstream diplomacy-policy work. Those are not claimed delivered here.
 
 ---
 
