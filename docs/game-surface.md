@@ -309,7 +309,8 @@ LLM drills down.
 | `unit.psi_gate` | ✅ | move.cpp:3431-3461, `teleport_score` :131 | D |
 | `unit.planet_buster` | ✅ | `nuclear_move` move.cpp:2701 | **L** |
 | `unit.odp_attack` | ❌ | `action_sat_attack` had no AI caller; **deterministic tier added in the fork** (`na_odp_attack_policy`, faction upkeep), vendetta-only and one strike per turn | D+L |
-| `unit.tectonic/fungal` | ❌ | `action_tectonic` veh_action.cpp:1452, `action_fungal` :1537 — **no caller at all** | L |
+| `unit.tectonic` | ❌ | `action_tectonic` veh_action.cpp:1452 — payload executor receives unit and target, then destroys the unit and changes global terrain/climate | — |
+| `unit.fungal` | ❌ | `action_fungal` veh_action.cpp:1537 — payload executor; no native target-selection policy | L |
 | `unit.patrol` | ❌ | `action_patrol` veh_action.cpp:1300 — human-issued order; `valid_patrol` is only its legality test, not an AI chooser | — |
 | `unit.disband` | ❌ | legacy ID for `action_destruct` veh_action.cpp:1174 — reactor self-destruct, not ordinary unit retirement; human command only | — |
 | `unit.gift` | ❌ | `action_give` veh_action.cpp:1649 — transfer executor reached from engine diplomacy/UI; takes recipient as input, chooses nothing | — |
@@ -423,6 +424,22 @@ whose decision has already happened. The missing policy, if wanted, belongs to a
 surface that can compare recipients, diplomatic value, and the military cost of the units offered;
 only its chosen transaction should call `action_give`. Retain `unit.gift` as a frozen execution
 marker, but do not count the executor itself as a missing native-answer seam for na-2mn.
+
+### 4.4 `unit.tectonic` is a detonation executor
+
+`action_tectonic(veh_id, tx, ty)` receives both the payload unit and target coordinates after the
+decision has already been made. It immediately kills the unit, checks interception across the blast
+area, raises the target altitude once per reactor level, and recalculates global climate. It never
+chooses whether to launch, which payload to spend, or which tile makes the irreversible world change
+worthwhile. Hank finds no source-level caller because the executable's human command path reaches
+the patched function directly.
+
+A flag or probe at this function would instrument an already-committed detonation and could not be a
+safe fallback: even observing it after entry is too late to preserve the payload. A real deterministic
+tier must live in unit movement/operations policy and define target scoring, friendly and pact blast
+constraints, interception risk, sea-level consequences, and the value of consuming the unit before
+calling this executor. Retain the frozen surface ID, but do not treat `action_tectonic` itself as the
+missing native-answer seam under na-2mn.
 
 ---
 
