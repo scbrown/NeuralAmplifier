@@ -91,8 +91,8 @@ they reach territory the 25 unit-scope surfaces below were deferred over. See
 The registry is frozen at 77 (`orchestrator/surfaces.py`), partitioned by contract scope:
 `base` 25, `unit` 32, `turn` 20.
 
-Four further surfaces — `base.governor_config`, `base.abandon`, `base.hq_escape` and
-`unit.odp_attack` — are
+Five further surfaces — `base.governor_config`, `base.abandon`, `base.hq_escape`,
+`unit.odp_attack` and `diplo.tech_trade` — are
 **instrumented but not brain-decidable**, and are deliberately not in the four. Each has a
 deterministic tier in the fork and a probe, and no decide or apply path at all — which is the
 intended first step for the 21 `NO_AI_PATH` surfaces (na-2mn): give them a native answer
@@ -117,6 +117,7 @@ not worth changing.
 | `base.abandon` | base | `mod_base_production` (size-1 base, pod ready) | keep / spend the base, with the growth numbers the answer turns on | `observe-abandon <base_id>` |
 | `base.hq_escape` | base | `mod_capture_base` | relocate / don't, with the 1000-credit cost, the reserve, and the engine's chosen destination | `observe-hq-escape <base_id>` |
 | `unit.odp_attack` | unit | faction upkeep → `action_sat_attack` | one strike / hold, with vendetta-only targets and the available orbital assets | `observe-odp-attack <faction_id>` |
+| `diplo.tech_trade` | turn | `mod_buy_tech` response path | accept / decline an offered technology at Thinker's engine-derived price | `observe-tech-trade <buyer> <seller> <tech> <high_price>` |
 
 Each of the four has an apply command, and each validates with the engine's own test rather
 than with a reconstruction of it:
@@ -163,12 +164,12 @@ toggle per surface, and one switched off is recorded at `deterministic` tier —
 degraded, because the brain was never asked. That is how a surface gets rolled out one step at a
 time: instrument it, watch it observe, then let it decide.
 
-All four instrumented `NO_AI_PATH` surfaces are at the first of those steps with an extra one in front of it. A
+All five instrumented `NO_AI_PATH` surfaces are at the first of those steps with an extra one in front of it. A
 `NO_AI_PATH` surface has a rollout one longer than the others — **native answer, instrument,
 observe, then decide** — because the usual first step assumes a deterministic tier already
 exists to observe, and on these 21 it does not. Each therefore has a `thinker.ini` option
-(`na_governor_policy`, `na_abandon_policy`, `na_hq_escape_policy`, `na_odp_attack_policy`; all
-default off) and no `na.toml` toggle,
+(`na_governor_policy`, `na_abandon_policy`, `na_hq_escape_policy`, `na_odp_attack_policy`,
+`na_tech_trade_policy`; all default off) and no `na.toml` toggle,
 there being no brain answer yet to switch on.
 
 It is also the reason that list is worth working through rather than routing straight to the
@@ -328,7 +329,7 @@ LLM drills down.
 | `diplo.treaty_break` | ✅ | `break_treaty` faction.cpp:534 (popups :546-558 return-value gated) | L |
 | `diplo.atrocity` | ✅ | `atrocity` faction.cpp:398, `major_atrocity` :487 | L |
 | `diplo.ai_to_ai` | ⚠️ | `enemy_diplomacy` engine.cpp:808 — **opaque engine fn, never overridden** | observe only |
-| `diplo.tech_trade` | ❌ | `mod_buy_tech` gui_dialog.cpp:481 — asserts `!is_human(faction2)`; **human-initiated only** | **L** |
+| `diplo.tech_trade` | ❌ | initiation remains human-only; **deterministic response tier added** in `mod_buy_tech` (`na_tech_trade_policy`) for an offered technology | D+L |
 | `diplo.energy_loan` | ❌ | `mod_energy_trade` gui_dialog.cpp:352-397 — same assert :77 | L |
 | `diplo.base_swap` | ❌ | `mod_base_swap` gui_dialog.cpp:207 — same assert | L |
 | `diplo.treaty_offer` | ❌ | `propose_pact`/`propose_treaty` engine.cpp:748-749 — raw ptrs, no override | **L** |
@@ -503,6 +504,22 @@ placing a jump at the opaque entry point cannot establish that separation. This 
 shares `council.vote`'s fixture-backed disassembly prerequisite and adds one acceptance condition:
 the recovered seam must identify the exact energy debit and vote-commit boundary so a probe cannot
 spend credits or alter a vote. Until then it remains explicitly gated, not implemented.
+
+### 4.9 `diplo.tech_trade` now has a response baseline, not an initiator
+
+`mod_buy_tech` exposes one honest source seam: after another faction offers a specific technology,
+Thinker computes the price from `tech_alt_val`, difficulty, friction, relationship, atrocities,
+relative ranking and population, the high-price flag, and research already invested. It then asks
+the human buyer to accept before `net_energy` and `net_tech` commit the transaction. The default-off
+`na_tech_trade_policy` names the deterministic response already implicit in that path: accept when
+the computed price is affordable. `observe-tech-trade` runs the same extracted price function and
+serialises the answer without opening diplomacy, moving credits, or transferring technology.
+
+This is deliberately narrower than "AI technology trading." It supplies a safe fallback for the
+managed-human response path, which is the seam the fork can verify, but it does not choose a seller,
+select a desired technology, or initiate contact. Those remain upstream diplomacy-policy work. The
+surface is instrumented as a response baseline without claiming the one-directional negotiation
+tree has been made symmetric.
 
 ---
 
