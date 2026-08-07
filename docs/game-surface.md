@@ -309,7 +309,7 @@ LLM drills down.
 | `unit.tectonic/fungal` | ❌ | `action_tectonic` veh_action.cpp:1452, `action_fungal` :1537 — **no caller at all** | L |
 | `unit.patrol` | ❌ | `action_patrol` veh_action.cpp:1300 — human-issued order; `valid_patrol` is only its legality test, not an AI chooser | — |
 | `unit.disband` | ❌ | legacy ID for `action_destruct` veh_action.cpp:1174 — reactor self-destruct, not ordinary unit retirement; human command only | — |
-| `unit.gift` | ❌ | `action_give` veh_action.cpp:1649 — engine diplomacy only | L |
+| `unit.gift` | ❌ | `action_give` veh_action.cpp:1649 — transfer executor reached from engine diplomacy/UI; takes recipient as input, chooses nothing | — |
 | `unit.obliterate` | ❌ | `action_oblit` veh_action.cpp:1210 — no Thinker caller | **L** |
 
 ### 3.3 Faction level — scope `turn`
@@ -406,6 +406,20 @@ tactical explosion, not supply a missing fallback for "disband". Keep the stable
 records, but exclude it from na-2mn's deterministic-tier work unless a separately designed
 self-destruct policy first defines the trigger, target valuation, friendly-fire constraints, and
 atrocity consequences.
+
+### 4.3 `unit.gift` is an executor, not a gift policy
+
+`action_give(veh_id, faction_id_tgt)` receives both the unit and recipient from its engine caller.
+It transfers the selected unit and boarded cargo, maps or creates matching prototypes for the
+recipient, resets their orders and support homes, and emits notifications. It never asks whether a
+gift is worthwhile or selects a beneficiary. Hank therefore correctly reports no source-level
+policy caller: the remaining caller is inside the executable's diplomacy/UI path.
+
+Putting a deterministic flag or probe around this function would only observe or gate an action
+whose decision has already happened. The missing policy, if wanted, belongs to a faction-level deal
+surface that can compare recipients, diplomatic value, and the military cost of the units offered;
+only its chosen transaction should call `action_give`. Retain `unit.gift` as a frozen execution
+marker, but do not count the executor itself as a missing native-answer seam for na-2mn.
 
 ---
 
