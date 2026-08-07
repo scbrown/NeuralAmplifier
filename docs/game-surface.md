@@ -307,7 +307,7 @@ LLM drills down.
 | `unit.planet_buster` | ✅ | `nuclear_move` move.cpp:2701 | **L** |
 | `unit.odp_attack` | ❌ | `action_sat_attack` basewin.cpp:43 — **no AI caller** | L |
 | `unit.tectonic/fungal` | ❌ | `action_tectonic` veh_action.cpp:1452, `action_fungal` :1537 — **no caller at all** | L |
-| `unit.patrol` | ❌ | `valid_patrol` veh_action.cpp:1241 — no Thinker caller | D |
+| `unit.patrol` | ❌ | `action_patrol` veh_action.cpp:1300 — human-issued order; `valid_patrol` is only its legality test, not an AI chooser | — |
 | `unit.disband` | ❌ | `action_destruct` veh_action.cpp:1174 — no AI caller | L |
 | `unit.gift` | ❌ | `action_give` veh_action.cpp:1649 — engine diplomacy only | L |
 | `unit.obliterate` | ❌ | `action_oblit` veh_action.cpp:1210 — no Thinker caller | **L** |
@@ -376,6 +376,21 @@ how much they cost us:
    `base.hq_escape`, `base.retool`.** Human-dialog-only decisions with real stakes.
 9. **`probe.action` sub-menus.** The human gets ~15 dialogs; the AI collapses to one branch chain
    with a **hardcoded** sabotage target list (`probe.cpp:1066`).
+
+### 4.1 `unit.patrol` is not a missing decision tier
+
+`unit.patrol` remains in the frozen registry for log compatibility, but it is not work for the
+deterministic-tier expansion. `action_patrol` is an imperative order issued with an already-chosen
+unit and waypoint. Its only caller of `valid_patrol` asks whether that supplied waypoint is legal;
+neither function chooses whether to patrol or where to go. Hank's call graph confirms the complete
+local chain is `action_patrol -> valid_patrol`, with no Thinker policy caller.
+
+Adding a default-off `na_patrol_policy` at either function would therefore put a policy gate around
+a human command or its validator, not give an AI faction a native answer. The actual deterministic
+unit policy already lives in `mod_enemy_move` and uses `NODE_PATROL` / `NODE_COMBAT_PATROL` goals;
+an LLM-level patrol operation belongs above that movement policy (or on the direct command channel),
+not at this UI action. Treat this entry as a retained registry marker, not as one of the surfaces
+that needs a fallback manufactured under na-2mn.
 
 ---
 
