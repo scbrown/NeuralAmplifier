@@ -337,7 +337,7 @@ LLM drills down.
 | `diplo.map_trade` | ❌ | `trade_maps` engine.cpp:747 — pure engine | L |
 | `council.call` | ⚠️ | `call_council` game.cpp:1636 — **AI-only**; human gets only "COUNCILOPEN" :1633 | L |
 | `council.vote` | ❌ | opaque executable function `council_get_vote` at `0x52BE60`; three-int ABI is declared but its argument meanings and internal callers are unknown | **gated** |
-| `council.buy_vote` | ❌ | `buy_council_vote` engine.cpp:743 — decision opaque | L |
+| `council.buy_vote` | ❌ | opaque executable procedure `buy_council_vote` at `0x53EB50`; four-int ABI and transaction boundary are unnamed | **gated** |
 | `victory.diplomatic` | ✅ | `aah_ooga` faction.cpp:888; `at_climax` :944 (false for humans) | L |
 | `victory.conquest` | ✅ | `end_of_game` game.cpp:1222 | L |
 
@@ -488,6 +488,21 @@ all three arguments, the legal return values, every caller, and whether the func
 or also applies a vote. Only then can a default-off deterministic scorer and side-effect-free probe
 share the recovered seam. Until that evidence exists, this surface is explicitly gated rather than
 counted as implemented or dismissed as an executor.
+
+### 4.8 `council.buy_vote` has the same ABI gate plus a transaction risk
+
+`buy_council_vote` is even less suitable for a guessed wrapper. `engine.h` declares a
+`void(int, int, int, int)` procedure at `0x53EB50`, with no argument names and no source caller.
+The four internal `mod_tech_val` call patches prove the executable evaluates technologies during
+the conversation, but they do not identify buyer, seller, candidate, price, or which call commits
+energy and allegiance. A void return also suggests the function may both negotiate and apply the
+transaction rather than return a choice to its caller.
+
+A safe native fallback has to distinguish declining, offering, accepting, and committing payment;
+placing a jump at the opaque entry point cannot establish that separation. This surface therefore
+shares `council.vote`'s fixture-backed disassembly prerequisite and adds one acceptance condition:
+the recovered seam must identify the exact energy debit and vote-commit boundary so a probe cannot
+spend credits or alter a vote. Until then it remains explicitly gated, not implemented.
 
 ---
 
