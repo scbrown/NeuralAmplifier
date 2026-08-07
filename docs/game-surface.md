@@ -310,7 +310,7 @@ LLM drills down.
 | `unit.planet_buster` | ✅ | `nuclear_move` move.cpp:2701 | **L** |
 | `unit.odp_attack` | ❌ | `action_sat_attack` had no AI caller; **deterministic tier added in the fork** (`na_odp_attack_policy`, faction upkeep), vendetta-only and one strike per turn | D+L |
 | `unit.tectonic` | ❌ | `action_tectonic` veh_action.cpp:1452 — payload executor receives unit and target, then destroys the unit and changes global terrain/climate | — |
-| `unit.fungal` | ❌ | `action_fungal` veh_action.cpp:1537 — payload executor; no native target-selection policy | L |
+| `unit.fungal` | ❌ | `action_fungal` veh_action.cpp:1537 — consumes a preselected payload at preselected coordinates, then rewrites terrain and spawns native life | — |
 | `unit.patrol` | ❌ | `action_patrol` veh_action.cpp:1300 — human-issued order; `valid_patrol` is only its legality test, not an AI chooser | — |
 | `unit.disband` | ❌ | legacy ID for `action_destruct` veh_action.cpp:1174 — reactor self-destruct, not ordinary unit retirement; human command only | — |
 | `unit.gift` | ❌ | `action_give` veh_action.cpp:1649 — transfer executor reached from engine diplomacy/UI; takes recipient as input, chooses nothing | — |
@@ -440,6 +440,22 @@ tier must live in unit movement/operations policy and define target scoring, fri
 constraints, interception risk, sea-level consequences, and the value of consuming the unit before
 calling this executor. Retain the frozen surface ID, but do not treat `action_tectonic` itself as the
 missing native-answer seam under na-2mn.
+
+### 4.5 `unit.fungal` is also a payload executor
+
+`action_fungal(veh_id, tx, ty)` likewise begins after payload and target selection. It kills the
+unit before interception is resolved; on success it replaces farms, mines, roads and other tile
+improvements with fungus, can raise deep ocean tiles to shelf altitude, and spawns independent
+native life based on reactor strength. There is no return path that can preserve a payload after
+entry and no internal choice to expose as a fallback. Hank finds no Thinker caller; the patched
+address is reached from the executable's human command path.
+
+The missing capability is therefore an operations policy upstream, not a native answer inside
+`action_fungal`. Such a policy needs explicit valuation of the consumed unit, friendly and pact
+infrastructure loss, interception risk, nearby bases, and the fact that spawned native life is not
+owned by the launching faction. Until that design exists, placing a default-off switch or probe at
+the executor would make an irreversible action look safely instrumented when its decision remains
+undefined. Keep the frozen ID, but exclude this executor from na-2mn's tier count.
 
 ---
 
