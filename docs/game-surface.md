@@ -314,7 +314,7 @@ LLM drills down.
 | `unit.patrol` | ❌ | `action_patrol` veh_action.cpp:1300 — human-issued order; `valid_patrol` is only its legality test, not an AI chooser | — |
 | `unit.disband` | ❌ | legacy ID for `action_destruct` veh_action.cpp:1174 — reactor self-destruct, not ordinary unit retirement; human command only | — |
 | `unit.gift` | ❌ | `action_give` veh_action.cpp:1649 — transfer executor reached from engine diplomacy/UI; takes recipient as input, chooses nothing | — |
-| `unit.obliterate` | ❌ | `action_oblit` veh_action.cpp:1210 — no Thinker caller | **L** |
+| `unit.obliterate` | ❌ | `action_oblit` veh_action.cpp:1210 — receives attacker and base after selection, then destroys the base and records the atrocity | — |
 
 ### 3.3 Faction level — scope `turn`
 
@@ -456,6 +456,21 @@ infrastructure loss, interception risk, nearby bases, and the fact that spawned 
 owned by the launching faction. Until that design exists, placing a default-off switch or probe at
 the executor would make an irreversible action look safely instrumented when its decision remains
 undefined. Keep the frozen ID, but exclude this executor from na-2mn's tier count.
+
+### 4.6 `unit.obliterate` executes a selected atrocity
+
+`action_oblit(veh_id, base_id)` receives the acting unit and target base after selection. It computes
+notification text, calls `mod_base_kill` unconditionally, and then records the atrocity when the game
+rule enables that consequence. It does not ask whether the base should be destroyed, identify an
+evacuation condition, or compare the diplomatic penalty with denial value. Hank finds no Thinker
+caller because the patched function is entered from the executable's human command path.
+
+The deterministic answer must therefore precede this function and must be allowed to say no before
+the irreversible `mod_base_kill`. A defensible policy needs at least target ownership and former
+ownership, population, recapture likelihood, facilities and projects lost, charter state, atrocity
+penalties, and friendly units affected. A flag attached to `action_oblit` itself supplies none of
+those decisions and cannot be a safe fallback. Retain the frozen ID, but treat this function as an
+executor outside na-2mn's tier count until an upstream base-denial policy is designed.
 
 ---
 
