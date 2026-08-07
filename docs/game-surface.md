@@ -91,7 +91,8 @@ they reach territory the 25 unit-scope surfaces below were deferred over. See
 The registry is frozen at 77 (`orchestrator/surfaces.py`), partitioned by contract scope:
 `base` 25, `unit` 32, `turn` 20.
 
-Three further surfaces — `base.governor_config`, `base.abandon` and `base.hq_escape` — are
+Four further surfaces — `base.governor_config`, `base.abandon`, `base.hq_escape` and
+`unit.odp_attack` — are
 **instrumented but not brain-decidable**, and are deliberately not in the four. Each has a
 deterministic tier in the fork and a probe, and no decide or apply path at all — which is the
 intended first step for the 21 `NO_AI_PATH` surfaces (na-2mn): give them a native answer
@@ -115,6 +116,7 @@ not worth changing.
 | `base.governor_config` | base | `governor_priorities` | n/a — deterministic tier only so far; records the resolved weights and their source | `observe-gov <base_id>` |
 | `base.abandon` | base | `mod_base_production` (size-1 base, pod ready) | keep / spend the base, with the growth numbers the answer turns on | `observe-abandon <base_id>` |
 | `base.hq_escape` | base | `mod_capture_base` | relocate / don't, with the 1000-credit cost, the reserve, and the engine's chosen destination | `observe-hq-escape <base_id>` |
+| `unit.odp_attack` | unit | faction upkeep → `action_sat_attack` | one strike / hold, with vendetta-only targets and the available orbital assets | `observe-odp-attack <faction_id>` |
 
 Each of the four has an apply command, and each validates with the engine's own test rather
 than with a reconstruction of it:
@@ -161,11 +163,12 @@ toggle per surface, and one switched off is recorded at `deterministic` tier —
 degraded, because the brain was never asked. That is how a surface gets rolled out one step at a
 time: instrument it, watch it observe, then let it decide.
 
-All three `NO_AI_PATH` surfaces are at the first of those steps with an extra one in front of it. A
+All four instrumented `NO_AI_PATH` surfaces are at the first of those steps with an extra one in front of it. A
 `NO_AI_PATH` surface has a rollout one longer than the others — **native answer, instrument,
 observe, then decide** — because the usual first step assumes a deterministic tier already
 exists to observe, and on these 21 it does not. Each therefore has a `thinker.ini` option
-(`na_governor_policy`, `na_abandon_policy`, `na_hq_escape_policy`; all default off) and no `na.toml` toggle,
+(`na_governor_policy`, `na_abandon_policy`, `na_hq_escape_policy`, `na_odp_attack_policy`; all
+default off) and no `na.toml` toggle,
 there being no brain answer yet to switch on.
 
 It is also the reason that list is worth working through rather than routing straight to the
@@ -305,7 +308,7 @@ LLM drills down.
 | `unit.artifact` | ✅ | `artifact_move` move.cpp:2204 | D+L |
 | `unit.psi_gate` | ✅ | move.cpp:3431-3461, `teleport_score` :131 | D |
 | `unit.planet_buster` | ✅ | `nuclear_move` move.cpp:2701 | **L** |
-| `unit.odp_attack` | ❌ | `action_sat_attack` basewin.cpp:43 — **no AI caller** | L |
+| `unit.odp_attack` | ❌ | `action_sat_attack` had no AI caller; **deterministic tier added in the fork** (`na_odp_attack_policy`, faction upkeep), vendetta-only and one strike per turn | D+L |
 | `unit.tectonic/fungal` | ❌ | `action_tectonic` veh_action.cpp:1452, `action_fungal` :1537 — **no caller at all** | L |
 | `unit.patrol` | ❌ | `action_patrol` veh_action.cpp:1300 — human-issued order; `valid_patrol` is only its legality test, not an AI chooser | — |
 | `unit.disband` | ❌ | legacy ID for `action_destruct` veh_action.cpp:1174 — reactor self-destruct, not ordinary unit retirement; human command only | — |
@@ -372,7 +375,7 @@ how much they cost us:
    (`game.cpp:1908`, `faction.cpp:1463`). The AI heuristics exist and are portable — the cheapest
    fixes on this list.
 7. **`unit.tectonic` / `unit.fungal`.** No caller anywhere; AI factions never fire these.
-8. **`unit.odp_attack`, `unit.obliterate`, `unit.gift`, `unit.disband`, `base.abandon`,
+8. **`unit.obliterate`, `unit.gift`, `unit.disband`, `base.abandon`,
    `base.hq_escape`, `base.retool`.** Human-dialog-only decisions with real stakes.
 9. **`probe.action` sub-menus.** The human gets ~15 dialogs; the AI collapses to one branch chain
    with a **hardcoded** sabotage target list (`probe.cpp:1066`).
