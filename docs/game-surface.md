@@ -336,7 +336,7 @@ LLM drills down.
 | `diplo.tribute` | ❌ | `demand_withdrawal` engine.cpp:755 etc. — no Thinker logic | L |
 | `diplo.map_trade` | ❌ | `trade_maps` engine.cpp:747 — pure engine | L |
 | `council.call` | ⚠️ | `call_council` game.cpp:1636 — **AI-only**; human gets only "COUNCILOPEN" :1633 | L |
-| `council.vote` | ❌ | `council_get_vote` engine.cpp:683 — **zero call sites anywhere in Thinker** | **L** |
+| `council.vote` | ❌ | opaque executable function `council_get_vote` at `0x52BE60`; three-int ABI is declared but its argument meanings and internal callers are unknown | **gated** |
 | `council.buy_vote` | ❌ | `buy_council_vote` engine.cpp:743 — decision opaque | L |
 | `victory.diplomatic` | ✅ | `aah_ooga` faction.cpp:888; `at_climax` :944 (false for humans) | L |
 | `victory.conquest` | ✅ | `end_of_game` game.cpp:1222 | L |
@@ -471,6 +471,23 @@ ownership, population, recapture likelihood, facilities and projects lost, chart
 penalties, and friendly units affected. A flag attached to `action_oblit` itself supplies none of
 those decisions and cannot be a safe fallback. Retain the frozen ID, but treat this function as an
 executor outside na-2mn's tier count until an upstream base-denial policy is designed.
+
+### 4.7 `council.vote` is gated on recovering the executable seam
+
+Unlike the unit executors above, `council.vote` is a real missing decision. The fork, however, has
+no source-level boundary at which a safe native answer can be inserted. `engine.cpp` exposes only a
+raw pointer to `0x52BE60`; `engine.h` types it as `int(int, int, int)` without naming any argument,
+and no Thinker function calls it. The actual caller and vote-state mutation remain inside
+`terranx.exe`. `council_action`, `can_call_council`, and `call_council` are opaque pointers too, so
+their presence does not reveal which values identify the voter, proposal, or candidates.
+
+Installing a jump at that address before recovering the ABI would replace the engine function, not
+wrap a known decision. A clean compile could not catch swapped arguments, a wrong return domain, or
+skipped state mutation. The next prerequisite is a fixture-backed trace or disassembly that names
+all three arguments, the legal return values, every caller, and whether the function merely chooses
+or also applies a vote. Only then can a default-off deterministic scorer and side-effect-free probe
+share the recovered seam. Until that evidence exists, this surface is explicitly gated rather than
+counted as implemented or dismissed as an executor.
 
 ---
 
