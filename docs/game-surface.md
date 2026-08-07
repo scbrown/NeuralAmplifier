@@ -336,7 +336,7 @@ LLM drills down.
 | `diplo.energy_loan` | ❌ | initiation remains human-only; **deterministic response tier added** in `mod_energy_trade` (`na_energy_loan_policy`) for offered loan terms | D+L |
 | `diplo.base_swap` | ❌ | initiation remains human-only; **deterministic priced-purchase response added** in `mod_base_swap` (`na_base_swap_policy`) | D+L |
 | `diplo.treaty_offer` | ❌ | opaque executable `propose_pact` / `propose_treaty` procedures; two faction-like ints are named only by inference and return/commit semantics are unknown | **gated** |
-| `diplo.surrender` | ❌ | no AI function; Thinker only throttles the dialog base.cpp:950-970 | L |
+| `diplo.surrender` | ❌ | surrender choice remains inside executable diplomacy; Thinker only throttles repeated post-capture conversations | **gated** |
 | `diplo.tribute` | ❌ | `demand_withdrawal` engine.cpp:755 etc. — no Thinker logic | L |
 | `diplo.map_trade` | ❌ | `trade_maps` engine.cpp:747 — pure engine | L |
 | `council.call` | ⚠️ | `call_council` game.cpp:1636 — **AI-only**; human gets only "COUNCILOPEN" :1633 | L |
@@ -576,6 +576,24 @@ Hooking either address from its name alone could invert proposer and recipient o
 during observation while still compiling cleanly. This surface is therefore explicitly ABI-gated on
 fixture-backed tracing or disassembly that names both arguments, legal returns, all callers and the
 exact treaty-commit operation. Only after that can proposal scoring be separated from application.
+
+### 4.13 `diplo.surrender` has state mutations but no decision seam
+
+Thinker's post-capture code in `mod_capture_base` does not decide surrender. It probabilistically
+clears `DIPLO_WANT_TO_TALK` to suppress an AI reopening diplomacy every turn after losing a base,
+while deliberately preserving conversations where the executable may decide capitulation. The
+actual offer, acceptance and application remain inside the engine's conversation tree.
+
+The source does contain one sequence that sets `DIPLO_HAVE_SURRENDERED`: a probe-team action that
+frees a previously captured faction leader. That path resurrects the faction, transfers technology,
+sets treaty and pact bits, and then runs `diplomacy_check`. It is a distinct operation, not evidence
+of the ordinary surrender ABI; reusing it would conflate liberating a leader with an enemy deciding
+to capitulate.
+
+This surface is gated on tracing the normal diplomacy branch from surrender offer through response
+to the exact treaty-state commit, including which faction is master and which surrendered. A safe
+probe must stop before every treaty mutation. Until that branch is recovered, there is no honest
+place for a default-off scorer or fallback.
 
 ---
 
