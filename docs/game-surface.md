@@ -308,7 +308,7 @@ LLM drills down.
 | `unit.odp_attack` | ❌ | `action_sat_attack` basewin.cpp:43 — **no AI caller** | L |
 | `unit.tectonic/fungal` | ❌ | `action_tectonic` veh_action.cpp:1452, `action_fungal` :1537 — **no caller at all** | L |
 | `unit.patrol` | ❌ | `action_patrol` veh_action.cpp:1300 — human-issued order; `valid_patrol` is only its legality test, not an AI chooser | — |
-| `unit.disband` | ❌ | `action_destruct` veh_action.cpp:1174 — no AI caller | L |
+| `unit.disband` | ❌ | legacy ID for `action_destruct` veh_action.cpp:1174 — reactor self-destruct, not ordinary unit retirement; human command only | — |
 | `unit.gift` | ❌ | `action_give` veh_action.cpp:1649 — engine diplomacy only | L |
 | `unit.obliterate` | ❌ | `action_oblit` veh_action.cpp:1210 — no Thinker caller | **L** |
 
@@ -391,6 +391,21 @@ unit policy already lives in `mod_enemy_move` and uses `NODE_PATROL` / `NODE_COM
 an LLM-level patrol operation belongs above that movement policy (or on the direct command channel),
 not at this UI action. Treat this entry as a retained registry marker, not as one of the surfaces
 that needs a fallback manufactured under na-2mn.
+
+### 4.2 `unit.disband` names the wrong operation
+
+The frozen `unit.disband` ID points at `action_destruct`, but that function is not a quiet unit
+retirement decision. It detonates the unit's reactor, computes blast damage from weapon and reactor
+strength, damages every adjacent stack, and kills units whose accumulated damage reaches their hit
+points. Hank finds no policy caller; the executable reaches the patched address from the human
+command surface. Thinker's actual lifecycle decisions already use `mod_upgrade_prototype` and
+`retire_proto`, both listed separately above as native deterministic paths.
+
+A default-off policy at `action_destruct` would therefore create a new AI decision to launch a
+tactical explosion, not supply a missing fallback for "disband". Keep the stable ID for historical
+records, but exclude it from na-2mn's deterministic-tier work unless a separately designed
+self-destruct policy first defines the trigger, target valuation, friendly-fire constraints, and
+atrocity consequences.
 
 ---
 
