@@ -91,8 +91,8 @@ they reach territory the 25 unit-scope surfaces below were deferred over. See
 The registry is frozen at 77 (`orchestrator/surfaces.py`), partitioned by contract scope:
 `base` 25, `unit` 32, `turn` 20.
 
-Five further surfaces — `base.governor_config`, `base.abandon`, `base.hq_escape`,
-`unit.odp_attack` and `diplo.tech_trade` — are
+Six further surfaces — `base.governor_config`, `base.abandon`, `base.hq_escape`,
+`unit.odp_attack`, `diplo.tech_trade` and `diplo.energy_loan` — are
 **instrumented but not brain-decidable**, and are deliberately not in the four. Each has a
 deterministic tier in the fork and a probe, and no decide or apply path at all — which is the
 intended first step for the 21 `NO_AI_PATH` surfaces (na-2mn): give them a native answer
@@ -118,6 +118,7 @@ not worth changing.
 | `base.hq_escape` | base | `mod_capture_base` | relocate / don't, with the 1000-credit cost, the reserve, and the engine's chosen destination | `observe-hq-escape <base_id>` |
 | `unit.odp_attack` | unit | faction upkeep → `action_sat_attack` | one strike / hold, with vendetta-only targets and the available orbital assets | `observe-odp-attack <faction_id>` |
 | `diplo.tech_trade` | turn | `mod_buy_tech` response path | accept / decline an offered technology at Thinker's engine-derived price | `observe-tech-trade <buyer> <seller> <tech> <high_price>` |
+| `diplo.energy_loan` | turn | `mod_energy_trade` loan response | accept / decline Thinker's offered terms using repayment capacity | `observe-energy-loan <borrower> <lender>` |
 
 Each of the four has an apply command, and each validates with the engine's own test rather
 than with a reconstruction of it:
@@ -164,12 +165,12 @@ toggle per surface, and one switched off is recorded at `deterministic` tier —
 degraded, because the brain was never asked. That is how a surface gets rolled out one step at a
 time: instrument it, watch it observe, then let it decide.
 
-All five instrumented `NO_AI_PATH` surfaces are at the first of those steps with an extra one in front of it. A
+All six instrumented `NO_AI_PATH` surfaces are at the first of those steps with an extra one in front of it. A
 `NO_AI_PATH` surface has a rollout one longer than the others — **native answer, instrument,
 observe, then decide** — because the usual first step assumes a deterministic tier already
 exists to observe, and on these 21 it does not. Each therefore has a `thinker.ini` option
 (`na_governor_policy`, `na_abandon_policy`, `na_hq_escape_policy`, `na_odp_attack_policy`,
-`na_tech_trade_policy`; all default off) and no `na.toml` toggle,
+`na_tech_trade_policy`, `na_energy_loan_policy`; all default off) and no `na.toml` toggle,
 there being no brain answer yet to switch on.
 
 It is also the reason that list is worth working through rather than routing straight to the
@@ -330,7 +331,7 @@ LLM drills down.
 | `diplo.atrocity` | ✅ | `atrocity` faction.cpp:398, `major_atrocity` :487 | L |
 | `diplo.ai_to_ai` | ⚠️ | `enemy_diplomacy` engine.cpp:808 — **opaque engine fn, never overridden** | observe only |
 | `diplo.tech_trade` | ❌ | initiation remains human-only; **deterministic response tier added** in `mod_buy_tech` (`na_tech_trade_policy`) for an offered technology | D+L |
-| `diplo.energy_loan` | ❌ | `mod_energy_trade` gui_dialog.cpp:352-397 — same assert :77 | L |
+| `diplo.energy_loan` | ❌ | initiation remains human-only; **deterministic response tier added** in `mod_energy_trade` (`na_energy_loan_policy`) for offered loan terms | D+L |
 | `diplo.base_swap` | ❌ | `mod_base_swap` gui_dialog.cpp:207 — same assert | L |
 | `diplo.treaty_offer` | ❌ | `propose_pact`/`propose_treaty` engine.cpp:748-749 — raw ptrs, no override | **L** |
 | `diplo.surrender` | ❌ | no AI function; Thinker only throttles the dialog base.cpp:950-970 | L |
@@ -520,6 +521,25 @@ managed-human response path, which is the seam the fork can verify, but it does 
 select a desired technology, or initiate contact. Those remain upstream diplomacy-policy work. The
 surface is instrumented as a response baseline without claiming the one-directional negotiation
 tree has been made symmetric.
+
+### 4.10 `diplo.energy_loan` has a repayment-capacity response
+
+`mod_energy_trade` exposes the same useful split for a loan. Thinker already decides whether the
+lender will offer, then derives amount, term and payment from diplomatic friction, relationship,
+atrocities, relative population and labs, faction traits, difficulty and the lender's reserve. The
+borrower dialog occurs immediately before `net_loan` creates the debt and `net_energy` transfers the
+principal. That is the response seam the deterministic tier can own without reimplementing the
+transaction.
+
+With default-off `na_energy_loan_policy`, the borrower accepts only when its current net energy
+income—surplus plus commerce, less maintenance and every active loan payment—covers the new payment.
+This is intentionally stricter than mere receipt of an offer: a loan that solves today's reserve by
+creating an unserviceable turn cost is not a safe fallback. `observe-energy-loan` shares the extracted
+term calculation and records repayment capacity without creating debt or moving credits.
+
+As with technology trading, this is a managed-human response baseline, not symmetric AI diplomacy.
+It does not decide to seek financing or choose a lender; those remain initiation-policy work and are
+not counted as delivered by this tier.
 
 ---
 
