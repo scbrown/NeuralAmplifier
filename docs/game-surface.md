@@ -337,7 +337,7 @@ LLM drills down.
 | `diplo.base_swap` | ❌ | initiation remains human-only; **deterministic priced-purchase response added** in `mod_base_swap` (`na_base_swap_policy`) | D+L |
 | `diplo.treaty_offer` | ❌ | opaque executable `propose_pact` / `propose_treaty` procedures; two faction-like ints are named only by inference and return/commit semantics are unknown | **gated** |
 | `diplo.surrender` | ❌ | surrender choice remains inside executable diplomacy; Thinker only throttles repeated post-capture conversations | **gated** |
-| `diplo.tribute` | ❌ | `demand_withdrawal` engine.cpp:755 etc. — no Thinker logic | L |
+| `diplo.tribute` | ❌ | no identified engine symbol or Thinker wrapper; nearby withdrawal-demand procedures are a different diplomatic action | **gated** |
 | `diplo.map_trade` | ❌ | `trade_maps` engine.cpp:747 — pure engine | L |
 | `council.call` | ⚠️ | `call_council` game.cpp:1636 — **AI-only**; human gets only "COUNCILOPEN" :1633 | L |
 | `council.vote` | ❌ | opaque executable function `council_get_vote` at `0x52BE60`; three-int ABI is declared but its argument meanings and internal callers are unknown | **gated** |
@@ -594,6 +594,20 @@ This surface is gated on tracing the normal diplomacy branch from surrender offe
 to the exact treaty-state commit, including which faction is master and which surrendered. A safe
 probe must stop before every treaty mutation. Until that branch is recovered, there is no honest
 place for a default-off scorer or fallback.
+
+### 4.14 `diplo.tribute` is gated on identifying the operation
+
+The fork does not expose a tribute function, caller, proposal ID, amount calculation or transfer
+boundary. The nearest named executable procedures—`demands_withdrawal`, `demand_withdrawal`,
+`do_withdrawal` and `dont_withdrawal`—govern removal of units from territory. Their two-integer
+signatures and names do not make them evidence for an energy-tribute decision, and using one would
+attach policy to a different diplomatic action.
+
+This is a discovery gate before it is an ABI gate: fixture-backed conversation tracing or
+disassembly must first identify the tribute branch, its amount and payer/payee state, response
+domain, and the exact `net_energy` commit. A side-effect-free probe then stops before that transfer.
+Until the operation itself is mapped, there is no honest function to wrap or deterministic answer
+to score.
 
 ---
 
