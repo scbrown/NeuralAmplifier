@@ -335,7 +335,7 @@ LLM drills down.
 | `diplo.tech_trade` | ❌ | initiation remains human-only; **deterministic response tier added** in `mod_buy_tech` (`na_tech_trade_policy`) for an offered technology | D+L |
 | `diplo.energy_loan` | ❌ | initiation remains human-only; **deterministic response tier added** in `mod_energy_trade` (`na_energy_loan_policy`) for offered loan terms | D+L |
 | `diplo.base_swap` | ❌ | initiation remains human-only; **deterministic priced-purchase response added** in `mod_base_swap` (`na_base_swap_policy`) | D+L |
-| `diplo.treaty_offer` | ❌ | `propose_pact`/`propose_treaty` engine.cpp:748-749 — raw ptrs, no override | **L** |
+| `diplo.treaty_offer` | ❌ | opaque executable `propose_pact` / `propose_treaty` procedures; two faction-like ints are named only by inference and return/commit semantics are unknown | **gated** |
 | `diplo.surrender` | ❌ | no AI function; Thinker only throttles the dialog base.cpp:950-970 | L |
 | `diplo.tribute` | ❌ | `demand_withdrawal` engine.cpp:755 etc. — no Thinker logic | L |
 | `diplo.map_trade` | ❌ | `trade_maps` engine.cpp:747 — pure engine | L |
@@ -562,6 +562,20 @@ valuation and response without transferring the base or credits.
 The baseline covers only the priced-purchase confirmation. Base-for-base offers already pass the
 seller's deterministic value checks, while choosing a target base, seller, or bid and initiating the
 conversation remain upstream diplomacy-policy work. Those are not claimed delivered here.
+
+### 4.12 `diplo.treaty_offer` is gated on proposal return semantics
+
+`propose_pact` and `propose_treaty` are raw executable pointers at `0x543BC0` and `0x544E40`.
+`engine.h` declares both as `int(int, int)` without argument names; there are no source callers, and
+the fork only patches internal `mod_tech_val` calls. The names strongly suggest two faction IDs, but
+that inference does not establish which side proposes, what the integer return means, or whether the
+procedure itself changes treaty state, transfers a counter-offer, or only reports acceptance.
+
+Those distinctions are the decision/apply boundary a safe fallback and side-effect-free probe need.
+Hooking either address from its name alone could invert proposer and recipient or apply a treaty
+during observation while still compiling cleanly. This surface is therefore explicitly ABI-gated on
+fixture-backed tracing or disassembly that names both arguments, legal returns, all callers and the
+exact treaty-commit operation. Only after that can proposal scoring be separated from application.
 
 ---
 
