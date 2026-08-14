@@ -83,3 +83,6 @@ CLAUDE.local.md
 
 # mdBook output — rebuildable with `just docs build`. The sources are docs/.
 /book/
+
+# Beads runtime lock
+*.gate.lock*
