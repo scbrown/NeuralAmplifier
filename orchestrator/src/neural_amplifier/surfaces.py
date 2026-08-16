@@ -219,6 +219,12 @@ OBSERVED: Final[frozenset[str]] = frozenset(
         # Records both callers and keeps them apart: a probe team's deliberate operation and the
         # acquisition that comes free with a base capture. Same chooser, different provenance.
         "faction.tech_steal",
+        # The seventh from na-yd4's 27, and the first RELATIVE one. move_upkeep assigns the
+        # defender tier by PERCENTILE across the faction's whole base list, so the same base
+        # with the same score is a different tier in a bigger empire. The record carries the
+        # engine's priority score AND the cohort size, because the tier alone cannot be
+        # compared across turns — which is the thing na-6db has to do.
+        "base.defend_goal",
     }
 )
 

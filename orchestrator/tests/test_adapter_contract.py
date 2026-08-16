@@ -694,6 +694,68 @@ FACTION_TECH_STEAL = {
     "applied": "native",
 }
 
+# na_write_head + na_build_base_defend_goal + na_write_metrics + na_write_base_state.
+BASE_DEFEND_GOAL = {
+    "schema_version": "0.1",
+    "engine": "thinker",
+    "scope": "base",
+    "surface_id": "base.defend_goal",
+    "turn": 42,
+    "faction_id": 1,
+    "faction": "Gaians",
+    "run_id": "68ad1e40-0004e1c8-1a2c",
+    "trace": {"traceparent": "00-0000002a000000010000000a07a1c0de-0000000a0000002b-01"},
+    "base_id": 0,
+    "base": "Gaia's Landing",
+    # The engine's own priority score AND the cohort it was ranked within. Both, because the
+    # tier is a percentile: score 44 is tier 4 in a 20-base empire and tier 2 in a 4-base one.
+    "priority_score": 44,
+    "cohort_size": 20,
+    # NOT tiles — plan.cpp weights map_range by region and war state. Lower means more exposed.
+    "defend_range": 8,
+    "subjects": ["Gaia's Landing"],
+    "metrics": {
+        "energy_reserves": 82,
+        "energy_income": 14,
+        "labs_output": 6,
+        "base_count": 2,
+        "pop_total": 5,
+        "military_units": 3,
+        "drone_total": 1,
+        "units_in_foreign_territory": 0,
+        "mineral_surplus": 2,
+        "minerals_remaining": 26,
+        "pop_size": 3,
+        "turns_to_completion": 13,
+    },
+    "base_state": {
+        "pop_size": 3,
+        "minerals_accumulated": 18,
+        "mineral_surplus": 2,
+        "nutrient_intake": 5,
+        "mineral_intake": 3,
+        "energy_intake": 4,
+        "eco_damage": 0,
+        "worked_tiles": 3,
+        "specialists": 0,
+        "queue_size": 1,
+        "current_item": -4,
+        "current_item_name": "Recycling Tanks",
+    },
+    "action_space": [
+        {"id": "defend:1", "action": "Hold 1 defender", "category": "defend"},
+        {"id": "defend:2", "action": "Hold 2 defenders", "category": "defend"},
+        {"id": "defend:3", "action": "Hold 3 defenders", "category": "defend"},
+        {"id": "defend:4", "action": "Hold 4 defenders", "category": "defend"},
+        {"id": "defend:5", "action": "Hold 5 defenders", "category": "defend"},
+    ],
+    "action_space_size": 5,
+    "native_choice": "defend:4",
+    "native_choice_item": 4,
+    "tier": "deterministic",
+    "applied": "native",
+}
+
 ALL_RECORDS = [
     BASE_PRODUCTION,
     BASE_HURRY,
@@ -706,6 +768,7 @@ ALL_RECORDS = [
     BASE_SATELLITE,
     BASE_PROJECT,
     FACTION_TECH_STEAL,
+    BASE_DEFEND_GOAL,
 ]
 
 
@@ -1509,3 +1572,43 @@ def test_tech_steal_is_observed_not_applied() -> None:
     assert "faction.tech_steal" in OBSERVED
     assert "faction.tech_steal" not in APPLIED
     assert "faction.tech_steal" not in NO_AI_PATH
+
+
+def test_defend_goal_carries_the_score_and_the_cohort_it_was_ranked_in() -> None:
+    """A percentile decision is meaningless without the population it was taken over.
+
+    move_upkeep sorts every base of the faction and cuts at 15/16, 7/8, 3/4 and 1/2. So the
+    tier answers "how does this base rank among ours", not "how exposed is this base" — and the
+    same base with the same score is tier 4 in a twenty-base empire and tier 2 in a four-base
+    one. A record carrying only the tier could not be compared across turns of one game, let
+    alone across games, which is exactly the comparison na-6db exists to make.
+    """
+    world_view = WorldView.model_validate(BASE_DEFEND_GOAL)
+    payload = world_view.model_dump()
+    assert isinstance(payload["priority_score"], int)
+    assert payload["cohort_size"] >= 1
+
+
+def test_defend_goal_offers_exactly_the_five_tiers_the_engine_assigns() -> None:
+    """Five, not an open integer. Anything outside 1..5 is not a goal this engine can act on,
+    and offering a free number would invite an answer the apply path could never honour."""
+    world_view = WorldView.model_validate(BASE_DEFEND_GOAL)
+    assert {a.id for a in world_view.action_space} == {f"defend:{n}" for n in range(1, 6)}
+    assert BASE_DEFEND_GOAL["native_choice"] in {a.id for a in world_view.action_space}
+
+
+def test_defend_range_is_not_tiles() -> None:
+    """Documented here because the name invites the wrong reading, and a policy already selects
+    on it. plan.cpp weights map_range by region and war state, halves it and caps at 50 — the
+    same neighbour scores 8 at war and 32 at peace. LOWER means more exposed."""
+    assert BASE_DEFEND_GOAL["defend_range"] < 12, (
+        "the fixture is a threatened base, which is what makes tier 4 sensible"
+    )
+
+
+def test_defend_goal_is_observed_not_applied() -> None:
+    from neural_amplifier.surfaces import APPLIED, NO_AI_PATH, OBSERVED
+
+    assert "base.defend_goal" in OBSERVED
+    assert "base.defend_goal" not in APPLIED
+    assert "base.defend_goal" not in NO_AI_PATH

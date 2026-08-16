@@ -71,7 +71,7 @@ Per-unit orders fire separately as the engine iterates units (`mod_enemy_turn`
 
 ## 2.5 Instrumentation status — measured 2026-07-29, amended 2026-08-03
 
-**4 of 77 surfaces the brain can actually decide**, plus **8 observed only**. The four apply:
+**4 of 77 surfaces the brain can actually decide**, plus **9 observed only**. The four apply:
 the choice executes, validated against the engine's own availability tests first, so an illegal
 order is rejected rather than applied. A surface is not covered until its decision can be applied
 — `just surfaces` reports it from the frozen registry rather than from this paragraph.
@@ -150,6 +150,18 @@ operation and the acquisition that comes free with capturing a base; without `ac
 eval asking "how good are our steals" would average a chosen operation together with something
 nobody chose.
 
+`base.defend_goal` is the seventh, and the first **relative** one. `move_upkeep` scores every
+base of a faction, sorts, and cuts at 15/16, 7/8, 3/4 and 1/2 — so the tier answers "how does
+this base rank among ours", not "how exposed is this base". The same base with the same score is
+tier 4 in a twenty-base empire and tier 2 in a four-base one. The record therefore carries the
+engine's priority score *and* the cohort size: a tier alone cannot be compared across turns of
+one game, let alone across games, which is the comparison na-6db exists to make.
+
+Its probe is the one that reports two honest zeros. The score lives only inside `move_upkeep`'s
+sorting pass and cannot be recovered afterwards, so the probe emits score 0 and cohort 0 rather
+than inventing a number no engine computed — and a reader seeing cohort 0 knows the row came
+from a probe.
+
 `econ.energy_sliders` is another observed-only one (na-yd4): the adapter records what
 `mod_allocate_energy` chose and every split that was legal, and nothing applies a brain's answer
 yet. It is deliberately in `OBSERVED` and not `APPLIED`, because the applied count is what says
@@ -194,6 +206,7 @@ not worth changing.
 | `base.satellite` | base | `find_satellite` | all four orbitals with per-option availability, built count and faction goal, plus decline and build-the-complex-first | `observe-satellite <base_id>` |
 | `base.project` | base | `find_project` | every buildable secret project with the engine's own `facility_score` under this base's governor weights, and how many bases are already on it | `observe-project <base_id>` |
 | `faction.tech_steal` | turn | `steal_tech` → `mod_tech_pick` | every tech the target holds and we do not, with the same AI weights `faction.tech` reports; names which caller it came from | `observe-steal <faction_id> <target_id>` |
+| `base.defend_goal` | base | `move_upkeep` | five tiers, with the engine's own priority score and the cohort it was ranked within | `observe-defend <base_id>` |
 | `base.governor_config` | base | `governor_priorities` | n/a — deterministic tier only so far; records the resolved weights and their source | `observe-gov <base_id>` |
 | `base.abandon` | base | `mod_base_production` (size-1 base, pod ready) | keep / spend the base, with the growth numbers the answer turns on | `observe-abandon <base_id>` |
 | `base.hq_escape` | base | `mod_capture_base` | relocate / don't, with the 1000-credit cost, the reserve, and the engine's chosen destination | `observe-hq-escape <base_id>` |
