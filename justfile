@@ -220,6 +220,24 @@ ingest-thinker:
         --out ../datalinks/thinker/alphax.ttl \
         --briefing ../datalinks/thinker/briefing.txt
 
+# Engine-mechanics grounding (Hank role a): promote the fork's code structure, then link the
+# surfaces to the functions that decide them. Needs THINKER_DIR and a yupana built with
+# `langs-extra` — without it the C++ is unparsed and the export is empty while exiting 0.
+# Structure the engine's code, so "how does it actually score this" is a graph hop
+code-graph db=".quipu/code.db":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    mkdir -p "$(dirname "{{db}}")"
+    yupana export "{{thinker}}/src" --repo thinker --format turtle > /tmp/na-thinker-code.ttl
+    # Refuse an empty export rather than knotting nothing and reporting success — that is the
+    # langs-extra failure, and it is silent by construction on yupana's side.
+    test -s /tmp/na-thinker-code.ttl || { echo "empty export — is yupana built with langs-extra?" >&2; exit 1; }
+    quipu knot /tmp/na-thinker-code.ttl --db "{{db}}"
+    quipu knot datalinks/computed-by.ttl --db "{{db}}"
+    # One line: `just` does not continue lines inside a shebang recipe, and a wrapped SPARQL
+    # string reads to it as the start of a new recipe.
+    quipu read 'PREFIX smac: <http://neuralamplifier.local/ontology/smac/> PREFIX bobbin: <http://aegis.gastown.local/ontology/> PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#> SELECT ?name ?fn ?file WHERE { ?s rdfs:label ?name ; smac:computedBy ?sym . ?sym bobbin:name ?fn ; bobbin:definedIn ?mod . ?mod bobbin:filePath ?file . }' --db "{{db}}"
+
 # === Quipu (knowledge graph) ===
 
 # Needs `quipu` built with --features shacl,onnx (scripts/setup-environment.sh).

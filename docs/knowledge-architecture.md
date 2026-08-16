@@ -469,7 +469,10 @@ Haiku, kept separate from the brain's model so the two can be priced independent
 - **K2 — Per-turn retrieval.** `quipu_context` + action-space grounding + budgeting + degradation.
 - **K3 — Memory write/recall. Wired** — `memory.py`, and the exit criterion is met: a tactic
   learned in game N surfaces in game N+1, verified against a real store. See below.
-- **K4 — Hank grounding (role a).** Blocked-partial: HTTP promotion only; signing unkeyed.
+- **K4 — Hank grounding (role a). Wired** — `just code-graph` promotes the Thinker fork's code
+  structure and links each surface to the function that decides it via `smac:computedBy`
+  (`datalinks/computed-by.ttl`). "How does the engine *actually* score this" is a graph hop.
+  Signing is still unkeyed.
 - **K5 — Hank dev guardrails (role b). Wired** — `.bobbin/config.toml` holds structural rules
   over this repository's own invariants, run by `yupana hook pre-edit` from a `PreToolUse` hook.
   Advise-mode and fails open twice over (the shell guard, then yupana's own). `.bobbin/README.md`
@@ -477,6 +480,30 @@ Haiku, kept separate from the brain's model so the two can be priced independent
 - **K6 — Hank hot state graph + policy harness + what-if (roles d, c, e).** Depends on net-new
   Hank ingestion; gated behind new Hank spec FRs. **Roles (c) and (d) are now wired**, against
   [yupana](https://github.com/scbrown/yupana) rather than a net-new service — see below.
+
+### Engine-mechanics grounding (K4, role a), wired
+
+```bash
+just code-graph            # needs THINKER_DIR and a yupana built with langs-extra
+```
+
+`yupana export` promotes the fork's code structure as `bobbin:CodeModule` / `bobbin:CodeSymbol`
+(13,379 facts for `src/`), and `datalinks/computed-by.ttl` links each surface and engine metric
+to the symbol that decides it. So `base.production → select_build → build.cpp` is a graph hop,
+and a claim about the engine's behaviour has a citable referent instead of a recollection.
+
+**Every link was read, not inferred.** A `computedBy` pointing at a plausible-sounding function
+is worse than no link at all — it looks like provenance and is a guess, and the entire value of
+this plane is that "the engine does X" stops being something someone remembers. The comments in
+that file carry the line numbers so a re-check is cheap.
+
+The IRIs are `file.cpp::function`, so an engine rename breaks the hop **loudly** — the object
+resolves to nothing — rather than silently pointing at the wrong code. Quipu is bitemporal, so
+the old belief stays time-travelable rather than being overwritten.
+
+One trap, and the recipe guards it: yupana parses C++ only with the `langs-extra` feature, and
+without it `export` produces nothing and exits 0. `just code-graph` refuses an empty export
+rather than knotting nothing and reporting success.
 
 ### Learned memory (K3), wired
 
