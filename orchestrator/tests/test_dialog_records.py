@@ -163,6 +163,11 @@ def test_an_unmapped_dialog_says_so_rather_than_guessing() -> None:
 #: path the AI takes. Two routes to one surface, and only the second one is coverage.
 INDEPENDENTLY_INSTRUMENTED = {
     "base.staple": "na_staple_observe, consider_staple (na-yd4)",
+    # Same shape, and it caught this one the turn it was introduced. The dialog table maps
+    # CORNERFOILED / CORNERTHEMFOIL — the NOTIFICATIONS that someone's corner attempt
+    # succeeded or was foiled — while `na_endgame_observe` instruments the decision itself in
+    # mod_faction_upkeep. A notice that a thing happened is not the choice to do it.
+    "econ.corner_market": "na_endgame_observe, mod_faction_upkeep (na-yd4)",
 }
 
 

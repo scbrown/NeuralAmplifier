@@ -371,6 +371,104 @@ BASE_STAPLE = {
     "applied": "native",
 }
 
+# na_write_head + na_build_corner_market. Turn scope, so faction metrics only and no
+# base_state. The highest-stakes surface in na-yd4's bucket: a move toward economic victory.
+ECON_CORNER_MARKET = {
+    "schema_version": "0.1",
+    "engine": "thinker",
+    "scope": "turn",
+    "surface_id": "econ.corner_market",
+    "turn": 42,
+    "faction_id": 1,
+    "faction": "Gaians",
+    "run_id": "68ad1e40-0004e1c8-1a2c",
+    "trace": {"traceparent": "00-0000002a000000010000000507a1c0de-000000050000002b-01"},
+    "corner_cost": 500,
+    # Read BEFORE the deduction, so the record shows the reserve the decision was made
+    # against rather than what survived it.
+    "energy_credits_before": 820,
+    # Non-zero means a corner is ALREADY running, one of the engine's reasons to decline.
+    # Kept as its own field so a declined row says WHICH reason.
+    "corner_market_cost_existing": 0,
+    "corner_market_turn": 0,
+    "turns_to_resolve": 20,
+    "metrics": {
+        "energy_reserves": 82,
+        "energy_income": 14,
+        "labs_output": 6,
+        "base_count": 2,
+        "pop_total": 5,
+        "military_units": 3,
+        "drone_total": 1,
+        "units_in_foreign_territory": 0,
+    },
+    "action_space": [
+        {
+            "id": "corner:none",
+            "action": "Do not corner the energy market",
+            "cost": 0,
+            "cost_unit": "credits",
+            "category": "corner",
+        },
+        {
+            "id": "corner:now",
+            "action": "Corner the global energy market",
+            "cost": 500,
+            "cost_unit": "credits",
+            "category": "corner",
+            # Declared because it happens THIS turn — the na-co2 distinction between a
+            # purchase and a build commitment paid over turns.
+            "effects": {"energy_reserves": -500},
+        },
+    ],
+    "action_space_size": 2,
+    "native_choice": "corner:now",
+    "tier": "deterministic",
+    "applied": "native",
+}
+
+# na_write_head + na_build_council_call. call_council returns nothing useful, so native_choice
+# comes from a STATE TRANSITION the caller observes rather than from a return value.
+COUNCIL_CALL = {
+    "schema_version": "0.1",
+    "engine": "thinker",
+    "scope": "turn",
+    "surface_id": "council.call",
+    "turn": 42,
+    "faction_id": 1,
+    "faction": "Gaians",
+    "run_id": "68ad1e40-0004e1c8-1a2c",
+    "trace": {"traceparent": "00-0000002a000000010000000607a1c0de-000000060000002b-01"},
+    "eligible": True,
+    "council_has_convened": False,
+    "metrics": {
+        "energy_reserves": 82,
+        "energy_income": 14,
+        "labs_output": 6,
+        "base_count": 2,
+        "pop_total": 5,
+        "military_units": 3,
+        "drone_total": 1,
+        "units_in_foreign_territory": 0,
+    },
+    "action_space": [
+        {
+            "id": "council:none",
+            "action": "Do not convene the council",
+            "category": "council",
+        },
+        {
+            "id": "council:call",
+            "action": "Convene the Planetary Council",
+            "category": "council",
+        },
+    ],
+    "action_space_size": 2,
+    "native_choice": "council:none",
+    "tier": "deterministic",
+    "applied": "native",
+}
+
 ALL_RECORDS = [
     BASE_PRODUCTION,
     BASE_HURRY,
@@ -378,6 +476,8 @@ ALL_RECORDS = [
     BASE_PRODUCTION_SUPERSEDED,
     BASE_RETOOL,
     BASE_STAPLE,
+    ECON_CORNER_MARKET,
+    COUNCIL_CALL,
 ]
 
 
@@ -953,3 +1053,62 @@ def test_staple_is_observed_and_not_applied() -> None:
     # between this bucket and na-2mn's.
     assert "base.staple" not in NO_AI_PATH
     assert BASE_STAPLE["applied"] == "native"
+
+
+def test_corner_market_declares_what_it_actually_spends() -> None:
+    """The one surface in this bucket where the cost IS the decision.
+
+    Cornering the energy market is a straight purchase from the reserve, paid on the turn it is
+    taken, so `effects` has to declare it — the orchestrator computes every directive trade-off
+    from `effects` alone and an undeclared effect is an invisible one.
+
+    Note the contrast this pins: a build option correctly declares NO effects, because minerals
+    are paid over turns out of surplus (na-co2). Same repository, opposite answer, and the
+    difference is whether the spend happens now.
+    """
+    world_view = WorldView.model_validate(ECON_CORNER_MARKET)
+    by_id = {a.id: a for a in world_view.action_space}
+    assert by_id["corner:none"].effects in (None, {})
+    assert by_id["corner:now"].effects == {"energy_reserves": -ECON_CORNER_MARKET["corner_cost"]}
+    assert by_id["corner:now"].model_dump()["cost"] == ECON_CORNER_MARKET["corner_cost"]
+
+
+def test_corner_market_shows_the_reserve_the_decision_was_made_against() -> None:
+    """`energy_credits_before`, not after.
+
+    The engine deducts the cost inside the same block that decides, so a record built afterwards
+    would show the balance the choice PRODUCED and make every affordability check look
+    marginal — a corner that cost 500 from 820 would read as 320 against 500, i.e. unaffordable,
+    on the very row where it was taken.
+    """
+    assert ECON_CORNER_MARKET["energy_credits_before"] > ECON_CORNER_MARKET["corner_cost"], (
+        "a cornered market must have been affordable at decision time"
+    )
+
+
+def test_council_call_reports_a_transition_not_an_inference() -> None:
+    """`call_council` decides internally and hands back nothing useful.
+
+    So the answer is observed as a state transition — convened off before the call, on after.
+    `eligible` is `can_call_council`'s own answer and is NOT the choice: the engine can be
+    eligible and still decline. This fixture is deliberately that case, because a record that
+    inferred the answer from eligibility would get it wrong silently, and in the direction that
+    looks like agreement.
+    """
+    world_view = WorldView.model_validate(COUNCIL_CALL)
+    offered = {a.id for a in world_view.action_space}
+    assert COUNCIL_CALL["native_choice"] in offered
+    assert COUNCIL_CALL["eligible"] is True
+    assert COUNCIL_CALL["native_choice"] == "council:none", (
+        "eligible-but-declined is the case that proves the two are not the same field"
+    )
+
+
+def test_both_endgame_surfaces_are_observed_not_applied() -> None:
+    """A native path exists, so invariant 9 holds — and observation is still not coverage."""
+    from neural_amplifier.surfaces import APPLIED, NO_AI_PATH, OBSERVED
+
+    for surface in ("econ.corner_market", "council.call"):
+        assert surface in OBSERVED, surface
+        assert surface not in APPLIED, surface
+        assert surface not in NO_AI_PATH, surface

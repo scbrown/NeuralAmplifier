@@ -182,6 +182,17 @@ OBSERVED: Final[frozenset[str]] = frozenset(
         # Observed, NOT applied, like every other entry that arrives here: `na_staple_observe`
         # records what consider_staple chose and nothing applies a brain's answer.
         "base.staple",
+        # Two more from na-yd4's 27, taken together because they live in one function and fire
+        # on one cadence (`na_endgame_observe`). Both are AI-only — the engine gates each block
+        # on `!is_human` — very low frequency, and very high stakes: cornering the energy market
+        # is a move toward economic victory.
+        #
+        # `council.call` is observed as a STATE TRANSITION rather than a return value, because
+        # `call_council` decides internally and hands back nothing useful. Convened off before
+        # the call and on after IS the engine's answer; inferring it from eligibility would be a
+        # guess wearing the same clothes.
+        "econ.corner_market",
+        "council.call",
     }
 )
 

@@ -71,7 +71,7 @@ Per-unit orders fire separately as the engine iterates units (`mod_enemy_turn`
 
 ## 2.5 Instrumentation status — measured 2026-07-29, amended 2026-08-03
 
-**4 of 77 surfaces the brain can actually decide**, plus **3 observed only**. The four apply:
+**4 of 77 surfaces the brain can actually decide**, plus **5 observed only**. The four apply:
 the choice executes, validated against the engine's own availability tests first, so an illegal
 order is rejected rather than applied. A surface is not covered until its decision can be applied
 — `just surfaces` reports it from the frozen registry rather than from this paragraph.
@@ -97,6 +97,18 @@ built first. Picked on decision-inputs.md's rule, low frequency and high stakes:
 rarely, and when it does the choice trades a lasting diplomatic and psych cost for immediate
 order. Behind `na_staple_observe`, default off, and recorded only when the eligibility gate
 opened so a row is always a decision that was genuinely on the table.
+
+`econ.corner_market` and `council.call` are the next two from that bucket, instrumented
+together behind `na_endgame_observe` because they sit in one function and fire on one cadence.
+Both are AI-only — the engine gates each block on `!is_human` — and both are rare and decisive:
+cornering the energy market is a move toward economic victory.
+
+`council.call` is the one worth reading, because the engine gives no answer to read.
+`call_council` decides internally and returns nothing useful, so the record observes a **state
+transition** instead: `STATE_COUNCIL_HAS_CONVENED` off before the call, on after. That is the
+engine's answer as a fact rather than an inference about one. Inferring it from
+`can_call_council` would have been wrong in the specific case that matters — eligible and still
+declining — and wrong in the direction that looks like agreement.
 
 `econ.energy_sliders` is another observed-only one (na-yd4): the adapter records what
 `mod_allocate_energy` chose and every split that was legal, and nothing applies a brain's answer
@@ -137,6 +149,8 @@ not worth changing.
 | `base.hurry` | base | `mod_base_hurry` (wrapped) | hurry / don't, with credit cost and turns saved; unaffordable option omitted | `observe-hurry <base_id>` |
 | `base.retool` | base | `select_build` (wrapped) | continue / cross, with both retool categories, banked minerals, the engine's own `penalty_applies`, and its `native_choice` | `observe-retool <base_id> [item]` |
 | `base.staple` | base | `consider_staple` | staple / leave, with drone, talent and specialist counts, prior staple count and riot state | `observe-staple <base_id> [stapled]` |
+| `econ.corner_market` | turn | `mod_faction_upkeep` (AI-only block) | corner / decline, with the live price, the reserve as it stood at decision time, and any corner already running | `observe-corner <faction_id>` |
+| `council.call` | turn | `call_council` (AI-only) | convene / decline, with eligibility from `can_call_council` and the convened flag | `observe-council <faction_id>` |
 | `base.governor_config` | base | `governor_priorities` | n/a — deterministic tier only so far; records the resolved weights and their source | `observe-gov <base_id>` |
 | `base.abandon` | base | `mod_base_production` (size-1 base, pod ready) | keep / spend the base, with the growth numbers the answer turns on | `observe-abandon <base_id>` |
 | `base.hq_escape` | base | `mod_capture_base` | relocate / don't, with the 1000-credit cost, the reserve, and the engine's chosen destination | `observe-hq-escape <base_id>` |
