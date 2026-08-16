@@ -100,6 +100,7 @@ changing the module — most of these look like ordinary plumbing and are not.
 | `fairness.py` | The computed handicap ledger | `favours` is *derived*, never copied from a table — three entries flip side by difficulty |
 | `knowledge.py` | The Quipu/Hank seam | Knowledge degrades, never stalls; a dead guard **allows** |
 | `hank.py` | Policy guards at the seam Hank will occupy | Guards only subtract from what is already legal — never widen it; unreported is *uncheckable*, never violated |
+| `yupana.py` | The board guard — graph-pattern policies over a live board, via yupana's MCP surface | Same two rules, plus: a policy nobody evaluated is reported, never counted as satisfied |
 | `decisions.py` | The record + JSONL log | The record of truth, written before any exporter |
 | `telemetry.py` | Sink fan-out + OTel | The record is assembled **once**; layers are projections of one object |
 | `coverage.py` | Run health | `degrade_rate` and `fair_play` are measured, not asserted |

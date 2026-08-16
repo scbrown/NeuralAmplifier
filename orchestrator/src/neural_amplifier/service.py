@@ -8,6 +8,9 @@ loggable, and replayable — and it is what step 7 of the observability plan
 
 from __future__ import annotations
 
+import json
+import logging
+import os
 from collections.abc import Sequence
 from pathlib import Path
 
@@ -29,6 +32,8 @@ from .pending import NotClaimable, Pending
 from .replay import WorldViewStore
 from .telemetry import OtelSink, Sink
 from .turns import TurnAnnouncement, TurnStore
+
+log = logging.getLogger(__name__)
 
 
 def build_brain(config: Config | None = None) -> Brain:
@@ -91,9 +96,15 @@ def build_guard(retriever: object | None, config: Config | None = None) -> objec
     cost of having it on is one set comparison per decision and the benefit is that a
     fabricated or unread citation stops being invisible.
 
-    Set ``knowledge.guard = false`` (or NA_HANK_GUARD=0) to disable. When Hank's own
-    POST /guard lands it replaces this, and the verdict shape is already what that surface
-    returns.
+    Set ``knowledge.guard = false`` (or NA_HANK_GUARD=0) to disable.
+
+    **The board guard is the third, and it is the one with a service behind it.** With
+    ``NA_YUPANA_URL`` set, ``yupana.YupanaGuard`` joins the chain and evaluates graph-pattern
+    policies over a copy-on-write overlay of this faction's board — the questions StateGuard
+    structurally cannot answer, because they are about entities and relations rather than
+    arithmetic on declared figures. It is added last: the two local guards need no service and
+    must not be made to depend on one being up. Absent ``NA_YUPANA_URL`` nothing changes, and
+    a configured-but-unreachable yupana degrades rather than denying (``yupana.py``).
     """
     # Deliberately not gated on ``retriever is None``: that would take StateGuard off with it,
     # and the body below turns on the two guards for different reasons.
@@ -110,7 +121,50 @@ def build_guard(retriever: object | None, config: Config | None = None) -> objec
     guards: list[object] = [StateGuard()]
     if retriever is not None:
         guards.append(CitationGuard())
+    # Last, and only when configured. A board guard is a network call inside the decision
+    # loop, so it goes behind the two that are not — an unreachable yupana then costs a
+    # degraded advisory rather than the affordability check that runs for free.
+    if os.environ.get("NA_YUPANA_URL"):
+        from .yupana import YupanaGuard
+
+        guards.append(YupanaGuard(policies=load_policies()))
     return GuardChain(*guards)
+
+
+def load_policies() -> list[dict[str, object]]:
+    """Board policies for the yupana guard, from ``NA_YUPANA_POLICIES``.
+
+    A file path, holding a JSON list of yupana ``StatePolicy`` objects. Read per process rather
+    than compiled in, because these are governance: they are authored in Quipu and projected,
+    and a copy baked into this repository would enforce yesterday's rules while looking current.
+
+    An unreadable or malformed file yields **no policies**, loudly in the log and not as an
+    exception. The guard then evaluates nothing and says so — every decision carries "policy not
+    evaluated" advisories rather than a clean board, which is the honest reading and is exactly
+    the distinction yupana's own ``unevaluated`` exists to preserve.
+
+    A relative path is tried against the working directory first and then against the repository
+    root. That is not tidiness: ``just play`` runs the service with ``--directory orchestrator``,
+    so the obvious ``NA_YUPANA_POLICIES=policies/board.example.json`` typed at the repo root
+    would otherwise resolve one level too deep and silently guard with nothing.
+    """
+    setting = os.environ.get("NA_YUPANA_POLICIES")
+    if not setting:
+        return []
+    candidates = [Path(setting)]
+    if not candidates[0].is_absolute():
+        candidates.append(Path(__file__).resolve().parents[3] / setting)
+    path = next((p for p in candidates if p.is_file()), candidates[0])
+    try:
+        with open(path, encoding="utf-8") as handle:
+            loaded = json.load(handle)
+    except (OSError, json.JSONDecodeError) as exc:
+        log.warning("yupana policies unreadable at %s (%s); guarding with none", path, exc)
+        return []
+    if not isinstance(loaded, list):
+        log.warning("yupana policies at %s is not a list; guarding with none", path)
+        return []
+    return [p for p in loaded if isinstance(p, dict)]
 
 
 def _accepted_status(pending: Pending) -> str:

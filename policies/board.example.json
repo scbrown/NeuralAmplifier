@@ -1,0 +1,50 @@
+[
+  {
+    "label": "reserves-stay-solvent",
+    "targets": "smac:FactionState",
+    "claim": "An order must not drive energy reserves below zero",
+    "boundary": "order",
+    "effect": "deny",
+    "selector": {
+      "selector_lang": "graph-pattern",
+      "evidence_source": "?f a smac:FactionState"
+    },
+    "predicate": {
+      "selector_lang": "graph-pattern",
+      "match_type": "must-match",
+      "evidence_source": "?f a smac:FactionState ; smac:energy_reserves ?e | ?e >= 0"
+    }
+  },
+  {
+    "label": "garrison-border-bases",
+    "targets": "smac:BaseState",
+    "claim": "A border base must keep at least one defender",
+    "boundary": "order",
+    "effect": "deny",
+    "selector": {
+      "selector_lang": "graph-pattern",
+      "evidence_source": "?b a smac:BaseState ; smac:isBorderBase true"
+    },
+    "predicate": {
+      "selector_lang": "graph-pattern",
+      "match_type": "must-match",
+      "evidence_source": "?b a smac:BaseState ; smac:garrisonCount ?g | ?g >= 1"
+    }
+  },
+  {
+    "label": "hold-expansion-under-threat",
+    "targets": "smac:FactionState",
+    "claim": "Do not commit to a colony pod while a base is under threat",
+    "boundary": "order",
+    "effect": "warn",
+    "selector": {
+      "selector_lang": "graph-pattern",
+      "evidence_source": "?b a smac:BaseState ; smac:underThreat true"
+    },
+    "predicate": {
+      "selector_lang": "graph-pattern",
+      "match_type": "must-not-match",
+      "evidence_source": "?f a smac:FactionState ; smac:expanding true"
+    }
+  }
+]

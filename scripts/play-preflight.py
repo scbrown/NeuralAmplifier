@@ -24,7 +24,6 @@ from __future__ import annotations
 import argparse
 import json
 import os
-import sys
 import urllib.error
 import urllib.request
 from pathlib import Path
@@ -137,7 +136,9 @@ def check_mcp_config(report: Report, root: Path) -> None:
     """A checked-in `.mcp.json` is what makes this repo attachable with no setup step."""
     path = root / ".mcp.json"
     if not path.is_file():
-        report.add(WARN, False, "mcp config", "no .mcp.json — attach manually with `claude mcp add`")
+        report.add(
+            WARN, False, "mcp config", "no .mcp.json — attach manually with `claude mcp add`"
+        )
         return
     try:
         servers = json.loads(path.read_text(encoding="utf-8")).get("mcpServers", {})

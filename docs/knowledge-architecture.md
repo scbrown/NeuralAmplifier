@@ -472,7 +472,46 @@ Haiku, kept separate from the brain's model so the two can be priced independent
 - **K4 — Hank grounding (role a).** Blocked-partial: HTTP promotion only; signing unkeyed.
 - **K5 — Hank dev guardrails (role b).**
 - **K6 — Hank hot state graph + policy harness + what-if (roles d, c, e).** Depends on net-new
-  Hank ingestion; gated behind new Hank spec FRs.
+  Hank ingestion; gated behind new Hank spec FRs. **Roles (c) and (d) are now wired**, against
+  [yupana](https://github.com/scbrown/yupana) rather than a net-new service — see below.
+
+### The board guard (K6 roles c and d), wired
+
+`yupana.py` is the seam. Yupana already holds a hot, per-tenant, copy-on-write board graph and
+evaluates graph-pattern policies at the order boundary, which is exactly role (d) with role (c)
+on top of it: `yupana_ingest` writes this turn's board, `yupana_guard` applies the proposed
+orders to an overlay and reports what breaks. Set `NA_YUPANA_URL` and it joins the guard chain
+behind `StateGuard` and `CitationGuard`; leave it unset and nothing changes.
+
+It goes **last** in the chain deliberately. It is the only guard with a network call in it, and
+the two local ones must not be made to depend on a service being up — an unreachable yupana then
+costs a degraded advisory rather than the affordability check that runs for free.
+
+Three properties, each load-bearing:
+
+- **It can only subtract.** Nothing yupana says adds an action, and a finding that names no order
+  strips nothing. That last case is `pre_existing` — a condition that already held before the
+  orders — and enforcing it would be a false deny that removes a legal, possibly correct move.
+- **A dead guard allows.** Yupana down, the `game-state` feature not built, a malformed reply, a
+  timeout: all return a degraded `allow`. The degradation is recorded, so an absent guard is
+  visible rather than silently permissive.
+- **A policy nobody evaluated is reported, not assumed satisfied.** Yupana distinguishes a
+  violated policy from one it could not compile (`unevaluated`) and one whose selector matched
+  nothing (`vacuous`), and the guard forwards both as advisories. This is what stops a selector
+  that has rotted away from the adapter's vocabulary from reading as a clean board.
+
+Policies come from `NA_YUPANA_POLICIES`, a JSON file — passed on every call rather than held
+resident by yupana, because they are authored in Quipu and projected, and a resident copy would
+enforce yesterday's governance while looking current. `policies/` holds a starter set and the
+guide to writing one.
+
+**What is live today.** `reserves-stay-solvent` is verified end to end: reserves 40, a hurry
+costing 81, and the guard denies, the brain is re-asked with the policy's claim, and it takes the
+legal alternative — one decision, `repairs: 1`, not a lost turn. `garrison-border-bases` and
+`hold-expansion-under-threat` are inert, because they name board attributes the Thinker adapter
+does not yet publish into `WorldView.bases`; they are shipped anyway because yupana reports them
+as `vacuous` on every decision, which puts the gap on the record instead of letting it pass as
+compliance. They start firing when the adapter grows those fields, with no change on this side.
 
 ## Document map (planned)
 
