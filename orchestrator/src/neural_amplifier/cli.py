@@ -29,6 +29,22 @@ def main(argv: list[str] | None = None) -> int:
         help="running orchestrator to attach to (default $NA_URL or http://127.0.0.1:8000)",
     )
 
+    learn = sub.add_parser(
+        "learn",
+        help="extract a finished game's decision log into learned memory (K3)",
+    )
+    learn.add_argument("log", type=Path)
+    learn.add_argument(
+        "--url",
+        default=None,
+        help="memory store (default $NA_MEMORY_QUIPU_URL)",
+    )
+    learn.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="show what would be written and write nothing",
+    )
+
     cov = sub.add_parser("coverage", help="summarise a decision log")
     cov.add_argument("log", type=Path)
     cov.add_argument(
@@ -68,6 +84,36 @@ def main(argv: list[str] | None = None) -> int:
         from .mcp_server import main as mcp_main
 
         return mcp_main(args.url)
+
+    if args.command == "learn":
+        from .memory import MemoryStore, episodes
+
+        extraction = episodes(args.log)
+        if not extraction:
+            print(f"nothing to learn from {args.log}")
+            return 1
+        print(
+            f"game {extraction.game_id}: {len(extraction.nodes)} node(s), "
+            f"{len(extraction.tactics)} tactic(s)"
+        )
+        for tactic in extraction.tactics:
+            props = tactic["properties"]
+            print(
+                f"  {tactic['description']} "
+                f"[{props['observations']}x, confidence {props['confidence']}]"
+            )
+        if args.dry_run:
+            print("\ndry run — nothing written")
+            return 0
+        store = MemoryStore(args.url)
+        if not store.available:
+            # Not a crash and not a silent success: extraction worked and there is nowhere to
+            # put it, which is a configuration answer rather than a failure of the game.
+            print("\nno memory store configured (set NA_MEMORY_QUIPU_URL); nothing written")
+            return 1
+        sent = store.write(extraction)
+        print(f"\nwrote {sent['game']} to the game group, {sent['durable']} durable")
+        return 0
 
     if args.command == "surfaces":
         from .config import load as load_config

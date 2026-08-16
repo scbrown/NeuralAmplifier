@@ -70,15 +70,25 @@ def _build_retriever(config: Config) -> object | None:
     Absent means an ungrounded decision, never a failed start — the
     knowledge layer is an optimisation (``knowledge.py``).
     """
-    if not config.knowledge.quipu_url:
-        return None
-    from .datalinks import QuipuRetriever
+    inner: object | None = None
+    if config.knowledge.quipu_url:
+        from .datalinks import QuipuRetriever
 
-    return QuipuRetriever(
-        config.knowledge.quipu_url,
-        engine=config.knowledge.engine,
-        token_budget=config.knowledge.token_budget,
-    )
+        inner = QuipuRetriever(
+            config.knowledge.quipu_url,
+            engine=config.knowledge.engine,
+            token_budget=config.knowledge.token_budget,
+        )
+
+    # Learned memory (K3) wraps whatever grounding there is, including none. A run with no
+    # rulebook retrieval still benefits from what earlier games taught — arguably more, because
+    # the brain has less else to go on — so this is gated on its own variable rather than on
+    # `inner`.
+    if os.environ.get("NA_MEMORY_QUIPU_URL"):
+        from .memory import RememberingRetriever
+
+        return RememberingRetriever(inner)
+    return inner
 
 
 def build_guard(retriever: object | None, config: Config | None = None) -> object | None:

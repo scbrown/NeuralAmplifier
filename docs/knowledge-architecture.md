@@ -467,13 +467,45 @@ Haiku, kept separate from the brain's model so the two can be priced independent
   **No model is involved, deliberately** — see below. What remains is loading the graph into
   a running Quipu and serving retrieval from it rather than from the parsed structs.
 - **K2 — Per-turn retrieval.** `quipu_context` + action-space grounding + budgeting + degradation.
-- **K3 — Memory write/recall.** Postgame extraction → `mem:` episodes; bitemporal per-game/durable;
-  tactics into the prompt. *Exit: a tactic learned in game N surfaces in game N+1.*
+- **K3 — Memory write/recall. Wired** — `memory.py`, and the exit criterion is met: a tactic
+  learned in game N surfaces in game N+1, verified against a real store. See below.
 - **K4 — Hank grounding (role a).** Blocked-partial: HTTP promotion only; signing unkeyed.
 - **K5 — Hank dev guardrails (role b).**
 - **K6 — Hank hot state graph + policy harness + what-if (roles d, c, e).** Depends on net-new
   Hank ingestion; gated behind new Hank spec FRs. **Roles (c) and (d) are now wired**, against
   [yupana](https://github.com/scbrown/yupana) rather than a net-new service — see below.
+
+### Learned memory (K3), wired
+
+`memory.py` is three separable parts. `episodes()` turns a finished game's decision log into
+`mem:` nodes and edges — pure, no store. `write()` posts them through `quipu_episode`, which is
+what buys `prov:wasGeneratedBy` for free. `recall()` reads durable tactics back as prompt lines,
+and `RememberingRetriever` appends them behind whatever rulebook grounding there is.
+
+```bash
+export NA_MEMORY_QUIPU_URL=http://127.0.0.1:3032
+neural-amplifier learn decisions.jsonl        # after a game
+```
+
+**Two exclusions carry most of the value.** A deterministic-tier record says what the engine
+would have done anyway, so learning from it teaches the brain the fallback's habits and then
+reads the agreement as evidence the brain was right. A degraded record is worse: it exists
+*because* the brain could not answer, so the chosen action is the fallback's, and a tactic built
+from it is a habit learned from the brain's absence.
+
+**A tactic is a claim, not an instruction**, and the shape says so. It carries its observation
+count and a confidence capped at 0.6, because a habit repeated many times inside *one* game is
+not a law of the game. `mem:Outcome` (`confirmedBy` / `refutedBy`) is how a belief earns or loses
+ground once outcomes are wired (na-6db) — a memory that can only accumulate gets more confident
+as it gets more wrong.
+
+**Tactics never get a citable `fact_id`.** Those ids resolve against datalinks nodes, and a
+tactic has none; minting one would make `CitationGuard` resolve it to nothing and report a
+fabricated citation on a fact we invented ourselves. So a recalled tactic reaches the prompt as
+text and is deliberately not something the brain can cite as a rule.
+
+Recall happens once per process and is cached — durable tactics are written *between* games, so
+asking per decision would be a round trip per turn for an answer that cannot have changed.
 
 ### The board guard (K6 roles c and d), wired
 
