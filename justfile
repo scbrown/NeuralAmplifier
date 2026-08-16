@@ -201,7 +201,18 @@ game-screen args="shot":
 
 # The repo holds paths and checksums, never the bytes (docs/headless-harness.md §2.3).
 # Needs SMAC_DIR. `scan` refuses a tree with a mod overlay on it — see §2.4.
-# Check or regenerate the SMAC fixture manifest: just game verify|scan
+#
+# `stage` is the recurrence fix for na-8ie: it copies the PRISTINE tree to a play directory and
+# overlays the mod THERE, so $SMAC_DIR stays vanilla. The original contamination — 17 tracked
+# files overwritten, alphax.txt among them — happened because Thinker's install instructions and
+# the fixture's requirements pointed at the same directory. Repairing that needs Steam; not
+# doing it again needs this.
+#
+# It refuses to stage FROM a contaminated tree, refuses a target that contains or is contained
+# by the source, and verifies alphax.txt is byte-identical afterwards — "I only read from it" is
+# exactly what the original install also believed.
+#
+# Check, regenerate, or stage the SMAC fixture: just game verify|scan|stage
 game cmd="verify" manifest="fixtures/smac/steam-2204130.manifest":
     #!/usr/bin/env bash
     set -euo pipefail
@@ -210,7 +221,11 @@ game cmd="verify" manifest="fixtures/smac/steam-2204130.manifest":
         strict) python3 scripts/game_fixture.py verify "{{smac}}" --manifest "{{manifest}}" --strict ;;
         scan)   python3 scripts/game_fixture.py scan "{{smac}}" --out "{{manifest}}" \
                     --provenance "${SMAC_PROVENANCE:-unspecified}" ;;
-        *)      echo "Unknown: {{cmd}}. Try: verify strict scan" ;;
+        stage)  python3 scripts/game_fixture.py stage "{{smac}}" \
+                    "${SMAC_PLAY_DIR:-../smac-play}" \
+                    --mod "${THINKER_BUILD:-{{thinker}}/build/develop}" \
+                    --manifest "{{manifest}}" --force ;;
+        *)      echo "Unknown: {{cmd}}. Try: verify strict scan stage" ;;
     esac
 
 # === Datalinks (K1) ===

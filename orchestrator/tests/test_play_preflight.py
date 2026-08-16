@@ -224,3 +224,85 @@ def test_a_yupana_that_ignores_replace_is_reported(monkeypatch: pytest.MonkeyPat
     assert kind == "optional"  # a degraded guard is not a reason to refuse to play
     assert not report.blocked
     assert "IGNORED" in dict((r[2], r[3]) for r in report.rows)["yupana replace"]
+
+
+# --- game fixture staging (na-8ie recurrence fix) ---------------------------
+
+
+def _stage_module():
+    import importlib.util
+    from pathlib import Path
+
+    path = Path(__file__).resolve().parents[2] / "scripts" / "game_fixture.py"
+    spec = importlib.util.spec_from_file_location("game_fixture", path)
+    assert spec and spec.loader
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_staging_never_writes_to_the_source(tmp_path) -> None:
+    """The property the whole command exists for.
+
+    na-8ie happened because Thinker was installed *directly into* the Steam directory, silently
+    overwriting 17 tracked files — `alphax.txt` among them. `just ingest` labels that file
+    canonical, so ingesting the overwritten copy would mislabel house-rule data as
+    game-canonical (invariant 4) and the resulting graph would look identical either way.
+
+    Repairing it needs the Steam client. Not doing it again needs a staging step that copies the
+    pristine tree and overlays the mod on the COPY.
+    """
+    import argparse
+
+    game_fixture = _stage_module()
+    pristine = tmp_path / "pristine"
+    (pristine / "basenames").mkdir(parents=True)
+    (pristine / "alphax.txt").write_text("vanilla")
+    (pristine / "basenames" / "gaians.txt").write_text("vanilla names")
+    mod = tmp_path / "mod"
+    mod.mkdir()
+    (mod / "thinker.dll").write_text("mod")
+
+    args = argparse.Namespace(
+        source=str(pristine),
+        play=str(tmp_path / "play"),
+        mod=str(mod),
+        manifest=str(tmp_path / "absent.manifest"),
+        overlays=str(tmp_path / "absent.tsv"),
+        force=False,
+        limit=15,
+    )
+    assert game_fixture.cmd_stage(args) == 0
+
+    assert (pristine / "alphax.txt").read_text() == "vanilla", "the source was modified"
+    assert not (pristine / "thinker.dll").exists(), "the mod leaked into the pristine tree"
+    assert (tmp_path / "play" / "thinker.dll").exists()
+    assert (tmp_path / "play" / "basenames" / "gaians.txt").exists()
+
+
+def test_staging_refuses_a_target_that_overlaps_the_source(tmp_path) -> None:
+    """Staging into the source, or into a subdirectory of it, writes to the tree that must not
+    be written to — the original bug with a different path spelling."""
+    import argparse
+
+    game_fixture = _stage_module()
+    pristine = tmp_path / "pristine"
+    pristine.mkdir()
+    (pristine / "alphax.txt").write_text("vanilla")
+
+    def run(play: str) -> int:
+        return game_fixture.cmd_stage(
+            argparse.Namespace(
+                source=str(pristine),
+                play=play,
+                mod=None,
+                manifest=str(tmp_path / "absent.manifest"),
+                overlays=str(tmp_path / "absent.tsv"),
+                force=True,
+                limit=15,
+            )
+        )
+
+    assert run(str(pristine)) == 1, "staged a directory onto itself"
+    assert run(str(pristine / "inner")) == 1, "staged into a subdirectory of the source"
+    assert (pristine / "alphax.txt").read_text() == "vanilla"

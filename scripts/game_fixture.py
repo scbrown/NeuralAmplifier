@@ -25,6 +25,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import os
+import shutil
 import sys
 from pathlib import Path
 
@@ -311,6 +312,122 @@ def cmd_verify(args: argparse.Namespace) -> int:
     return 1 if bad else 0
 
 
+def cmd_stage(args: argparse.Namespace) -> int:
+    """Copy a pristine install to a play directory and overlay the mod there.
+
+    This is the recurrence fix for na-8ie, and the bead names it: Thinker was installed
+    *directly into the Steam directory* and overwrote 17 tracked files — `alphax.txt`,
+    `german/alphax.txt` and 15 `basenames/*.txt`. That is not a mistake anyone made carelessly;
+    it is what happens when the mod's install instructions and the fixture's requirements point
+    at the same directory. Repairing it needs the Steam client. Not doing it again needs this.
+
+    `alphax.txt` is the one that matters. `just ingest` labels it canonical, so ingesting
+    Thinker's copy would mislabel house-rule data as game-canonical — invariant 4, and a
+    contamination that is invisible downstream because the graph looks the same either way.
+
+    THE SOURCE IS NEVER WRITTEN. Every guard below exists to keep that true, because a staging
+    tool that could scribble on the pristine tree would reintroduce the exact bug it exists to
+    prevent.
+    """
+    source = Path(args.source)
+    play = Path(args.play)
+
+    if not source.is_dir():
+        print(f"source is not a directory: {source}", file=sys.stderr)
+        return 1
+
+    # Refuse to stage FROM a contaminated tree. Copying a tree that already holds mod bytes
+    # would produce a play directory that looks staged and carries the same overwritten
+    # alphax.txt — the failure this exists to prevent, wearing a fresh directory name.
+    manifest_path = Path(args.manifest)
+    if manifest_path.exists():
+        manifest = read_manifest(manifest_path)
+        overlays = read_overlays(Path(args.overlays))
+        contaminated = []
+        for rel, (want, _size) in manifest.items():
+            candidate = source / rel
+            if not candidate.is_file():
+                continue
+            got = sha1(candidate)
+            if got != want and got in overlays:
+                contaminated.append(f"{rel} ({overlays[got]})")
+        if contaminated:
+            print(
+                f"refusing to stage: {source} already holds mod bytes in "
+                f"{len(contaminated)} tracked file(s):",
+                file=sys.stderr,
+            )
+            for line in sorted(contaminated)[: args.limit]:
+                print(f"  {line}", file=sys.stderr)
+            if len(contaminated) > args.limit:
+                print(f"  ... and {len(contaminated) - args.limit} more", file=sys.stderr)
+            print(
+                "\nThat is na-8ie. Repair the source with Steam's "
+                "Properties > Installed Files > Verify integrity of game files, then re-run.",
+                file=sys.stderr,
+            )
+            return 1
+
+    # Never stage into the source, or into anything containing it. Both would write to the tree
+    # whose whole job is to stay untouched.
+    src_resolved = source.resolve()
+    play_resolved = play.resolve()
+    if src_resolved == play_resolved:
+        print("refusing to stage a directory onto itself", file=sys.stderr)
+        return 1
+    if src_resolved in play_resolved.parents or play_resolved in src_resolved.parents:
+        print(
+            f"refusing to stage: {play_resolved} and {src_resolved} contain one another",
+            file=sys.stderr,
+        )
+        return 1
+
+    if play.exists() and not args.force:
+        print(
+            f"{play} already exists — pass --force to replace it, or remove it first",
+            file=sys.stderr,
+        )
+        return 1
+
+    before = sha1(source / "alphax.txt") if (source / "alphax.txt").is_file() else None
+
+    if play.exists():
+        shutil.rmtree(play)
+    shutil.copytree(source, play, symlinks=True)
+
+    copied = 0
+    if args.mod:
+        mod = Path(args.mod)
+        if not mod.is_dir():
+            print(f"mod directory not found: {mod}", file=sys.stderr)
+            return 1
+        for item in sorted(mod.iterdir()):
+            if item.is_file():
+                shutil.copy2(item, play / item.name)
+                copied += 1
+
+    # The check that gives this tool its point: the source must be byte-identical afterwards.
+    # Asserted rather than assumed, because "I only read from it" is exactly what the original
+    # install also believed.
+    if before is not None:
+        after = sha1(source / "alphax.txt")
+        if after != before:
+            print(
+                "STAGING MODIFIED THE SOURCE — alphax.txt changed. This is the bug this "
+                "command exists to prevent; do not use the result.",
+                file=sys.stderr,
+            )
+            return 1
+
+    print(f"staged {source} -> {play}")
+    if copied:
+        print(f"overlaid {copied} file(s) from {args.mod}")
+    print("source unchanged (alphax.txt verified)" if before is not None else "source unchanged")
+    print(f"\nPoint the harness at it:  export SMAC_PLAY_DIR={play_resolved}")
+    print(f"Keep SMAC_DIR on the pristine tree:  {src_resolved}")
+    return 0
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -343,6 +460,19 @@ def main() -> int:
     )
     v.add_argument("--limit", type=int, default=15, help="max paths to list per category")
     v.set_defaults(func=cmd_verify)
+
+    t = sub.add_parser(
+        "stage",
+        help="copy a pristine install to a play directory and overlay the mod there",
+    )
+    t.add_argument("source", help="the PRISTINE install ($SMAC_DIR) — never written")
+    t.add_argument("play", help="the play directory to create")
+    t.add_argument("--mod", help="directory whose files are overlaid onto the copy")
+    t.add_argument("--manifest", default="fixtures/smac/steam-2204130.manifest")
+    t.add_argument("--overlays", default="fixtures/smac/overlays.tsv")
+    t.add_argument("--force", action="store_true", help="replace an existing play directory")
+    t.add_argument("--limit", type=int, default=15, help="max paths to list")
+    t.set_defaults(func=cmd_stage)
 
     args = ap.parse_args()
     return args.func(args)
