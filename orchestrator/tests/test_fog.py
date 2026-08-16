@@ -99,8 +99,63 @@ def test_a_world_view_with_no_deltas_is_untouched() -> None:
     assert result.enforced is True
 
 
-def test_malformed_parties_do_not_crash_the_gate() -> None:
-    """Adapters grow faster than this file; a bad shape must not stall the
-    game. Unparseable parties read as 'no parties', i.e. public."""
-    for bad in ({"parties": "HIVE"}, {"parties": None}, {"parties": [1, 2]}, {}):
-        assert redact(view(contacts=[], deltas=[bad])).removed == 0
+def test_a_delta_that_names_nobody_is_public() -> None:
+    """Absent and null are the delta declining to name anyone, which is what
+    public news looks like. The gate hides private pacts; it must not blind the
+    brain to the Planetary Council convening."""
+    for quiet in ({"parties": None}, {}):
+        result = redact(view(contacts=[], deltas=[quiet]))
+        assert result.removed == 0
+        assert result.enforced is True
+
+
+def test_unreadable_parties_are_redacted_not_waved_through() -> None:
+    """The bug: keeping only the `str` entries turned `[1, 2]` into the empty
+    set, which is a subset of every contact list — so an adapter that started
+    emitting numeric faction ids would have every private pact read as public
+    news, with the gate reporting itself enforced the whole way.
+
+    Adapters grow faster than this file, so a bad shape must not stall the
+    game — but it must not pass silently either.
+    """
+    for bad in ({"parties": "HIVE"}, {"parties": [1, 2]}, {"parties": ["HIVE", 7]}):
+        result = redact(view(contacts=["HIVE"], deltas=[bad]))
+        assert result.removed == 1, bad
+        assert result.world_view.deltas == [], bad
+        assert result.enforced is False, bad
+
+
+def test_one_unreadable_delta_ungates_the_whole_view() -> None:
+    """The verdict on the readable deltas is only as good as the parse. A run
+    whose input the gate could not read has not been gated, whatever it managed
+    to check alongside it."""
+    result = redact(view(contacts=["HIVE"], deltas=[OURS, {"parties": [1, 2]}]))
+    assert result.world_view.deltas == [OURS]
+    assert result.removed == 1
+    assert result.enforced is False
+
+
+def test_a_type_drift_is_visible_on_the_record(tmp_path: Path) -> None:
+    """The number an adapter regression has to move. Before this, the record
+    read `redacted_deltas=0, fog_enforced=True` — indistinguishable from a
+    clean turn."""
+    log = DecisionLog(tmp_path / "d.jsonl")
+    result = Orchestrator(ScriptedBrain(), log=log).decide(
+        view(contacts=["HIVE"], deltas=[{"parties": [1, 2]}])
+    )
+    assert result.record.redacted_deltas == 1
+    assert result.record.fog_enforced is False
+
+
+def test_the_brain_never_sees_an_unreadable_delta() -> None:
+    """Dropping is the safe direction: we cannot show it is public, and the
+    whole point of the second line is that the adapter may be wrong."""
+    seen: list[WorldView] = []
+
+    class Watching(ScriptedBrain):
+        def decide(self, world_view: WorldView):  # type: ignore[no-untyped-def]
+            seen.append(world_view)
+            return super().decide(world_view)
+
+    Orchestrator(Watching()).decide(view(contacts=["HIVE"], deltas=[{"parties": [1, 2]}, OURS]))
+    assert seen[0].deltas == [OURS]

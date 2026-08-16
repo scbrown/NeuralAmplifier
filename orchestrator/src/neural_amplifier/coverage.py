@@ -78,9 +78,10 @@ class Report:
     def fog_enforced(self) -> bool:
         """Whether every decision was fog-gated.
 
-        False means at least one world view arrived with no ``contacts``, so
-        a leaked pact could not have been detected. Not proof of a cheat —
-        proof that we could not have seen one.
+        False means at least one world view could not be gated: it arrived with
+        no ``contacts``, or a delta named parties in a shape the gate cannot
+        read. Either way a leaked pact could not have been detected. Not proof
+        of a cheat — proof that we could not have seen one.
         """
         return self.ungated_decisions == 0
 

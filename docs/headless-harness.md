@@ -634,6 +634,15 @@ These already happen, and Thinker already intercepts them.
 > Removals are counted on the decision record (`redacted_deltas`), and a world view that
 > omits `contacts` sets `fog_enforced: false` rather than being reported as clean: we cannot
 > tell a legitimate delta from a leaked one, and absence of evidence gets recorded as such.
+>
+> **Unreadable is not public.** A `parties` list the gate cannot compare — a bare string,
+> numeric faction ids, anything with a non-string in it — is an adapter *naming* parties in a
+> shape we cannot check. Such a delta is dropped and the world view is marked
+> `fog_enforced: false`. The alternative, keeping only the string entries, quietly turns
+> `["HIVE", 7]` into the empty set, which is a subset of every contact list: the delta reads
+> as public news and the gate reports itself enforced, so a type drift in the adapter disables
+> the control while every number stays green. Absent or null `parties` still means public — a
+> delta declining to name anyone is the shape public news has.
 
 ### 4.3 Custom dialogs are already a solved, data-driven pattern
 
