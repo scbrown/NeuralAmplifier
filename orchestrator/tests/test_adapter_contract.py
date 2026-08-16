@@ -227,7 +227,88 @@ BASE_PRODUCTION_SUPERSEDED = BASE_PRODUCTION | {
     "fallback_reason": "cached choice became illegal before replay",
 }
 
-ALL_RECORDS = [BASE_PRODUCTION, BASE_HURRY, FACTION_TECH, BASE_PRODUCTION_SUPERSEDED]
+# na_write_head + na_build_base_retool + na_write_metrics + na_write_base_state. Transcribed
+# from the emitter, same as the others. This one is observation-only, so it carries a
+# `native_choice` and no brain answer at all — the engine has already chosen by the time the
+# record is written.
+BASE_RETOOL = {
+    "schema_version": "0.1",
+    "engine": "thinker",
+    "scope": "base",
+    "surface_id": "base.retool",
+    "turn": 42,
+    "faction_id": 1,
+    "faction": "Gaians",
+    "run_id": "68ad1e40-0004e1c8-1a2c",
+    "trace": {"traceparent": "00-0000002a000000010000000307a1c0de-000000030000002b-01"},
+    "base_id": 0,
+    "base": "Gaia's Landing",
+    # NOT `current_item`: base_state carries one of those and it is the queue head. On this
+    # surface the two disagree by construction, which is the decision.
+    "previous_item": 4,
+    "previous_item_name": "Scout Patrol",
+    "chosen_item": -4,
+    "chosen_item_name": "Recycling Tanks",
+    "retool_category_previous": 0,
+    "retool_category_chosen": -4,
+    "minerals_accumulated": 18,
+    "retool_exemption": 10,
+    "retool_strictness": 2,
+    "penalty_applies": True,
+    "subjects": ["Scout Patrol"],
+    "metrics": {
+        "energy_reserves": 82,
+        "energy_income": 14,
+        "labs_output": 6,
+        "base_count": 2,
+        "pop_total": 5,
+        "military_units": 3,
+        "drone_total": 1,
+        "units_in_foreign_territory": 0,
+        "mineral_surplus": 2,
+        "minerals_remaining": 26,
+        "pop_size": 3,
+        "turns_to_completion": 13,
+    },
+    "base_state": {
+        "pop_size": 3,
+        "minerals_accumulated": 18,
+        "mineral_surplus": 2,
+        "nutrient_intake": 5,
+        "mineral_intake": 3,
+        "energy_intake": 4,
+        "eco_damage": 0,
+        "worked_tiles": 3,
+        "specialists": 0,
+        "queue_size": 1,
+        "current_item": -4,
+        "current_item_name": "Recycling Tanks",
+    },
+    "action_space": [
+        {
+            "id": "retool:continue",
+            "action": "Stay in the current retool category",
+            "category": "retool",
+        },
+        {
+            "id": "retool:switch",
+            "action": "Cross retool categories, spending 18 banked minerals",
+            "category": "retool",
+        },
+    ],
+    "action_space_size": 2,
+    "native_choice": "retool:switch",
+    "tier": "deterministic",
+    "applied": "native",
+}
+
+ALL_RECORDS = [
+    BASE_PRODUCTION,
+    BASE_HURRY,
+    FACTION_TECH,
+    BASE_PRODUCTION_SUPERSEDED,
+    BASE_RETOOL,
+]
 
 
 @pytest.mark.parametrize("record", ALL_RECORDS, ids=[r["surface_id"] for r in ALL_RECORDS])
@@ -698,3 +779,67 @@ def test_base_hurry_has_no_audit_because_it_cannot_diverge() -> None:
     audited = {"faction.se", "faction.tech", "base.production"}
     assert "base.hurry" not in audited
     assert SE_AUDIT["surface_id"] in audited
+
+
+def test_retool_names_both_halves_of_the_pair() -> None:
+    """A retool record is only readable if the item switched FROM and the item switched TO are
+    both present, under names that cannot be confused for each other.
+
+    The trap this pins: `na_write_base_state` emits its own `current_item`, and it is the queue
+    head. On this surface the queue head and the previously-produced item disagree *by
+    construction* — that disagreement is the entire decision. Emitting the outer one as
+    `current_item` too would have produced a record with two same-named fields that reliably
+    contradict, and the reader with no way to know which one the categories were computed from.
+    """
+    world_view = WorldView.model_validate(BASE_RETOOL)
+    payload = world_view.model_dump()
+
+    assert payload["previous_item_name"], "nothing to switch away from"
+    assert payload["chosen_item_name"], "nothing to switch to"
+    assert "current_item" not in payload, "collides with base_state.current_item"
+
+    state = BASE_RETOOL["base_state"]
+    assert state["current_item"] == payload["chosen_item"], (
+        "base_state's queue head is what the chooser landed on"
+    )
+    assert payload["previous_item"] != payload["chosen_item"], (
+        "a retool record where both halves agree is not a retool"
+    )
+
+
+def test_retool_reports_the_engines_own_answer() -> None:
+    """Invariant: this surface's deterministic tier already works, so the record's job is to
+    write that tier's answer down (na-lnv).
+
+    Without `native_choice` the record would carry the inputs to a decision and not the
+    decision, which is precisely the shape that cannot be A/B'd against a brain (na-6db). The
+    answer is also required to AGREE with the categories it was derived from — a `native_choice`
+    that contradicts them would be a second, drifting definition of what a crossing is.
+    """
+    world_view = WorldView.model_validate(BASE_RETOOL)
+    payload = world_view.model_dump()
+
+    crossed = payload["retool_category_previous"] != payload["retool_category_chosen"]
+    expected = "retool:switch" if crossed else "retool:continue"
+    assert payload["native_choice"] == expected
+
+    offered = {a.id for a in world_view.action_space}
+    assert payload["native_choice"] in offered, "the engine chose something it was not offered"
+
+
+def test_retool_is_observation_only() -> None:
+    """It is in OBSERVED and must stay out of APPLIED until a decide path exists.
+
+    The record says so itself: `applied: native` means the engine's choice ran. A record
+    claiming otherwise would move the coverage number for work nobody did, which is the one
+    thing `surfaces.py` exists to prevent.
+    """
+    from neural_amplifier.surfaces import APPLIED, NO_AI_PATH, OBSERVED
+
+    assert BASE_RETOOL["applied"] == "native"
+    assert BASE_RETOOL["tier"] == "deterministic"
+    assert "base.retool" in OBSERVED
+    assert "base.retool" not in APPLIED
+    # Still no *native AI path* in the dialog sense — the penalty is folded into select_build's
+    # scoring, which is why it has a working tier and no hook of its own.
+    assert "base.retool" in NO_AI_PATH

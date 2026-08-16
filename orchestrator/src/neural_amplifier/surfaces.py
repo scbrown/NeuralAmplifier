@@ -166,6 +166,13 @@ OBSERVED: Final[frozenset[str]] = frozenset(
         # and what else was legal; nothing applies a brain's answer yet, and adding it here
         # would move the coverage number for work that has not been done.
         "econ.energy_sliders",
+        # Observed, NOT applied, and unusual among the 21: its deterministic tier already
+        # existed. select_build threads a retool category through the production chooser and
+        # push_item penalises a category crossing, so what was missing was never an answer —
+        # it was the record (na-lnv). Instrumented behind `na_retool_observe`, with an
+        # `observe-retool` probe, because a retool decision fires only when a base is mid-build
+        # and the chooser wants a different category, which is far too rare to catch by playing.
+        "base.retool",
     }
 )
 
