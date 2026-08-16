@@ -470,7 +470,10 @@ Haiku, kept separate from the brain's model so the two can be priced independent
 - **K3 — Memory write/recall. Wired** — `memory.py`, and the exit criterion is met: a tactic
   learned in game N surfaces in game N+1, verified against a real store. See below.
 - **K4 — Hank grounding (role a).** Blocked-partial: HTTP promotion only; signing unkeyed.
-- **K5 — Hank dev guardrails (role b).**
+- **K5 — Hank dev guardrails (role b). Wired** — `.bobbin/config.toml` holds structural rules
+  over this repository's own invariants, run by `yupana hook pre-edit` from a `PreToolUse` hook.
+  Advise-mode and fails open twice over (the shell guard, then yupana's own). `.bobbin/README.md`
+  has the rules and the one build flag that decides whether they run at all.
 - **K6 — Hank hot state graph + policy harness + what-if (roles d, c, e).** Depends on net-new
   Hank ingestion; gated behind new Hank spec FRs. **Roles (c) and (d) are now wired**, against
   [yupana](https://github.com/scbrown/yupana) rather than a net-new service — see below.

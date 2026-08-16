@@ -58,6 +58,7 @@ MEM = "mem:"
 #: reading the triples back, not assumed.
 MEM_IRI = "http://aegis.gastown.local/ontology/"
 
+
 #: Per-game memories: valid-time is the in-game turn, and the group is archived at game end.
 def game_group(game_id: str) -> str:
     return f"memory:game:{game_id}"
@@ -161,9 +162,7 @@ def episodes(log: Path) -> Extraction:
                 },
             }
         )
-        out.edges.append(
-            {"source": name, "target": f"{MEM}game/{game_id}", "relation": "inGame"}
-        )
+        out.edges.append({"source": name, "target": f"{MEM}game/{game_id}", "relation": "inGame"})
 
     out.tactics = _tactics(game_id, considered)
     return out

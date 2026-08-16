@@ -1,0 +1,69 @@
+# Dev-time guardrail on the orchestrator's own code — K5 / Hank role (b).
+#
+# `yupana hook pre-edit` reads this and refuses an edit that introduces text a rule forbids. It
+# is opt-in and ALWAYS FAILS OPEN: no yupana on PATH, a parse failure, a blown deadline — the
+# edit proceeds. That is the same rule every guard in this project follows, and for the same
+# reason: a tool that can block work has to be less likely to fail than the work is.
+#
+# The rules below are this repository's own invariants, the ones that have actually been broken
+# and cost something. They are structural — tree-sitter selectors plus a regex predicate — so
+# they catch a *shape*, not a spelling, and none of them can tell intent. Hence `warn`: the
+# author is told and decides. A guard that denies on a heuristic teaches people to disable it.
+#
+# Not the whole of role (b). The architecture wants these projected from Quipu's canonical
+# `aegis:Policy` rows rather than authored here; the field names below mirror those atoms 1:1
+# (`query` is aegis:Selector.evidenceSource, `pattern` is aegis:Predicate.evidenceSource,
+# `match_type` is aegis:matchType) precisely so the move is a projection and not a rewrite.
+
+[yupana]
+base_ref = "HEAD"
+
+[yupana.policy]
+mode = "advise"
+# Generous, and it still fails open on expiry. An edit blocked by a slow guard is a guard
+# nobody keeps.
+deadline_ms = 4000
+notify_on_fail_open = true
+
+# `degrade_rate` is measured over LLM-tier decisions only, and `policy.py` states why: a
+# disabled surface is decided by the engine, never asked of the brain, and folding the two
+# together puts a deliberate configuration into the one number that catches a run where the
+# brain was silently absent. Code that writes `degraded=True` next to a tier decision is worth
+# a second look.
+[[yupana.policy.rules]]
+name = "degraded-is-not-deterministic"
+language = "python"
+query = "(assignment) @a"
+gate = "degrade"
+match_type = "must-not-match"
+pattern = "tier\\s*==\\s*[\"']deterministic[\"']"
+paths = ["orchestrator/src/**/*.py"]
+
+# Invariant 2: the orchestrator speaks only `docs/contract.md` and must never learn which
+# engine it is driving. A literal engine name in a decision path is how that leaks — the
+# adapter is where engine specifics live.
+[[yupana.policy.rules]]
+name = "no-engine-specifics-in-the-orchestrator"
+language = "python"
+query = "(comparison_operator) @c"
+gate = "engine"
+match_type = "must-not-match"
+pattern = "engine\\s*==\\s*[\"'](thinker|glsmac)[\"']"
+paths = ["orchestrator/src/neural_amplifier/orchestrator.py"]
+
+# A bare `except:` or `except Exception: pass` in the knowledge or guard seam is how a
+# degradation stops being recorded. Those layers are required to degrade VISIBLY — `knowledge.py`
+# and `yupana.py` both turn a failure into a recorded reason, and a swallowed one is
+# indistinguishable from a clean run.
+[[yupana.policy.rules]]
+name = "degradations-are-recorded-not-swallowed"
+language = "python"
+query = "(except_clause) @e"
+gate = "except"
+match_type = "must-not-match"
+pattern = "except[^:]*:\\s*pass\\s*$"
+paths = [
+    "orchestrator/src/neural_amplifier/knowledge.py",
+    "orchestrator/src/neural_amplifier/yupana.py",
+    "orchestrator/src/neural_amplifier/memory.py",
+]

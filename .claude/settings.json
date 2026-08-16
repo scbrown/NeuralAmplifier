@@ -10,6 +10,17 @@
         ],
         "matcher": ""
       }
+    ],
+    "PreToolUse": [
+      {
+        "hooks": [
+          {
+            "command": "command -v yupana >/dev/null 2>&1 && yupana hook pre-edit || true",
+            "type": "command"
+          }
+        ],
+        "matcher": "Edit|Write"
+      }
     ]
   }
 }
