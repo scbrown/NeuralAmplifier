@@ -408,6 +408,37 @@ how much they cost us:
 9. **`probe.action` sub-menus.** The human gets ~15 dialogs; the AI collapses to one branch chain
    with a **hardcoded** sabotage target list (`probe.cpp:1066`).
 
+### 4.0 The dialog plane — how several of these become reachable at once
+
+Most of the gaps above are *dialog-only*: the decision exists, but it is raised as a `popp`
+dialog a human answers, so nothing in the AI path ever asks it. Invariant 7 says intercept those,
+never blanket-suppress them — they are decision points.
+
+`na_dialog_observe` (default off, `scbrown/thinker`) is the first half of that. It is a single
+hook and needs no per-site patching: `popp` is a function **pointer** the engine binds and the
+fork calls through, so a wrapper written into that pointer sees every dialog Thinker raises. The
+engine's answer passes through unchanged on every path — nothing is suppressed, which is the
+invariant, and the recorded `native_choice` is the button the engine or the human actually took.
+
+Two limits, both real and neither hidden:
+
+- **It does not see dialogs the engine raises from its own code.** Those call the real function
+  directly. Reaching them needs each call site's address, which needs the game binary — which
+  this project deliberately does not have (invariant 8).
+- **A dialog record is not a world view and does not count as coverage.** The hook cannot build
+  an action space: a dialog's buttons live in a game text file keyed by label, and that is data
+  we do not ship. So it emits the compact form the divergence records use — a `surface_id` and
+  the facts, no `tier`, no `applied` — and the harvester skips it rather than mistaking it for a
+  capture. None of the mapped surfaces has moved into `OBSERVED`, and none should until one is
+  seen firing in a real game.
+
+The (file, label) table is **evidence, not guesswork**: every entry appears in the fork's own
+source. A table filled out from memory would match nothing while looking like coverage. So an
+unrecognised dialog is still recorded and flagged `mapped:false`, which turns the unknown part
+of the inventory into something a single real game collects — and `dialog-stats` distinguishes
+"the table matched nothing" from "no dialog was raised", since an empty log looks identical
+either way and only one of them is a bug.
+
 ### 4.1 `unit.patrol` is not a missing decision tier
 
 `unit.patrol` remains in the frozen registry for log compatibility, but it is not work for the
