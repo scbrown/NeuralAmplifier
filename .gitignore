@@ -86,3 +86,9 @@ CLAUDE.local.md
 
 # Beads runtime lock
 *.gate.lock*
+
+# Fetched embedding model (na-6td). Never committed: ~90 MB of weights, the large-file
+# pre-commit check would refuse it, and a vendored binary in a source tree is a licence and
+# provenance question nobody wants to answer later. scripts/fetch-embedding-model.sh puts it
+# here, and keeps whatever it could reach when the weights host is blocked.
+models/
