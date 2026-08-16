@@ -9,10 +9,28 @@ export NA_YUPANA_POLICIES=policies/board.example.json
 just play
 ```
 
-**These are a starter, not the source of truth.** Policies are governance: they are authored in
-Quipu and projected, and a copy compiled into this repository would enforce yesterday's rules
-while looking current. The file is read per process so a run states which policy set it played
-under.
+**The JSON file is the fallback; Quipu is the source.** Policies are governance — a rule wants
+provenance, a history and one owner, not a file somebody edited. `board.ttl` is the authored
+form, as `aegis:Policy` nodes, and the orchestrator projects it:
+
+```bash
+quipu knot policies/board.ttl --db .quipu/policy.db
+quipu-server --db .quipu/policy.db --bind 127.0.0.1:3031
+export NA_POLICY_QUIPU_URL=http://127.0.0.1:3031
+```
+
+With that set, `NA_YUPANA_POLICIES` is only consulted when the store cannot be read — and the
+fallback is logged, because guarding with a stale file while saying nothing is how a run ends up
+enforcing rules nobody can point at. It is a *fallback*, never a merge: two live sources of
+governance is the drift this was meant to remove.
+
+The field names in `board.ttl` are quipu's own governance vocabulary
+(`shapes/aegis-properties.ttl`), and yupana's `StatePolicy` deserialises exactly that shape in
+snake_case — its `Boundary::as_str` is documented as "the wire spelling of `aegis:boundary`". So
+the projection is a rename, not a translation between two ontologies, and there is no second
+vocabulary here to drift. Only `boundary "order"` policies are handed to the board guard; quipu's
+graph holds the whole agent's constraints, and one written for the pre-edit seam would otherwise
+come back `unevaluated` on every decision.
 
 ## Turning the board on
 

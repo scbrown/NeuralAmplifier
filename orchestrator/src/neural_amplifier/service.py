@@ -147,7 +147,23 @@ def load_policies() -> list[dict[str, object]]:
     root. That is not tidiness: ``just play`` runs the service with ``--directory orchestrator``,
     so the obvious ``NA_YUPANA_POLICIES=policies/board.example.json`` typed at the repo root
     would otherwise resolve one level too deep and silently guard with nothing.
+
+    **Quipu wins when it is configured.** ``NA_POLICY_QUIPU_URL`` points at a store holding
+    ``aegis:Policy`` nodes, which is where these are meant to live: a rule with provenance, a
+    history and one owner, rather than a file somebody edited. The JSON path stays as the
+    fallback for a run with no store — and it is a *fallback*, not a merge, because two live
+    sources of governance is the drift this was supposed to remove.
     """
+    quipu_url = os.environ.get("NA_POLICY_QUIPU_URL")
+    if quipu_url:
+        projected = _policies_from_quipu(quipu_url)
+        if projected is not None:
+            return projected
+        # Falling through to the file, loudly. A store that is configured and unreachable is an
+        # operator problem, and guarding with a stale file while saying nothing is how a run
+        # ends up enforcing rules nobody can point at.
+        log.warning("policy store %s unreachable; falling back to NA_YUPANA_POLICIES", quipu_url)
+
     setting = os.environ.get("NA_YUPANA_POLICIES")
     if not setting:
         return []
@@ -165,6 +181,26 @@ def load_policies() -> list[dict[str, object]]:
         log.warning("yupana policies at %s is not a list; guarding with none", path)
         return []
     return [p for p in loaded if isinstance(p, dict)]
+
+
+def _policies_from_quipu(url: str) -> list[dict[str, object]] | None:
+    """Board policies projected from a Quipu store, or ``None`` if it could not be read.
+
+    ``None`` and ``[]`` are different answers and the caller treats them differently: an empty
+    projection is a store that genuinely holds no order-boundary policy, which is a legitimate
+    configuration, while ``None`` is "I could not ask" and falls back to the file.
+    """
+    from .datalinks import QuipuRetriever
+    from .yupana import POLICY_QUERY, policies_from_quipu
+
+    try:
+        rows = QuipuRetriever(url).query(POLICY_QUERY)
+    except Exception as exc:  # a policy store is not worth failing a service start over
+        log.warning("could not project policies from %s: %s", url, exc)
+        return None
+    projected = policies_from_quipu(rows)
+    log.info("projected %d board policy(ies) from %s", len(projected), url)
+    return projected
 
 
 def _accepted_status(pending: Pending) -> str:

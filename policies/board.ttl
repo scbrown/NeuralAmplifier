@@ -1,0 +1,78 @@
+# Board policies as governance — the authored source the JSON file is a projection of.
+#
+# `policies/board.example.json` is what the guard consumes. This is where the policies are
+# meant to LIVE: in Quipu, as `aegis:Policy` nodes, so a rule has provenance, a history and a
+# single owner rather than existing as a file somebody edited. `na-eyc`.
+#
+# The field names below are not invented for this file. `aegis:boundary`, `aegis:effect`,
+# `aegis:targets`, `aegis:claim`, `aegis:selector` and `aegis:predicate` are quipu's own
+# governance vocabulary (`shapes/aegis-properties.ttl`), and yupana's `StatePolicy` deserialises
+# exactly that shape — its `Boundary::as_str` is documented as "the wire spelling of
+# aegis:boundary". So the projection is a rename into snake_case, not a translation between two
+# ontologies, and there is no second vocabulary here to drift.
+#
+# `boundary "order"` is yupana's extension of the aegis split. Quipu's own comment gives
+# "action" (a dispatched action) and "transition" (a state change); yupana added "order" for the
+# FR-36 pre-apply seam, which is the one a game order sits at.
+
+@prefix aegis: <https://aegis.local/ontology/> .
+@prefix rdfs:  <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix na:    <http://neuralamplifier.local/policy/> .
+
+na:reserves-stay-solvent a aegis:Policy ;
+    rdfs:label "reserves-stay-solvent" ;
+    aegis:targets "smac:FactionState" ;
+    aegis:claim "An order must not drive energy reserves below zero" ;
+    aegis:boundary "order" ;
+    aegis:effect "deny" ;
+    aegis:selector na:reserves-stay-solvent-sel ;
+    aegis:predicate na:reserves-stay-solvent-pred .
+
+na:reserves-stay-solvent-sel a aegis:Selector ;
+    aegis:selectorLang "graph-pattern" ;
+    aegis:evidenceSource "?f a smac:FactionState" .
+
+na:reserves-stay-solvent-pred a aegis:Predicate ;
+    aegis:selectorLang "graph-pattern" ;
+    aegis:matchType "must-match" ;
+    aegis:evidenceSource "?f a smac:FactionState ; smac:energy_reserves ?e | ?e >= 0" .
+
+# The threshold lives HERE and not in the adapter. `defend_range` is a fact the engine
+# publishes; "near a hostile faction" is a judgement about it, and a judgement compiled into the
+# DLL is one nobody can change without a cross-compiler. 12 is what Thinker's own build code
+# treats as wanting perimeter defence.
+na:garrison-exposed-bases a aegis:Policy ;
+    rdfs:label "garrison-exposed-bases" ;
+    aegis:targets "smac:BaseState" ;
+    aegis:claim "A base near a hostile faction must keep at least one garrison unit" ;
+    aegis:boundary "order" ;
+    aegis:effect "deny" ;
+    aegis:selector na:garrison-exposed-bases-sel ;
+    aegis:predicate na:garrison-exposed-bases-pred .
+
+na:garrison-exposed-bases-sel a aegis:Selector ;
+    aegis:selectorLang "graph-pattern" ;
+    aegis:evidenceSource "?b a smac:BaseState ; smac:defend_range ?d | ?d < 12" .
+
+na:garrison-exposed-bases-pred a aegis:Predicate ;
+    aegis:selectorLang "graph-pattern" ;
+    aegis:matchType "must-match" ;
+    aegis:evidenceSource "?b a smac:BaseState ; smac:garrison_count ?g | ?g >= 1" .
+
+na:meet-the-defence-goal-when-close a aegis:Policy ;
+    rdfs:label "meet-the-defence-goal-when-close" ;
+    aegis:targets "smac:BaseState" ;
+    aegis:claim "A base with an enemy very close should hold the defenders the engine asked for" ;
+    aegis:boundary "order" ;
+    aegis:effect "warn" ;
+    aegis:selector na:meet-the-defence-goal-when-close-sel ;
+    aegis:predicate na:meet-the-defence-goal-when-close-pred .
+
+na:meet-the-defence-goal-when-close-sel a aegis:Selector ;
+    aegis:selectorLang "graph-pattern" ;
+    aegis:evidenceSource "?b a smac:BaseState ; smac:defend_range ?d | ?d < 6" .
+
+na:meet-the-defence-goal-when-close-pred a aegis:Predicate ;
+    aegis:selectorLang "graph-pattern" ;
+    aegis:matchType "must-match" ;
+    aegis:evidenceSource "?b a smac:BaseState ; smac:garrison_count ?g ; smac:defend_goal ?goal | ?g >= 1" .

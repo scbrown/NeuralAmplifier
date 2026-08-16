@@ -343,6 +343,79 @@ class YupanaGuard:
         return _ruling(report)
 
 
+#: Board policies as quipu's own governance vocabulary — `shapes/aegis-properties.ttl`.
+#:
+#: Not a translation between two ontologies. Yupana's ``StatePolicy`` deserialises exactly these
+#: names in snake_case, and its ``Boundary::as_str`` is documented as "the wire spelling of
+#: aegis:boundary" — so this is a rename, and there is no second vocabulary to drift.
+#:
+#: Dot terminators between the triple blocks are load-bearing: quipu's parser refuses the
+#: semicolon-and-newline form that works inside one subject.
+POLICY_QUERY = """PREFIX aegis: <https://aegis.local/ontology/>
+PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+SELECT ?label ?targets ?claim ?boundary ?effect ?sel_lang ?sel_src ?pred_lang ?pred_match ?pred_src
+WHERE {
+  ?p a aegis:Policy ;
+     rdfs:label ?label ;
+     aegis:claim ?claim ;
+     aegis:boundary ?boundary ;
+     aegis:effect ?effect ;
+     aegis:selector ?sel ;
+     aegis:predicate ?pred .
+  ?sel aegis:selectorLang ?sel_lang ;
+       aegis:evidenceSource ?sel_src .
+  ?pred aegis:selectorLang ?pred_lang ;
+        aegis:matchType ?pred_match ;
+        aegis:evidenceSource ?pred_src .
+  OPTIONAL { ?p aegis:targets ?targets }
+}"""
+
+
+def policies_from_quipu(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Projected ``aegis:Policy`` rows as the JSON yupana's guard accepts.
+
+    Only ``boundary "order"`` policies come through. Quipu's governance graph holds the whole
+    agent's constraints — pre-edit code rules, transition rules — and handing yupana's board
+    guard a policy written for a different seam would have it report the policy ``unevaluated``
+    on every decision. Filtering here says the same thing more usefully: it was never this
+    guard's to evaluate.
+    """
+    out: list[dict[str, Any]] = []
+    for row in rows:
+        if _lit(row, "boundary") != "order":
+            continue
+        policy: dict[str, Any] = {
+            "label": _lit(row, "label"),
+            "claim": _lit(row, "claim"),
+            "boundary": "order",
+            "effect": _lit(row, "effect"),
+            "selector": {
+                "selector_lang": _lit(row, "sel_lang"),
+                "evidence_source": _lit(row, "sel_src"),
+            },
+            "predicate": {
+                "selector_lang": _lit(row, "pred_lang"),
+                "match_type": _lit(row, "pred_match"),
+                "evidence_source": _lit(row, "pred_src"),
+            },
+        }
+        if row.get("targets"):
+            policy["targets"] = _lit(row, "targets")
+        out.append(policy)
+    return out
+
+
+def _lit(row: dict[str, Any], key: str) -> str:
+    """One SPARQL string literal, unquoted.
+
+    Quipu returns literals with their quotes on (``"deny"``), and a policy whose effect is
+    literally ``'"deny"'`` matches nothing in yupana's enum — it would be refused as an unknown
+    variant, which is at least loud, but the same slip on an evidence_source would produce a
+    selector that silently matches no node.
+    """
+    return str(row.get(key, "")).strip('"')
+
+
 def what_if(guard: YupanaGuard, world_view: WorldView, action_id: str) -> dict[str, Any]:
     """What would this action change, and what do those changes reach — Hank role (e).
 

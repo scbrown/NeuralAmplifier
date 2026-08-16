@@ -624,3 +624,64 @@ def test_what_if_reports_what_the_move_changes() -> None:
     assert "unavailable" not in answer
     assert answer["committed"] is False  # speculative, always
     assert any("energy_reserves" in c.get("detail", "") for c in answer["changes"])
+
+
+# --- policies projected from Quipu (na-eyc) ---------------------------------
+
+
+def _row(**over: Any) -> dict[str, Any]:
+    """One projected `aegis:Policy` row, quoted the way quipu returns literals."""
+    base = {
+        "label": '"reserves-stay-solvent"',
+        "targets": '"smac:FactionState"',
+        "claim": '"An order must not drive energy reserves below zero"',
+        "boundary": '"order"',
+        "effect": '"deny"',
+        "sel_lang": '"graph-pattern"',
+        "sel_src": '"?f a smac:FactionState"',
+        "pred_lang": '"graph-pattern"',
+        "pred_match": '"must-match"',
+        "pred_src": '"?f a smac:FactionState ; smac:energy_reserves ?e | ?e >= 0"',
+    }
+    return {**base, **over}
+
+
+def test_a_projected_policy_is_the_shape_the_guard_accepts() -> None:
+    """The projection is a rename, not a translation: yupana's StatePolicy deserialises quipu's
+    own aegis: names in snake_case, and its Boundary::as_str is documented as the wire spelling
+    of aegis:boundary. So the assertion worth making is that a projected row is byte-identical
+    to a hand-written policy."""
+    from neural_amplifier.yupana import policies_from_quipu
+
+    (projected,) = policies_from_quipu([_row()])
+    assert projected == SOLVENCY
+
+
+def test_a_policy_for_another_seam_is_not_handed_to_the_board_guard() -> None:
+    """Quipu's governance graph holds the whole agent's constraints — pre-edit code rules,
+    transition rules. Passing one written for a different boundary would have yupana report it
+    `unevaluated` on every decision; filtering says the same thing more usefully."""
+    from neural_amplifier.yupana import policies_from_quipu
+
+    assert policies_from_quipu([_row(boundary='"action"')]) == []
+    assert policies_from_quipu([_row(boundary='"transition"')]) == []
+    assert len(policies_from_quipu([_row(), _row(boundary='"action"')])) == 1
+
+
+def test_an_absent_optional_field_is_omitted_rather_than_emptied() -> None:
+    """`targets` is optional in the shape. Emitting it as "" would be a policy claiming to be
+    about a class called nothing."""
+    from neural_amplifier.yupana import policies_from_quipu
+
+    row = _row()
+    del row["targets"]
+    (projected,) = policies_from_quipu([row])
+    assert "targets" not in projected
+
+
+def test_a_store_with_no_board_policies_projects_nothing_rather_than_failing() -> None:
+    """An empty projection is a legitimate configuration — a store that holds governance for
+    other seams and none for this one — and is a different answer from "I could not ask"."""
+    from neural_amplifier.yupana import policies_from_quipu
+
+    assert policies_from_quipu([]) == []
