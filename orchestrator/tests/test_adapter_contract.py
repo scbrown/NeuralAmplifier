@@ -566,6 +566,83 @@ BASE_SATELLITE = {
     "applied": "native",
 }
 
+# na_write_head + na_build_base_project + na_write_metrics + na_write_base_state.
+# The richest action space in na-yd4's bucket.
+BASE_PROJECT = {
+    "schema_version": "0.1",
+    "engine": "thinker",
+    "scope": "base",
+    "surface_id": "base.project",
+    "turn": 42,
+    "faction_id": 1,
+    "faction": "Gaians",
+    "run_id": "68ad1e40-0004e1c8-1a2c",
+    "trace": {"traceparent": "00-0000002a000000010000000807a1c0de-000000080000002b-01"},
+    "base_id": 0,
+    "base": "Gaia's Landing",
+    "minerals_accumulated": 18,
+    "metrics": {
+        "energy_reserves": 82,
+        "energy_income": 14,
+        "labs_output": 6,
+        "base_count": 2,
+        "pop_total": 5,
+        "military_units": 3,
+        "drone_total": 1,
+        "units_in_foreign_territory": 0,
+        "mineral_surplus": 2,
+        "minerals_remaining": 26,
+        "pop_size": 3,
+        "turns_to_completion": 13,
+    },
+    "base_state": {
+        "pop_size": 3,
+        "minerals_accumulated": 18,
+        "mineral_surplus": 2,
+        "nutrient_intake": 5,
+        "mineral_intake": 3,
+        "energy_intake": 4,
+        "eco_damage": 0,
+        "worked_tiles": 3,
+        "specialists": 0,
+        "queue_size": 1,
+        "current_item": -4,
+        "current_item_name": "Recycling Tanks",
+    },
+    "action_space": [
+        {
+            "id": "project:none",
+            "action": "Start no secret project here",
+            "category": "project",
+        },
+        # `engine_score` is facility_score under THIS base's governor weights — the number the
+        # chooser maximises. The fixture has the chooser taking the highest, which is the usual
+        # case; `already_building` is why it sometimes will not.
+        {
+            "id": "project:70",
+            "action": "Human Genome Project",
+            "category": "project",
+            "engine_score": 42,
+            "already_building": 0,
+        },
+        {
+            "id": "project:71",
+            "action": "Command Nexus",
+            "category": "project",
+            "engine_score": 17,
+            "already_building": 1,
+        },
+    ],
+    "action_space_size": 3,
+    "action_space_truncated": False,
+    "subjects": ["Human Genome Project", "Command Nexus"],
+    "native_choice": "project:70",
+    "native_choice_item": -70,
+    "native_choice_name": "Human Genome Project",
+    "tier": "deterministic",
+    "applied": "native",
+}
+
 ALL_RECORDS = [
     BASE_PRODUCTION,
     BASE_HURRY,
@@ -576,6 +653,7 @@ ALL_RECORDS = [
     ECON_CORNER_MARKET,
     COUNCIL_CALL,
     BASE_SATELLITE,
+    BASE_PROJECT,
 ]
 
 
@@ -1266,3 +1344,67 @@ def test_satellite_is_observed_not_applied() -> None:
     assert "base.satellite" in OBSERVED
     assert "base.satellite" not in APPLIED
     assert "base.satellite" not in NO_AI_PATH
+
+
+def test_project_scores_are_the_engines_own() -> None:
+    """`engine_score` must come from the chooser's own facility_score, under its own weights.
+
+    The adapter forwards the caller's `Wgov` rather than rebuilding it. A reconstruction would
+    rank options differently from the engine for reasons invisible in the record — while
+    carrying the engine's authority, which is the worst of both. This pins that every offered
+    project has a score at all; the C++ side pins where it comes from.
+    """
+    world_view = WorldView.model_validate(BASE_PROJECT)
+    scored = [a for a in world_view.action_space if a.id != "project:none"]
+    assert scored, "a project record with no projects is not a decision"
+    for action in scored:
+        extra = action.model_dump()
+        assert isinstance(extra.get("engine_score"), int), action.id
+        assert isinstance(extra.get("already_building"), int), action.id
+
+
+def test_project_says_when_it_truncated() -> None:
+    """A capped list presented as a whole one is how a brain comes to believe it saw everything.
+
+    The walk stops at 32 options. `action_space_truncated` is the same admission `na_audit`
+    already makes about its id lists: report the cap rather than letting a partial list read as
+    complete.
+    """
+    assert BASE_PROJECT["action_space_truncated"] is False
+    offered = len(BASE_PROJECT["action_space"])
+    assert BASE_PROJECT["action_space_size"] == offered
+
+
+def test_project_distinguishes_its_three_kinds_of_answer() -> None:
+    """find_project can answer with a project, a PREREQUISITE facility, or a missile unit.
+
+    All three are legitimate and they mean different things, so the adapter emits `project:<id>`
+    for the first two and `unit:<id>` for the last. Flattening any of them into `project:none`
+    would record a base that was told to build something as a base that declined — and the two
+    are indistinguishable after the fact.
+    """
+    assert BASE_PROJECT["native_choice"].startswith("project:")
+    assert BASE_PROJECT["native_choice_item"] < 0, "a project is a negated facility id"
+    assert BASE_PROJECT["native_choice"] != "project:none"
+    assert BASE_PROJECT["native_choice_name"]
+
+
+def test_project_only_offers_what_the_engine_would_accept() -> None:
+    """`can_build` is the gate, and it is the engine's own.
+
+    Offering an option the engine would refuse invites the brain to decide something that was
+    never available — the base.hurry affordability lesson, where an unaffordable hurry was
+    omitted rather than offered-and-rejected.
+    """
+    world_view = WorldView.model_validate(BASE_PROJECT)
+    ids = {a.id for a in world_view.action_space}
+    assert "project:none" in ids, "declining is always available"
+    assert BASE_PROJECT["native_choice"] in ids
+
+
+def test_project_is_observed_not_applied() -> None:
+    from neural_amplifier.surfaces import APPLIED, NO_AI_PATH, OBSERVED
+
+    assert "base.project" in OBSERVED
+    assert "base.project" not in APPLIED
+    assert "base.project" not in NO_AI_PATH

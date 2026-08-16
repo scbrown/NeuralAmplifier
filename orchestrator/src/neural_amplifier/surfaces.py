@@ -203,6 +203,14 @@ OBSERVED: Final[frozenset[str]] = frozenset(
         # find_satellite will pick — the chooser also weighs an aerospace-complex prerequisite
         # and a randomised defence bias, so an option can be available and go unchosen.
         "base.satellite",
+        # The fifth from na-yd4's 27 and the richest action space in the set: every buildable
+        # secret project with the engine's OWN `facility_score` under this base's governor
+        # weights, plus how many of the faction's bases are already building it.
+        #
+        # The scores are forwarded from the chooser's own Wgov rather than reconstructed. A
+        # local reconstruction would rank options differently from the engine for reasons no
+        # reader could see, while carrying the engine's authority.
+        "base.project",
     }
 )
 

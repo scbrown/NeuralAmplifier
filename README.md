@@ -160,7 +160,7 @@ Full design — the contract Claude speaks, the two-engine strategy, and the roa
 
 ## 📊 Coverage & Plan
 
-**4 of 77 decision surfaces the brain can actually decide**, plus **6 it can watch**. Those are
+**4 of 77 decision surfaces the brain can actually decide**, plus **7 it can watch**. Those are
 two different numbers and conflating them overstates coverage by half. A surface is not covered
 until its decision can be *applied*; observing changes what is recorded, not what the game does.
 `just surfaces` prints both from the frozen registry rather than from this table. The registry
@@ -179,13 +179,14 @@ is frozen at 77 (`orchestrator/surfaces.py`), partitioned by contract scope: `ba
 | `econ.corner_market` | turn | Observed · cornering the energy market — a move toward economic victory |
 | `council.call` | turn | Observed · convening the Planetary Council, read as a state transition because `call_council` returns nothing |
 | `base.satellite` | base | Observed · all four orbitals with per-option availability, built count and faction goal |
+| `base.project` | base | Observed · every buildable secret project with the engine's own score under this base's governor weights |
 
 Every surface ships a **side-effect-free probe** (`observe`, `observe-tech`, `observe-se`,
 `observe-hurry`, `observe-retool`, `observe-staple`, `observe-corner`, `observe-council`,
-`observe-satellite`) because in-game input cannot be driven at all, so a decision that fires
+`observe-satellite`, `observe-project`) because in-game input cannot be driven at all, so a decision that fires
 every five to ten turns is otherwise unverifiable without playing until it happens.
 
-**The observed six are not a waiting room.** Each has a working native answer, which is what
+**The observed seven are not a waiting room.** Each has a working native answer, which is what
 makes recording one safe from the first row — invariant 9 needs nothing built first. Their value
 is the `native_choice`: a baseline nobody wrote down cannot be A/B'd against a brain later. Every
 adapter record is transcribed into `test_adapter_contract.py` and diffed *mechanically* against
@@ -260,11 +261,11 @@ because it is the cheerful failure mode of a list like this: a surface can sit i
 build-it-first pile for months because nobody read the function that already does the work. The
 other 13 uninstrumented ones were audited in the same pass; `base.retool` was the outlier.
 
-Of the 67 not yet instrumented, **25 are `unit`-scope** and mostly stay deterministic on volume
+Of the 66 not yet instrumented, **25 are `unit`-scope** and mostly stay deterministic on volume
 grounds — see [docs/decision-inputs.md](docs/decision-inputs.md) §5 for why, and why revisiting
 them should mean deciding *operations* rather than tile moves. **20 still need their tier built.**
-That leaves **22 base and faction surfaces that already have a native path and so already have a
-safe fallback** — the bucket being worked through now, five of them done. `just surfaces` prints
+That leaves **21 base and faction surfaces that already have a native path and so already have a
+safe fallback** — the bucket being worked through now, six of them done. `just surfaces` prints
 the split from the registry rather than from this paragraph.
 
 Detail, including the seam and action-space quality per surface:
@@ -332,7 +333,7 @@ and the rollout are in the [design doc](docs/knowledge-architecture.md).
 >
 > What is *not* proven: nothing has played a turn of Alpha Centauri yet.
 > **Track A (Thinker) is the current focus** — the complete, balanced game, controllable
-> today. The fork now instruments ten decision surfaces and *applies* four of them, intercepts
+> today. The fork now instruments eleven decision surfaces and *applies* four of them, intercepts
 > in-game dialogs, and ships a side-effect-free probe for every surface. The wire is tested
 > against a real orchestrator under Wine with no game present.
 >

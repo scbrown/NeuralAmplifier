@@ -168,6 +168,12 @@ INDEPENDENTLY_INSTRUMENTED = {
     # succeeded or was foiled — while `na_endgame_observe` instruments the decision itself in
     # mod_faction_upkeep. A notice that a thing happened is not the choice to do it.
     "econ.corner_market": "na_endgame_observe, mod_faction_upkeep (na-yd4)",
+    # Third time, same shape, and by now the pattern is the point: the dialog table maps
+    # SURVIVEPROJECT / HALTPROJECT / SEIZEPROJECT / LOSEPROJECT — what happened to a project
+    # already under way, usually someone else's — while `na_project_observe` instruments
+    # find_project, the choice to start one. Outcome and decision are different surfaces
+    # wearing one id, and every entry on this list so far is that same split.
+    "base.project": "na_project_observe, find_project (na-yd4)",
 }
 
 
