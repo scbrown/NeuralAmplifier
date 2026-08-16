@@ -10,10 +10,21 @@
 # they catch a *shape*, not a spelling, and none of them can tell intent. Hence `warn`: the
 # author is told and decides. A guard that denies on a heuristic teaches people to disable it.
 #
-# Not the whole of role (b). The architecture wants these projected from Quipu's canonical
-# `aegis:Policy` rows rather than authored here; the field names below mirror those atoms 1:1
-# (`query` is aegis:Selector.evidenceSource, `pattern` is aegis:Predicate.evidenceSource,
-# `match_type` is aegis:matchType) precisely so the move is a projection and not a rewrite.
+# THE CANONICAL SOURCE IS `policies/preedit.ttl`, not this file. These same three rules exist
+# there as `aegis:Policy` rows, which is where a rule that can block an edit belongs: with
+# provenance, a history and an owner. The field names below mirror those atoms 1:1 (`query` is
+# aegis:Selector.evidenceSource, `pattern` is aegis:Predicate.evidenceSource, `match_type` is
+# aegis:matchType, `paths` is aegis:appliesTo), so the two are a rename apart.
+#
+# This file is still what runs, because projection needs a quipu holding the rows and a
+# `[yupana.quipu]` endpoint pointing at it. Until then the TOML is the operational plane and
+# the TTL is the governed one — and two representations of one rule set drift silently, in the
+# direction that matters most: this file is what executes, so a TTL that falls behind describes
+# governance nobody is subject to while looking exactly like governance.
+#
+# `orchestrator/tests/test_preedit_policies.py` is what stops that. It compares every field,
+# both directions, and fails on a rule present in one and not the other. Edit BOTH, or the
+# suite will tell you.
 
 [yupana]
 base_ref = "HEAD"

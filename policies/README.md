@@ -118,3 +118,33 @@ Three things to get right:
   `pre_existing` — the condition already held before these orders — never strips whatever its
   effect, because denying a move for something it did not cause removes a legal and possibly
   correct option.
+
+## Two planes, two namespaces, two consumers
+
+`board.ttl` and `preedit.ttl` are both `aegis:Policy` files, and they are **not**
+interchangeable. Copying an idiom from one into the other is the mistake this section exists to
+prevent, because every way of getting it wrong fails as silence rather than as an error.
+
+| Aspect | `board.ttl` | `preedit.ttl` |
+| --- | --- | --- |
+| Guards | game orders, at decision time | source edits, at `hook pre-edit` |
+| Read by | `neural_amplifier/yupana.py` | yupana's own `src/project_queries.rs` |
+| Namespace | `https://aegis.local/ontology/` | `http://aegis.gastown.local/ontology/` |
+| `aegis:boundary` | `"order"` | `"action"` |
+| Evidence | graph patterns over board state | tree-sitter selector + regex predicate |
+| Also needs | — | `aegis:tier "tree-sitter"`, `aegis:language` |
+
+The namespaces differ because each is fixed by its consumer, not chosen by us: we own the
+board query and yupana owns the pre-edit one. A file written against the wrong namespace parses
+cleanly, matches nothing, and yields a guard with no rules — which cannot be told apart from a
+guard with nothing to complain about. Same for a missing `tier` or the wrong `boundary`.
+
+`preedit.ttl` is the canonical form of the three rules in `.bobbin/config.toml`, which is what
+actually runs today; projection needs a quipu holding the rows and a `[yupana.quipu]` endpoint.
+Two representations drift silently, so `orchestrator/tests/test_preedit_policies.py` compares
+them field by field in both directions. Change one, change the other.
+
+`aegis:appliesTo` carries the path scope, and it is the field to watch. yupana projected it as
+empty until `scbrown/yupana` 35ebc90 — so a policy scoped to one module was enforced repo-wide,
+which reads as a rule that works rather than as a bug. One of these rules is scoped to a single
+file and is the one that would have hurt.

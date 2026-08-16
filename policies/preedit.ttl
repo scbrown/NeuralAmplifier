@@ -1,0 +1,138 @@
+# Dev-time structural policies as governance — the canonical source `.bobbin/config.toml`
+# is a projection of. Hank role (b) / K5, na-kdw.
+#
+# `.bobbin/config.toml` is what yupana's `hook pre-edit` reads today. This is where these
+# rules are meant to LIVE: in Quipu, as `aegis:Policy` nodes, so a rule that can block an
+# edit has provenance, a history and a single owner rather than existing as a file somebody
+# edited. Same move `policies/board.ttl` made for the board plane, and for the same reason.
+#
+# ## Why the namespace differs from board.ttl
+#
+# board.ttl uses `https://aegis.local/ontology/`; this file uses
+# `http://aegis.gastown.local/ontology/`. That is not an inconsistency to tidy — the two
+# planes are read by two different consumers, and each one's namespace is fixed by the
+# consumer, not by us:
+#
+#   - the BOARD plane is queried by `orchestrator/src/neural_amplifier/yupana.py`, whose
+#     POLICY_QUERY we own and which names `https://aegis.local/ontology/`.
+#   - the PRE-EDIT plane is queried by yupana itself (`src/project_queries.rs`
+#     POLICY_QUERY), which names `http://aegis.gastown.local/ontology/` and is not ours to
+#     change from here.
+#
+# Getting this wrong is silent in the worst way: the SPARQL matches nothing, the projection
+# returns zero rows, and a guard with no rules is indistinguishable from a guard with
+# nothing to complain about.
+#
+# ## Shape, and what it must satisfy to project at all
+#
+# yupana's structural projection requires, on pain of the policy simply not appearing:
+#
+#   - `aegis:boundary "action"` — NOT "order". "order" is yupana's extension for the game
+#     pre-apply seam and is what board.ttl uses; "action" is the dispatched-action boundary
+#     the pre-edit hook evaluates. A rule with the wrong boundary is not an error anywhere,
+#     it is absent.
+#   - `aegis:tier "tree-sitter"` on the Selector. A committed-tier policy has no structural
+#     evidence to project and is deliberately left to quipu's own write gate.
+#   - `aegis:language` on the Selector. A rule only evaluates files of its own language.
+#
+# ## The scope is load-bearing
+#
+# `aegis:appliesTo` carries what `paths` does in the TOML. It was NOT projected until
+# scbrown/yupana 35ebc90: the decoder hardcoded an empty scope, so every projected policy
+# applied to every file of its language. `no-engine-specifics-in-the-orchestrator` below is
+# scoped to ONE file, and unscoped it would fire on every comparison against a string
+# literal in the whole orchestrator. Requires yupana >= that commit; an older one projects
+# these rules unscoped rather than failing, which is why `just policy-check` verifies the
+# scope survives rather than trusting a version.
+#
+# ## Effects are `warn`, and that is not timidity
+#
+# These are structural rules over a *shape*, and none of them can tell intent. A guard that
+# denies on a heuristic teaches people to disable it, and a disabled guard is worth less
+# than no guard because everyone believes it is running.
+
+@prefix aegis: <http://aegis.gastown.local/ontology/> .
+@prefix rdfs:  <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix na:    <http://neuralamplifier.local/policy/> .
+
+# `degrade_rate` is measured over LLM-tier decisions only, and `policy.py` states why: a
+# disabled surface is decided by the engine, never asked of the brain, and folding the two
+# together puts a deliberate configuration into the one number that catches a run where the
+# brain was silently absent.
+na:degraded-is-not-deterministic a aegis:Policy ;
+    rdfs:label "degraded-is-not-deterministic" ;
+    aegis:claim "Code that writes degraded=True beside a tier comparison is conflating a configured tier with a failure" ;
+    aegis:boundary "action" ;
+    aegis:effect "warn" ;
+    aegis:appliesTo "orchestrator/src/**/*.py" ;
+    aegis:selector na:degraded-is-not-deterministic-sel ;
+    aegis:predicate na:degraded-is-not-deterministic-pred .
+
+na:degraded-is-not-deterministic-sel a aegis:Selector ;
+    aegis:selectorLang "tree-sitter" ;
+    aegis:tier "tree-sitter" ;
+    aegis:language "python" ;
+    aegis:evidenceSource "(assignment) @a" .
+
+na:degraded-is-not-deterministic-pred a aegis:Predicate ;
+    aegis:selectorLang "regex" ;
+    aegis:matchType "must-not-match" ;
+    aegis:gate "degrade" ;
+    aegis:evidenceSource "tier\\s*==\\s*[\"']deterministic[\"']" .
+
+# Invariant 2: the orchestrator speaks only `docs/contract.md` and must never learn which
+# engine it is driving. A literal engine name in a decision path is how that leaks — the
+# adapter is where engine specifics live.
+#
+# THE ONE-FILE SCOPE IS THE POINT. Unscoped, this fires on every comparison against a
+# string literal in the orchestrator package.
+na:no-engine-specifics-in-the-orchestrator a aegis:Policy ;
+    rdfs:label "no-engine-specifics-in-the-orchestrator" ;
+    aegis:claim "The orchestrator must not branch on which engine it is driving (invariant 2)" ;
+    aegis:boundary "action" ;
+    aegis:effect "warn" ;
+    aegis:appliesTo "orchestrator/src/neural_amplifier/orchestrator.py" ;
+    aegis:selector na:no-engine-specifics-in-the-orchestrator-sel ;
+    aegis:predicate na:no-engine-specifics-in-the-orchestrator-pred .
+
+na:no-engine-specifics-in-the-orchestrator-sel a aegis:Selector ;
+    aegis:selectorLang "tree-sitter" ;
+    aegis:tier "tree-sitter" ;
+    aegis:language "python" ;
+    aegis:evidenceSource "(comparison_operator) @c" .
+
+na:no-engine-specifics-in-the-orchestrator-pred a aegis:Predicate ;
+    aegis:selectorLang "regex" ;
+    aegis:matchType "must-not-match" ;
+    aegis:gate "engine" ;
+    aegis:evidenceSource "engine\\s*==\\s*[\"'](thinker|glsmac)[\"']" .
+
+# A bare `except:` or `except Exception: pass` in the knowledge or guard seam is how a
+# degradation stops being recorded. Those layers are required to degrade VISIBLY —
+# `knowledge.py`, `yupana.py` and `memory.py` each turn a failure into a recorded reason,
+# and a swallowed one is indistinguishable from a clean run.
+#
+# Three `aegis:appliesTo` values on one policy, which is the multi-valued case: the SPARQL
+# returns three rows for this policy and the projection accumulates them.
+na:degradations-are-recorded-not-swallowed a aegis:Policy ;
+    rdfs:label "degradations-are-recorded-not-swallowed" ;
+    aegis:claim "A degradation in the knowledge, board-guard or memory seam must be recorded, never swallowed" ;
+    aegis:boundary "action" ;
+    aegis:effect "warn" ;
+    aegis:appliesTo "orchestrator/src/neural_amplifier/knowledge.py" ,
+                    "orchestrator/src/neural_amplifier/yupana.py" ,
+                    "orchestrator/src/neural_amplifier/memory.py" ;
+    aegis:selector na:degradations-are-recorded-not-swallowed-sel ;
+    aegis:predicate na:degradations-are-recorded-not-swallowed-pred .
+
+na:degradations-are-recorded-not-swallowed-sel a aegis:Selector ;
+    aegis:selectorLang "tree-sitter" ;
+    aegis:tier "tree-sitter" ;
+    aegis:language "python" ;
+    aegis:evidenceSource "(except_clause) @e" .
+
+na:degradations-are-recorded-not-swallowed-pred a aegis:Predicate ;
+    aegis:selectorLang "regex" ;
+    aegis:matchType "must-not-match" ;
+    aegis:gate "except" ;
+    aegis:evidenceSource "except[^:]*:\\s*pass\\s*$" .

@@ -153,8 +153,17 @@ def test_orders_are_serialised(tmp_path: Path) -> None:
     channel = OrderChannel(tmp_path)
     results: list[str] = []
 
+    # Generous on BOTH sides, for the reason above. Fixing only the adapter's lifetime left the
+    # clock still holding a casting vote: `issue` starts its deadline once it owns the channel,
+    # so lock-wait is not the risk, but a 3s window for the poller to notice one file still
+    # loses on a machine under load — which is what happened, at 3x the suite's usual runtime,
+    # and it failed claiming an order never arrived (na-5w2 again, other half).
+    #
+    # 30s is a hang detector, not a latency budget. Nothing here asserts timing; the subject is
+    # that four concurrent callers each get their OWN result, and a real deadlock still fails —
+    # just thirty seconds later instead of three.
     def issue(n: int) -> None:
-        results.append(channel.issue(f"skip {n}", timeout_s=3.0).detail)
+        results.append(channel.issue(f"skip {n}", timeout_s=30.0).detail)
 
     threads = [threading.Thread(target=issue, args=(i,)) for i in range(4)]
     for t in threads:
