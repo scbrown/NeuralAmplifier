@@ -302,12 +302,82 @@ BASE_RETOOL = {
     "applied": "native",
 }
 
+# na_write_head + na_build_base_staple + na_write_metrics + na_write_base_state. The first of
+# na-yd4's 27 — the bucket that already has a native AI path, so the fallback exists from the
+# first record and invariant 9 needs nothing built first.
+BASE_STAPLE = {
+    "schema_version": "0.1",
+    "engine": "thinker",
+    "scope": "base",
+    "surface_id": "base.staple",
+    "turn": 42,
+    "faction_id": 1,
+    "faction": "Gaians",
+    "run_id": "68ad1e40-0004e1c8-1a2c",
+    "trace": {"traceparent": "00-0000002a000000010000000407a1c0de-000000040000002b-01"},
+    "base_id": 0,
+    "base": "Gaia's Landing",
+    # The numbers consider_staple's inner test weighs, as facts rather than as its verdict.
+    "drone_total": 3,
+    "talent_total": 1,
+    "specialist_adjust": 0,
+    "nerve_staple_count": 0,
+    "drone_riots_active": True,
+    "faction_id_former": 1,
+    "subjects": ["Gaia's Landing"],
+    "metrics": {
+        "energy_reserves": 82,
+        "energy_income": 14,
+        "labs_output": 6,
+        "base_count": 2,
+        "pop_total": 5,
+        "military_units": 3,
+        "drone_total": 1,
+        "units_in_foreign_territory": 0,
+        "mineral_surplus": 2,
+        "minerals_remaining": 26,
+        "pop_size": 3,
+        "turns_to_completion": 13,
+    },
+    "base_state": {
+        "pop_size": 3,
+        "minerals_accumulated": 18,
+        "mineral_surplus": 2,
+        "nutrient_intake": 5,
+        "mineral_intake": 3,
+        "energy_intake": 4,
+        "eco_damage": 0,
+        "worked_tiles": 3,
+        "specialists": 0,
+        "queue_size": 1,
+        "current_item": -4,
+        "current_item_name": "Recycling Tanks",
+    },
+    "action_space": [
+        {
+            "id": "staple:none",
+            "action": "Leave the drones unstapled",
+            "category": "staple",
+        },
+        {
+            "id": "staple:now",
+            "action": "Nerve staple the base",
+            "category": "staple",
+        },
+    ],
+    "action_space_size": 2,
+    "native_choice": "staple:now",
+    "tier": "deterministic",
+    "applied": "native",
+}
+
 ALL_RECORDS = [
     BASE_PRODUCTION,
     BASE_HURRY,
     FACTION_TECH,
     BASE_PRODUCTION_SUPERSEDED,
     BASE_RETOOL,
+    BASE_STAPLE,
 ]
 
 
@@ -843,3 +913,43 @@ def test_retool_is_observation_only() -> None:
     # Still no *native AI path* in the dialog sense — the penalty is folded into select_build's
     # scoring, which is why it has a working tier and no hook of its own.
     assert "base.retool" in NO_AI_PATH
+
+
+def test_staple_offers_the_engines_answer_among_its_options() -> None:
+    """na-yd4's first surface, and the check that generalises to the other 26.
+
+    Every record in this bucket is an OBSERVATION of a native path, so its whole value is
+    `native_choice` — and a native_choice naming something the action space never offered is
+    the failure that makes a record unusable for the A/B na-6db wants: there would be nothing
+    to compare a brain's answer against.
+    """
+    world_view = WorldView.model_validate(BASE_STAPLE)
+    offered = {a.id for a in world_view.action_space}
+    assert offered == {"staple:none", "staple:now"}
+    assert BASE_STAPLE["native_choice"] in offered
+
+
+def test_staple_reports_the_counts_not_the_verdict() -> None:
+    """The threshold is the engine's judgement; the counts are what it judged.
+
+    consider_staple fires when drones exceed talents (adjusted), or when a riot is already
+    running. Emitting only a derived `should_staple` boolean would bake today's threshold into
+    the record, so a later engine change would silently reinterpret every past row.
+    """
+    for field in ("drone_total", "talent_total", "specialist_adjust", "nerve_staple_count"):
+        assert isinstance(BASE_STAPLE[field], int), field
+    assert isinstance(BASE_STAPLE["drone_riots_active"], bool)
+    assert "should_staple" not in BASE_STAPLE
+
+
+def test_staple_is_observed_and_not_applied() -> None:
+    """The native path is the fallback, which is what makes this bucket safe — and is also
+    exactly why observing it must not be mistaken for driving it."""
+    from neural_amplifier.surfaces import APPLIED, NO_AI_PATH, OBSERVED
+
+    assert "base.staple" in OBSERVED
+    assert "base.staple" not in APPLIED
+    # Not one of the 21: consider_staple IS a native AI path. That is the whole distinction
+    # between this bucket and na-2mn's.
+    assert "base.staple" not in NO_AI_PATH
+    assert BASE_STAPLE["applied"] == "native"

@@ -71,7 +71,7 @@ Per-unit orders fire separately as the engine iterates units (`mod_enemy_turn`
 
 ## 2.5 Instrumentation status — measured 2026-07-29, amended 2026-08-03
 
-**4 of 77 surfaces the brain can actually decide**, plus **2 observed only**. The four apply:
+**4 of 77 surfaces the brain can actually decide**, plus **3 observed only**. The four apply:
 the choice executes, validated against the engine's own availability tests first, so an illegal
 order is rejected rather than applied. A surface is not covered until its decision can be applied
 — `just surfaces` reports it from the frozen registry rather than from this paragraph.
@@ -90,7 +90,15 @@ different places. So the record carries `native_choice`, the two retool categori
 which is the baseline itself rather than the inputs to one. It has **not** been verified against
 a running game: no engine has fired the hook, which is exactly why the probe exists.
 
-`econ.energy_sliders` is the other observed-only one (na-yd4): the adapter records what
+`base.staple` is the first surface instrumented from na-yd4's bucket of 27 — the ones that
+already have a native AI path. That is what makes this bucket cheap and safe: `consider_staple`
+already decides, so the fallback exists from the first record and invariant 9 needs nothing
+built first. Picked on decision-inputs.md's rule, low frequency and high stakes: the gate opens
+rarely, and when it does the choice trades a lasting diplomatic and psych cost for immediate
+order. Behind `na_staple_observe`, default off, and recorded only when the eligibility gate
+opened so a row is always a decision that was genuinely on the table.
+
+`econ.energy_sliders` is another observed-only one (na-yd4): the adapter records what
 `mod_allocate_energy` chose and every split that was legal, and nothing applies a brain's answer
 yet. It is deliberately in `OBSERVED` and not `APPLIED`, because the applied count is what says
 how much of the game the brain drives and moving it for an observation would overstate the one
@@ -128,6 +136,7 @@ not worth changing.
 | `faction.se` | turn | `mod_social_ai` | legal (field, model) pairs with effect deltas | `observe-se <faction_id>` |
 | `base.hurry` | base | `mod_base_hurry` (wrapped) | hurry / don't, with credit cost and turns saved; unaffordable option omitted | `observe-hurry <base_id>` |
 | `base.retool` | base | `select_build` (wrapped) | continue / cross, with both retool categories, banked minerals, the engine's own `penalty_applies`, and its `native_choice` | `observe-retool <base_id> [item]` |
+| `base.staple` | base | `consider_staple` | staple / leave, with drone, talent and specialist counts, prior staple count and riot state | `observe-staple <base_id> [stapled]` |
 | `base.governor_config` | base | `governor_priorities` | n/a — deterministic tier only so far; records the resolved weights and their source | `observe-gov <base_id>` |
 | `base.abandon` | base | `mod_base_production` (size-1 base, pod ready) | keep / spend the base, with the growth numbers the answer turns on | `observe-abandon <base_id>` |
 | `base.hq_escape` | base | `mod_capture_base` | relocate / don't, with the 1000-credit cost, the reserve, and the engine's chosen destination | `observe-hq-escape <base_id>` |

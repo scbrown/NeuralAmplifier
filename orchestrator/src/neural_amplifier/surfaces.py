@@ -173,6 +173,15 @@ OBSERVED: Final[frozenset[str]] = frozenset(
         # `observe-retool` probe, because a retool decision fires only when a base is mid-build
         # and the chooser wants a different category, which is far too rare to catch by playing.
         "base.retool",
+        # The first of na-yd4's 27 — the bucket that already HAS a native AI path, so invariant
+        # 9 holds from the first record and nothing needs building before one is safe. Picked on
+        # decision-inputs.md's rule (low frequency, high stakes): `consider_staple`'s gate opens
+        # rarely, and when it does the choice trades a lasting diplomatic and psych cost for
+        # immediate order.
+        #
+        # Observed, NOT applied, like every other entry that arrives here: `na_staple_observe`
+        # records what consider_staple chose and nothing applies a brain's answer.
+        "base.staple",
     }
 )
 

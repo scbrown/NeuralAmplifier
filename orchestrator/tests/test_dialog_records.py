@@ -155,16 +155,47 @@ def test_an_unmapped_dialog_says_so_rather_than_guessing() -> None:
     assert MAPPED["mapped"] is True
 
 
-def test_observing_a_dialog_does_not_move_coverage() -> None:
-    """Nothing here has been seen against a running game, so nothing here is covered.
+#: Dialog-mapped surfaces that ALSO have an adapter hook of their own, with the hook that earns
+#: it. Their place in OBSERVED comes from that hook, never from the dialog plane.
+#:
+#: `base.staple` is the case that created this list. The dialog table maps NERVESTAPLE2 — the
+#: path a HUMAN takes to staple — while `na_staple_observe` instruments `consider_staple`, the
+#: path the AI takes. Two routes to one surface, and only the second one is coverage.
+INDEPENDENTLY_INSTRUMENTED = {
+    "base.staple": "na_staple_observe, consider_staple (na-yd4)",
+}
 
-    The hook is built and unverified: no engine has raised a dialog through it. `surfaces.py`
-    exists to stop exactly this kind of work from moving the number, and a dialog surface would
-    have to be observed for real — and then applied — before it belonged in either set.
+
+def test_observing_a_dialog_does_not_move_coverage() -> None:
+    """A dialog record is not coverage, and no dialog surface may reach OBSERVED on its own.
+
+    The hook has never been seen firing against a real game. `surfaces.py` exists to stop
+    exactly this kind of work from moving the number.
+
+    Stated as a bounded exception rather than a blanket ban, because a blanket ban became FALSE
+    the moment `base.staple` was instrumented through `consider_staple` — a different, real
+    hook that earns its place. The looser assertion would have been to delete this test; the
+    honest one names which surfaces are allowed through and why, so a NEW dialog surface
+    appearing in OBSERVED still fails here.
     """
     mapped = {s for _f, _label, s in DIALOG_TABLE if s}
-    assert not (mapped & OBSERVED), "a dialog surface reached OBSERVED without a live capture"
+    unearned = (mapped & OBSERVED) - set(INDEPENDENTLY_INSTRUMENTED)
+    assert not unearned, f"reached OBSERVED with only a dialog hook: {sorted(unearned)}"
     assert not (mapped & APPLIED)
+
+
+def test_the_exception_list_does_not_outlive_its_reason() -> None:
+    """An allowlist nobody prunes becomes a permanent hole.
+
+    Every entry must still be both dialog-mapped and in OBSERVED. A surface that left OBSERVED,
+    or that is no longer in the dialog table, has no business granting an exception to a rule it
+    is not subject to.
+    """
+    mapped = {s for _f, _label, s in DIALOG_TABLE if s}
+    for surface, why in INDEPENDENTLY_INSTRUMENTED.items():
+        assert surface in mapped, f"{surface} is not dialog-mapped; drop the exception"
+        assert surface in OBSERVED, f"{surface} left OBSERVED; drop the exception"
+        assert why.strip(), surface
 
 
 def test_the_engines_answer_is_recorded() -> None:
