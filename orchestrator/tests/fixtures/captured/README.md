@@ -62,6 +62,12 @@ And it was not lost. It was in the play directory's `na-observations.jsonl` the 
 sweeps concluded "no base.hurry capture survives anywhere on disk" after searching the repo
 and `/tmp`, which is where a world-view STORE lives; the adapter log is a different sink in
 a different tree. **When harvesting, check both: the `NA_WORLD_VIEW_STORE` directory AND
-`$PLAY_DIR/na-observations.jsonl`.** `harvest-world-views.py` reads only the former, so a
-surface that reached the log and not the store is invisible to it (na-ibh's script cannot
-see this file — see na-qu8).
+`$PLAY_DIR/na-observations.jsonl`.**
+
+`harvest-world-views.py` now does, so this is no longer a thing to remember (na-0oa). It takes
+`--log <file-or-play-directory>`, repeatably, and reads `SMAC_PLAY_DIR` automatically; the store
+argument is optional, because a session that only has the adapter log is exactly the case it was
+blind to. Each row of the report names the sink its capture came from, so "the store had it" and
+"only the log had it" stay distinguishable. Log lines that are not world views — the compact
+divergence records `na_verify_*` emits carry a `surface_id` and nothing else the contract
+requires — are skipped rather than harvested as fixtures.
