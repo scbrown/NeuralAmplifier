@@ -213,6 +213,10 @@ class Orchestrator:
         # Same accumulate-don't-overwrite reasoning, for the same reason: a repair attempt that
         # stopped looping should not erase the evidence that the first attempt did.
         repeats = 0
+        #: One hash per re-ask, in order. Empty when nothing was repaired, and also when no
+        #: store is configured — which is why `repairs` is recorded separately: the count is
+        #: what says a repair happened at all, the hashes are what make it reconstructible.
+        repair_inputs: list[str] = []
         while True:
             try:
                 orders = self.brain.decide(asked)
@@ -248,6 +252,21 @@ class Orchestrator:
             )
             repairs += 1
 
+            # Store the augmented view too, and record its hash. The store write above happens
+            # once, before this loop, so until now the only input kept was the one the *first*
+            # attempt saw: the view the brain actually answered from on attempt two existed for
+            # the length of one call and was then unreconstructible — `world_view_hash` does not
+            # address it and nothing else held the bytes.
+            #
+            # Not by widening `world_view_hash`, which stays the decision's input: a replay
+            # starts from the original and regenerates its own advisories, and that is the
+            # point — a changed guard producing a different second prompt is a divergence worth
+            # seeing, not one to paper over by replaying the recorded prompt back. These hashes
+            # answer the other question, the forensic one: what did the brain read when it
+            # answered this way. Content-addressed, so an unchanged advisory list costs nothing.
+            if self.store is not None:
+                repair_inputs.append(self.store.put(asked))
+
         if degrade_reason is None and not allowed.choices:
             # Nothing survived — an empty turn is indistinguishable from a
             # stall, so treat it as degradation whichever gate emptied it.
@@ -269,6 +288,8 @@ class Orchestrator:
             latency_ms=int((time.monotonic() - started) * 1000),
             unknown=violations,
             repeated=repeats,
+            repairs=repairs,
+            repair_inputs=repair_inputs,
             fog=fog,
             knowledge=summarise(
                 grounding,
@@ -452,6 +473,8 @@ class Orchestrator:
         #: Defaults to zero for the deterministic path, where it is not an omission: the brain
         #: was never asked, so there is no answer that could have repeated itself.
         repeated: int = 0,
+        repairs: int = 0,
+        repair_inputs: Sequence[str] = (),
     ) -> DecisionRecord:
         # Derive the ledger when the adapter stamped the *inputs* but not the entries.
         #
@@ -495,6 +518,8 @@ class Orchestrator:
             latency_ms=latency_ms,
             adherence_violations=unknown,
             repeated_actions=repeated,
+            repairs=repairs,
+            repair_inputs=list(repair_inputs),
             knowledge=KnowledgeBlock(**asdict(knowledge)),
             plan=plan,
             redacted_deltas=fog.removed,

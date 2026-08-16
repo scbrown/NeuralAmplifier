@@ -203,6 +203,23 @@ not.
 The store doubles as **fixture harvesting** (§5 of [headless-harness.md](headless-harness.md)):
 one recorded game yields orchestrator fixtures no hand-written world view would.
 
+**A repaired decision has two inputs, and the second one used to be lost.** When every choice is
+thrown out, the brain is re-asked from the original world view with the reason appended as
+advisories. The store write happens once, before that loop, so `world_view_hash` addresses the
+first prompt and cannot address the second — the view the brain actually answered from existed
+for the length of one call and nothing held the bytes. Each re-asked view is now stored too and
+its hash recorded in `repair_inputs`, alongside a `repairs` count that is the field to read when
+no store is configured. A successful repair was otherwise invisible on the record: the degrade
+reason names repair attempts only when they *failed*, so a decision that took two round trips
+read exactly like one that landed first time, and that difference is a turn the game spent
+waiting.
+
+`world_view_hash` deliberately does **not** widen to the last prompt. A replay starts from the
+original and regenerates its own advisories, so a changed guard producing a different second
+prompt surfaces as a divergence — which is the entire job — rather than being hidden by replaying
+the recorded prompt back at the brain. `repair_inputs` answers the other question, the forensic
+one: what did the brain read when it answered this way.
+
 ### 5.4 Silent degradation — the failure tests miss
 
 A run where the orchestrator timed out every single turn, fell back to `end_turn`, and finished

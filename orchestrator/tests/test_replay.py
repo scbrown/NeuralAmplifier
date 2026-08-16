@@ -154,3 +154,100 @@ def test_stored_views_are_harvestable_as_fixtures(
 
     assert len(harvested) == 2
     assert {v.engine for v in harvested} == {"thinker", "glsmac"}
+
+
+# --- repairs -----------------------------------------------------------------
+
+
+def _repairable() -> tuple[WorldView, ScriptedBrain]:
+    """A decision the guard denies once, then accepts — the shape a repair needs.
+
+    `hurry:now` is legal by the engine's list and unaffordable at 40 reserves, so the first
+    answer is stripped to nothing and the brain is re-asked with the reason attached.
+    """
+    from neural_amplifier.contract import Action
+
+    world_view = WorldView(
+        engine="thinker",
+        scope="base",
+        turn=42,
+        faction="Gaians",
+        surface_id="base.hurry",
+        action_space=[
+            Action(id="hurry:now", action="Hurry production", effects={"energy_reserves": -81.0}),
+            Action(id="hurry:none", action="Do not hurry"),
+        ],
+        metrics={"energy_reserves": 40},
+    )
+    brain = ScriptedBrain(
+        responses=[
+            Orders(choices=[Choice(action_id="hurry:now")]),
+            Orders(choices=[Choice(action_id="hurry:none")]),
+        ]
+    )
+    return world_view, brain
+
+
+def test_the_view_a_repair_was_asked_from_is_stored(tmp_path: Path) -> None:
+    """The gap: the store is written once, before the repair loop, so the augmented view the
+    brain actually answered from existed for the length of one call and then nothing held the
+    bytes. `world_view_hash` addresses the first prompt and cannot address the second.
+    """
+    from neural_amplifier.hank import StateGuard
+
+    world_view, brain = _repairable()
+    store = WorldViewStore(tmp_path / "views")
+    record = Orchestrator(brain, store=store, guard=StateGuard()).decide(world_view).record
+
+    assert record.repairs == 1
+    assert len(record.repair_inputs) == 1
+
+    reasked = store.get(record.repair_inputs[0])
+    assert reasked is not None
+    assert reasked.advisories  # the reason the brain was given, recoverable after the fact
+    assert record.repair_inputs[0] != record.world_view_hash
+
+
+def test_a_decision_that_needed_no_repair_records_none(
+    thinker_base: WorldView, tmp_path: Path
+) -> None:
+    """The baseline the count is read against — and a check that a clean decision does not pay
+    for this in store writes."""
+    _, store = record_a_run(tmp_path, [thinker_base])
+    record = next(iter(DecisionLog(tmp_path / "d.jsonl").read()))
+
+    assert record.repairs == 0
+    assert record.repair_inputs == []
+    assert len(list(stored(store))) == 1
+
+
+def test_the_repair_count_survives_without_a_store(tmp_path: Path) -> None:
+    """Hashes need somewhere to point; the count does not. A run with no store configured must
+    still be able to say that a decision took two round trips, because that is a turn the game
+    spent waiting."""
+    from neural_amplifier.hank import StateGuard
+
+    world_view, brain = _repairable()
+    record = Orchestrator(brain, guard=StateGuard()).decide(world_view).record
+
+    assert record.repairs == 1
+    assert record.repair_inputs == []
+
+
+def test_replay_still_starts_from_the_original_input(tmp_path: Path) -> None:
+    """`world_view_hash` stays the decision's input rather than widening to the last prompt.
+
+    A replay regenerates its own advisories, so a changed guard producing a different second
+    prompt shows up as a divergence — which is the entire job — instead of being hidden by
+    replaying the recorded prompt back at the brain.
+    """
+    from neural_amplifier.hank import StateGuard
+
+    world_view, brain = _repairable()
+    log = DecisionLog(tmp_path / "d.jsonl")
+    store = WorldViewStore(tmp_path / "views")
+    Orchestrator(brain, log=log, store=store, guard=StateGuard()).decide(world_view)
+
+    (before,) = list(log.read())
+    assert store.get(before.world_view_hash) is not None
+    assert store.get(before.world_view_hash).advisories is None

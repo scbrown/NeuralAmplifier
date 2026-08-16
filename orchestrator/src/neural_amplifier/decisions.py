@@ -194,6 +194,26 @@ class DecisionRecord(BaseModel):
     #: to the record of a clean one-choice turn.
     repeated_actions: int = 0
 
+    #: Times this decision was re-asked with the reason attached after every
+    #: choice was thrown out. A successful repair was otherwise invisible: the
+    #: degrade reason names repair attempts only when they *failed*, so a
+    #: decision that took two round trips to land read exactly like one that
+    #: landed first time — and that difference is a turn the game spent waiting.
+    repairs: int = 0
+
+    #: ``world_view_hash`` of each augmented view the brain was re-asked from,
+    #: in order. The store is written once, before the repair loop, so these are
+    #: what make the second prompt reconstructible; without them the view the
+    #: brain actually answered from existed for one call and nothing held the
+    #: bytes. Empty when nothing was repaired, and also when no store is
+    #: configured — which is why ``repairs`` is counted separately.
+    #:
+    #: Deliberately not folded into ``world_view_hash``, which stays this
+    #: decision's *input*. A replay starts from the original and regenerates its
+    #: own advisories: a changed guard producing a different second prompt is a
+    #: divergence worth seeing, not one to hide by replaying the recorded one.
+    repair_inputs: list[str] = Field(default_factory=list)
+
     #: What Quipu and Hank contributed (``docs/observability.md`` §7).
     knowledge: KnowledgeBlock = Field(default_factory=KnowledgeBlock)
 
