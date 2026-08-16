@@ -48,6 +48,53 @@ def test_a_non_boolean_toggle_is_refused(tmp_path: Path) -> None:
         load(write(tmp_path, '[surfaces]\n"base.production" = "yes"\n'))
 
 
+def test_a_surface_with_no_native_ai_path_cannot_be_switched_on(tmp_path: Path) -> None:
+    """Invariant 9 is a precondition, not an aspiration.
+
+    The engine never decides `base.abandon`, so there is no native answer for a slow or broken
+    model to degrade *to* — putting the brain there trades a safe default for a stalled turn.
+    The refusal is at load, where it is one legible error, rather than at decision time in a
+    running game.
+    """
+    with pytest.raises(PolicyError, match="no native AI path"):
+        load(write(tmp_path, '[surfaces]\n"base.abandon" = true\n'))
+
+
+def test_switching_a_fallbackless_surface_off_is_fine(tmp_path: Path) -> None:
+    """Only `true` is refused. Writing the safe value down is how someone documents that they
+    considered the surface, and rejecting it would make the file unable to say so."""
+    policy = load(write(tmp_path, '[surfaces]\n"base.abandon" = false\n'))
+    assert policy.allows("base.abandon") is False
+
+
+def test_a_permissive_default_cannot_reach_a_fallbackless_surface(tmp_path: Path) -> None:
+    """The path load-time refusal alone would miss: `surface_default = true` never mentions
+    `base.abandon`, so there is no toggle to reject, and the brain would acquire the surface
+    because nobody wrote its name down."""
+    policy = load(write(tmp_path, "surface_default = true\n"))
+    assert policy.allows("base.abandon") is False
+    assert policy.allows("base.production") is True
+
+
+def test_no_config_at_all_still_cannot_reach_a_fallbackless_surface(tmp_path: Path) -> None:
+    """ "No opinion means permissive" is a statement about *policy*. Whether the engine has an
+    answer to fall back on is a fact about the engine, and an absent file does not change it."""
+    assert load(tmp_path / "missing.toml").allows("base.abandon") is False
+
+
+def test_every_fallbackless_surface_is_refused(tmp_path: Path) -> None:
+    """The registry drives the gate, so a surface leaving NO_AI_PATH releases it with no change
+    in this module — and one added is covered the day it lands."""
+    from neural_amplifier.surfaces import NO_AI_PATH
+
+    permissive = load(write(tmp_path, "surface_default = true\n"))
+    assert NO_AI_PATH  # a vacuous pass here would be the whole test
+    for surface_id in sorted(NO_AI_PATH):
+        assert permissive.allows(surface_id) is False, surface_id
+        with pytest.raises(PolicyError, match="no native AI path"):
+            load(write(tmp_path, f'[surfaces]\n"{surface_id}" = true\n'))
+
+
 def test_an_explicit_false_survives_a_permissive_default(tmp_path: Path) -> None:
     """The bug this nearly shipped with: storing only the enabled ids meant a `default = true`
     policy silently re-enabled everything anyone had deliberately switched off."""

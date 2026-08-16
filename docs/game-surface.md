@@ -175,6 +175,14 @@ exists to observe, and on these 21 it does not. Each therefore has a `thinker.in
 `na.toml` toggle,
 there being no brain answer yet to switch on.
 
+That last part is **enforced rather than observed**. `policy.py` refuses a `NO_AI_PATH` surface
+set to `true` at load — one legible error before the service starts, not a stalled turn in a
+running game — and `allows()` refuses the surface unconditionally, so neither
+`surface_default = true` nor a missing config file can reach one by never naming it. Whether the
+engine has an answer to fall back on is a fact about the engine, so it is not a thing the config
+file gets a vote on. The gate is driven off the registry: a surface that earns its native answer
+and leaves `NO_AI_PATH` becomes switchable with no change to the orchestrator.
+
 It is also the reason that list is worth working through rather than routing straight to the
 model: it looked like a permissions checkbox and turned out to be the sole input to every build
 decision a player-owned base makes. Had it gone to the brain first there would have been no

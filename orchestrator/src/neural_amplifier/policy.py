@@ -16,6 +16,15 @@ brain was silently absent — the one metric that must not be able to lie in tha
 **An unknown id is refused, not ignored.** A typo'd surface in this file would otherwise be a
 toggle that appears to be set and does nothing, and the failure surfaces only as "why is the
 brain still deciding that".
+
+**A surface with no native AI path cannot be toggled on at all.** ``surfaces.NO_AI_PATH`` is the
+set the engine never decides for itself, so there is nothing to fall back *to* — and invariant 9
+(degrade safely) is a precondition, not an aspiration: a slow or broken model on one of those
+surfaces stalls or corrupts a turn instead of quietly reverting to a competent default. That is
+a fact about the engine rather than an opinion about a run, so it is not something a config file
+gets a vote on. See ``na-2mn``: the deterministic tier is built first, in the fork, and a surface
+leaves ``NO_AI_PATH`` when it has an answer to degrade to — at which point this gate releases
+itself with no change here.
 """
 
 from __future__ import annotations
@@ -23,7 +32,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from .surfaces import ALL
+from .surfaces import ALL, NO_AI_PATH
 
 
 class PolicyError(ValueError):
@@ -54,7 +63,15 @@ class SurfacePolicy:
         A world view with no ``surface_id`` is allowed through. The adapter is supposed to stamp
         one (invariant 5) and a missing one is already counted as a coverage gap; refusing to
         decide it here would turn an instrumentation bug into a silently deterministic game.
+
+        A ``NO_AI_PATH`` surface is refused unconditionally, ahead of every other branch — no
+        file, a permissive ``surface_default``, and an explicit toggle all lose to it. Load-time
+        refusal already catches the explicit ``true``; this catches the two paths that never pass
+        through the table at all, where the brain would acquire a fallback-less surface because
+        nobody wrote its name down.
         """
+        if surface_id is not None and surface_id in NO_AI_PATH:
+            return False
         if self.source is None or surface_id is None:
             return True
         return self.toggles.get(surface_id, self.default)
@@ -80,6 +97,15 @@ def parse_surfaces(
     bad = sorted(k for k, v in table.items() if not isinstance(v, bool))
     if bad:
         raise PolicyError(f"[surfaces]: these must be true or false: {', '.join(bad)}")
+
+    fallbackless = sorted(k for k, v in table.items() if v is True and k in NO_AI_PATH)
+    if fallbackless:
+        raise PolicyError(
+            f"[surfaces]: no native AI path, so the LLM tier cannot own these yet: "
+            f"{', '.join(fallbackless)}. The engine never decides them, so there is no safe "
+            "fallback for a slow or broken model to degrade to (invariant 9). Build the "
+            "deterministic tier first — na-2mn."
+        )
 
     return SurfacePolicy(
         toggles={k: bool(v) for k, v in table.items()},
