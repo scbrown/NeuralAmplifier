@@ -11,7 +11,7 @@
 <p align="center">
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue.svg" alt="License: MIT"/></a>
   <a href="VISION.md#3-two-engines-one-brain"><img src="https://img.shields.io/badge/engines-Thinker%20%C2%B7%20GLSMAC-orange.svg" alt="Engines: Thinker and GLSMAC"/></a>
-  <a href="docs/knowledge-architecture.md"><img src="https://img.shields.io/badge/knowledge-Quipu%20%C2%B7%20Hank-blueviolet.svg" alt="Knowledge: Quipu and Hank"/></a>
+  <a href="docs/knowledge-architecture.md"><img src="https://img.shields.io/badge/knowledge-Quipu%20%C2%B7%20Yupana-blueviolet.svg" alt="Knowledge: Quipu and Yupana"/></a>
   <a href="https://github.com/casey/just"><img src="https://img.shields.io/badge/tasks-just-brightgreen.svg" alt="Task runner: just"/></a>
   <a href="VISION.md"><img src="https://img.shields.io/badge/status-pre--alpha-lightgrey.svg" alt="Status: pre-alpha"/></a>
 </p>
@@ -29,24 +29,47 @@ or advising a human at the wheel. One brain, either engine, behind a single
 
 ## 🎬 See It In Action
 
+The engine raises a **decision surface**, the orchestrator hands Claude a fog-limited world view
+and the *legal* options, and the answer is validated against the engine's own tests before it
+runs:
+
 ```text
-turn 42 · 2142 AD · faction GAIANS  ────────────────────────────────
+turn 42 · 2142 AD · GAIANS  ─────────────────────────────────────────
 
-  world view  → 128 visible tiles, 6 units, 2 bases, research 60%
-  claude      → "Ridge to the NE has +2 minerals and a defensible
-                 chokepoint. Send the former to terraform, escort with
-                 the scout. Hold expansion — the Hive is massing east."
+  surface     base.production        scope base   Gaia's Landing
+  metrics     minerals +2 · reserves 82 · drones 1 · bases 2
+  history     t40 facility:4 (llm) · t41 facility:4 (llm)
 
-  orders      ✓ move_unit former → (13,8)   [accepted]
-              ✓ move_unit scout  → (14,8)   [accepted]
-              ✓ set_production Gaia's Landing → Recycling Tanks
-              ✓ end_turn
+  action_space
+    unit:0        Colony Pod        cost 30   FOUNDS A NEW BASE elsewhere
+    facility:4    Recycling Tanks   cost 40   +minerals +nutrients
+
+  claude      → facility:4
+                "Two bases at turn 42 is behind, but this base makes
+                 2 minerals a turn — a pod costs 15 turns of that.
+                 Tanks first, then expand from a base that can pay."
+
+  guards      StateGuard    ok      affordable
+              CitationGuard ok      2 cited facts resolve
+              YupanaGuard   ok      board clean
+  applied     facility:4  ← engine kept it (na_verify_base_production)
 ```
 
-Every turn, Neural Amplifier hands Claude a compact, fog-of-war-limited picture of the game
-and a menu of *legal* moves; Claude reasons about it in the open and returns orders; the game
-validates and executes them. Same loop, two modes: **autonomous opponent** or **human
-copilot**.
+The brain never learns which engine it is driving — Thinker and GLSMAC meet it behind one
+[contract](docs/contract.md). And it can also act *outside* the ask-and-answer cycle: `move`,
+`skip` and `build` on the command channel drive any unit or base directly.
+
+```text
+  > build 0 -4        # Gaia's Landing → Recycling Tanks
+  > move 7 13 8       # former → ridge
+  > skip 9            # scout holds
+```
+
+Same loop, two modes: **autonomous opponent** or **human copilot**.
+
+> The transcript above is the real record shape — surfaces, metrics, history, action space,
+> guard chain and the post-apply check are all wired and tested. What has *not* happened yet is
+> a decision executing inside a running game; see **Coverage & Plan**.
 
 ## 🤔 Why Neural Amplifier?
 
@@ -137,23 +160,42 @@ Full design — the contract Claude speaks, the two-engine strategy, and the roa
 
 ## 📊 Coverage & Plan
 
-**4 of 77 decision surfaces the brain can actually decide.** All four apply: the choice
-executes, validated against the engine's own availability tests first. A surface is not covered
-until its decision can be *applied* — observing changes what is recorded, not what the game
-does.
-`just surfaces` prints it. The registry is frozen at 77
-(`orchestrator/surfaces.py`) and partitioned by contract scope: `base` 25, `unit` 32, `turn` 20.
+**4 of 77 decision surfaces the brain can actually decide**, plus **6 it can watch**. Those are
+two different numbers and conflating them overstates coverage by half. A surface is not covered
+until its decision can be *applied*; observing changes what is recorded, not what the game does.
+`just surfaces` prints both from the frozen registry rather than from this table. The registry
+is frozen at 77 (`orchestrator/surfaces.py`), partitioned by contract scope: `base` 25,
+`unit` 32, `turn` 20.
 
 | Surface | Scope | Status |
 | --- | --- | --- |
-| `base.production` | base | **Wired** · posts the world view and applies the returned build, falling back to the engine's own answer |
-| `faction.tech` | turn | **Wired** · posts the world view and applies the returned tech, falling back to the engine's own answer |
-| `faction.se` | turn | **Wired** · applies the returned social model, refusing one the faction cannot afford |
-| `base.hurry` | base | **Wired** · spends or holds, through the engine's own `hurry_item` |
+| `base.production` | base | **Applied** · posts the world view and applies the returned build, falling back to the engine's own answer |
+| `faction.tech` | turn | **Applied** · posts the world view and applies the returned tech, falling back to the engine's own answer |
+| `faction.se` | turn | **Applied** · applies the returned social model, refusing one the faction cannot afford |
+| `base.hurry` | base | **Applied** · spends or holds, through the engine's own `hurry_item` |
+| `econ.energy_sliders` | turn | Observed · records what `mod_allocate_energy` chose and every split that was legal |
+| `base.retool` | base | Observed · the odd one — its deterministic tier already existed inside `select_build`, so what was missing was the *record*, not an answer |
+| `base.staple` | base | Observed · nerve stapling, recorded only when the engine's eligibility gate opened |
+| `econ.corner_market` | turn | Observed · cornering the energy market — a move toward economic victory |
+| `council.call` | turn | Observed · convening the Planetary Council, read as a state transition because `call_council` returns nothing |
+| `base.satellite` | base | Observed · all four orbitals with per-option availability, built count and faction goal |
 
 Every surface ships a **side-effect-free probe** (`observe`, `observe-tech`, `observe-se`,
-`observe-hurry`) because in-game input cannot be driven at all, so a decision that fires every five
-to ten turns is otherwise unverifiable without playing until it happens.
+`observe-hurry`, `observe-retool`, `observe-staple`, `observe-corner`, `observe-council`,
+`observe-satellite`) because in-game input cannot be driven at all, so a decision that fires
+every five to ten turns is otherwise unverifiable without playing until it happens.
+
+**The observed six are not a waiting room.** Each has a working native answer, which is what
+makes recording one safe from the first row — invariant 9 needs nothing built first. Their value
+is the `native_choice`: a baseline nobody wrote down cannot be A/B'd against a brain later. Every
+adapter record is transcribed into `test_adapter_contract.py` and diffed *mechanically* against
+its C++ emitter, because the adapter writes the contract by hand with `snprintf` and an
+`extra="allow"` model swallows a misnamed field in silence.
+
+In-game **dialogs** are intercepted too (invariant 7) — one hook on the engine's `popp` function
+pointer, so every dialog Thinker raises is seen without patching a single call site. Nothing is
+suppressed; a dialog the table does not recognise is recorded and flagged so the inventory can be
+built from a real game rather than guessed.
 
 All four **emit the contract directly** — no translation layer between the adapter and the brain.
 
@@ -200,7 +242,7 @@ flowchart LR
 
 **Step 0 is the one that is easy to skip and expensive to skip.** 21 of the 77 surfaces
 (`surfaces.NO_AI_PATH`) are decisions the native AI *never makes* — `base.abandon`,
-`council.vote`, `base.retool`, `diplo.base_swap`. Putting an LLM straight onto those breaks
+`council.vote`, `diplo.base_swap`. Putting an LLM straight onto those breaks
 [invariant 9](AGENTS.md): *degrade safely.* There is no native choice to fall back to when the
 model is slow, over budget, or wrong, so a failure there stalls or corrupts a turn rather than
 quietly reverting to a competent default.
@@ -211,11 +253,19 @@ tier on top of it. That also means the work is independently useful: a better de
 improves the game whether or not a brain is attached, and it gives the LLM something to be measured
 *against* rather than merely compared to.
 
-Of the remaining 52, **25 are `unit`-scope** and mostly stay deterministic on volume grounds —
-see [docs/decision-inputs.md](docs/decision-inputs.md) §5 for why, and why revisiting them should
-mean deciding *operations* rather than tile moves. That leaves **27 base and faction surfaces
-that already have a native path and so already have a safe fallback**: the bucket to work
-through. `just surfaces` prints the split from the registry.
+One of the 21 turned out **not** to need step 0 at all. `base.retool` already had a working
+deterministic tier folded into `select_build` — a category-crossing penalty of 400, or 800 with a
+secret project at risk. What was missing was never an answer; it was the *record*. Worth stating
+because it is the cheerful failure mode of a list like this: a surface can sit in the
+build-it-first pile for months because nobody read the function that already does the work. The
+other 13 uninstrumented ones were audited in the same pass; `base.retool` was the outlier.
+
+Of the 67 not yet instrumented, **25 are `unit`-scope** and mostly stay deterministic on volume
+grounds — see [docs/decision-inputs.md](docs/decision-inputs.md) §5 for why, and why revisiting
+them should mean deciding *operations* rather than tile moves. **20 still need their tier built.**
+That leaves **22 base and faction surfaces that already have a native path and so already have a
+safe fallback** — the bucket being worked through now, five of them done. `just surfaces` prints
+the split from the registry rather than from this paragraph.
 
 Detail, including the seam and action-space quality per surface:
 **[docs/game-surface.md](docs/game-surface.md) §2.5**. What each surface needs in its world view:
@@ -234,9 +284,16 @@ So the brain is backed by two sibling services (design:
   masquerade as canonical); curated **strategy/doctrine** (real SMAC unit designs and base build
   orders — see [docs/strategy-knowledge.md](docs/strategy-knowledge.md)); and **learned memory**
   (tactics and opponent patterns the brain accumulates across games).
-- **[Hank](https://github.com/scbrown/hank) — hot in-memory board + guardrail harness.** Holds
-  the per-faction, fog-limited board graph in memory and runs a strategic **policy guard** and
-  **what-if** analysis on proposed orders before they apply.
+- **[Yupana](https://github.com/scbrown/yupana) — hot in-memory board + guardrail harness.**
+  Holds the per-faction, fog-limited board graph in memory (multi-tenant, copy-on-write) and runs
+  a strategic **policy guard** and **what-if** analysis on proposed orders before they apply,
+  over MCP. *This role was designed as a service called Hank;* it is implemented against Yupana,
+  which already had the hot graph and the order-boundary evaluation the guard needed. The docs
+  still say "Hank role (c)/(d)/(e)" for the design, and Yupana is what runs.
+
+  Policies are **governance, not config**: they live in Quipu as `aegis:Policy` rows
+  (`policies/`) and are projected out, so a rule that can block an order has provenance and an
+  owner. The same machinery guards *this repository's own* code at edit time.
 
 A third layer is the game's **own** standing intent, rather than knowledge about the game:
 
@@ -271,14 +328,19 @@ and the rollout are in the [design doc](docs/knowledge-architecture.md).
 > **Status: pre-alpha, but the brain runs.** The orchestrator is real and tested — the
 > contract types, `POST /decide`, action-space validation, safe degradation, the decision
 > record and JSONL log, the OTel exporter, replay, the derived fairness ledger, the
-> Quipu/Hank seam, and the SMAC datalinks ingester. All of it runs with **no game present**.
+> Quipu/Yupana seam, and the SMAC datalinks ingester. All of it runs with **no game present**.
 >
 > What is *not* proven: nothing has played a turn of Alpha Centauri yet.
 > **Track A (Thinker) is the current focus** — the complete, balanced game, controllable
-> today. The fork observes four decision surfaces and now *decides* one of them: `base.production`
-> posts the world view and applies what comes back. The wire is tested against a real
-> orchestrator with no game present; running it on a real board needs the game fixture and the
-> unattended harness, which is the next step.
+> today. The fork now instruments ten decision surfaces and *applies* four of them, intercepts
+> in-game dialogs, and ships a side-effect-free probe for every surface. The wire is tested
+> against a real orchestrator under Wine with no game present.
+>
+> **The honest gap is the same one it has always been: no hook has fired inside a running
+> game.** Every surface here is built and unverified against a board, which is exactly why each
+> ships a probe — so whoever has a game can check any of them in one command rather than playing
+> until a rare decision happens. Closing that gap needs the game fixture (the assets are
+> copyrighted and this repo carries only a checksum manifest) and the unattended harness.
 
 ```bash
 git clone https://github.com/scbrown/NeuralAmplifier && cd NeuralAmplifier
@@ -299,7 +361,7 @@ docs/               contract.md         the world-view / action-space interface
                     headless-harness.md game fixture + running unattended
                     observability.md    decision records, tracing, coverage
                     building-and-testing.md, adapter notes, knowledge-architecture.md,
-                    strategy-knowledge.md, ontology/, Quipu/Hank integration docs
+                    strategy-knowledge.md, ontology/, Quipu/Yupana integration docs
 ```
 
 **Want to run a real game?** You bring your own copy of *Alpha Centauri* — see
