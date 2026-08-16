@@ -192,6 +192,62 @@ def test_the_doorbell_names_the_surface_but_carries_no_game_data() -> None:
     assert decision_id.startswith("base.hurry-")
 
 
+def test_an_unregistered_surface_id_never_reaches_the_pane() -> None:
+    """A surface id is adapter-supplied text, on the same footing as a base name — it merely
+    happens to look tame. It was character-whitelisted and never checked against the frozen
+    registry, so an adapter could put an arbitrary string of its choosing into both the nudge
+    and the decision id, in a module whose stated contract is that nothing from the game is
+    interpolated at all.
+
+    Dropped rather than refused: an unregistered surface is an instrumentation bug, already
+    counted as one on the decision record, and losing four words of context in a convenience
+    nudge is not a reason to withhold the nudge.
+
+    This is the decision-id half — `pending.py` used the adapter string as the id prefix, and
+    that id is interpolated into the nudge too. The message half is enforced at the doorbell's
+    own boundary and tested below.
+    """
+    doorbell = SilentDoorbell()
+    brain = AgentBrain(doorbell=doorbell, timeout=0.05)
+    with pytest.raises(BrainError):
+        brain.decide(world_view(surface="base.pruduction"))
+
+    (decision_id, _) = doorbell.rings[0]
+    assert "pruduction" not in decision_id
+    assert decision_id.startswith("decision-")
+
+
+def test_only_a_registered_surface_is_typed_into_the_pane(monkeypatch: pytest.MonkeyPatch) -> None:
+    """What actually reaches tmux. The distinction the fix turns on is that `not.a.surface` is
+    shell-safe by every character rule and still is not one of the 77 strings this repository
+    wrote down, so a whitelist passes it and the registry does not."""
+    import neural_amplifier.doorbell as doorbell_mod
+    from neural_amplifier.doorbell import Doorbell
+
+    typed: list[str] = []
+
+    def fake_run(argv, **kwargs):  # type: ignore[no-untyped-def]
+        typed.append(argv[-1])
+
+        class Done:
+            returncode = 0
+
+        return Done()
+
+    monkeypatch.setattr(doorbell_mod.shutil, "which", lambda _: "/usr/bin/tmux")
+    monkeypatch.setattr(doorbell_mod.subprocess, "run", fake_run)
+
+    bell = Doorbell(target="pane", enabled=True)
+
+    assert bell.ring("base.hurry-1", "base.hurry") is True
+    assert "(base.hurry)" in typed[0]
+
+    typed.clear()
+    assert bell.ring("decision-2", "not.a.surface") is True
+    assert "not.a.surface" not in typed[0]
+    assert "decision-2" in typed[0]
+
+
 def test_a_silent_agent_degrades_instead_of_hanging() -> None:
     """`NA_AGENT_TIMEOUT` is the unattended-run escape from the blocking default."""
     brain = AgentBrain(doorbell=SilentDoorbell(), timeout=0.05)

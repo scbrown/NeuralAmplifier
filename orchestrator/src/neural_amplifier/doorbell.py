@@ -25,8 +25,19 @@ That split is also what keeps the terminal out of the trust boundary. Base names
 in-game and faction nouns come from a text file, so every name in a world view is player-supplied.
 A base called ``"; rm -rf ~`` is a legal SMAC base name, and putting one on a command line that
 something types into a shell-adjacent pane is a vulnerability rather than a formatting problem.
-Nothing from the game is ever interpolated into a nudge — the payload is a fixed sentence plus a
-decision id this module generated.
+Nothing from the game is ever interpolated into a nudge — the payload is a fixed sentence, a
+decision id generated on this side, and a surface id that had to be in the frozen registry to
+appear at all.
+
+**That registry check is the whole of it, and a character whitelist is not a substitute.** A
+surface id arrives on the world view, stamped by the adapter, so it is adapter-supplied text on
+the same footing as a base name — it merely happens to look tame. Matching it against a pattern
+asks whether it could hurt, which is a judgement about shell metacharacters that has to be right
+forever; matching it against ``surfaces.ALL`` asks whether it is one of 77 strings this
+repository wrote down, which is a fact. An id that is not in the registry is dropped from the
+message rather than refused: an unregistered surface is an instrumentation bug, it is already
+counted as one on the decision record (``coverage.unknown_surface_ids``), and losing four words
+of context in a convenience nudge is not a reason to withhold the nudge.
 
 Why tmux rather than a socket: every harness worth attaching already runs in a terminal, so a
 pane is the one interface Claude Code, a REPL, another agent framework and a human all present.
@@ -40,6 +51,8 @@ import os
 import re
 import shutil
 import subprocess
+
+from .surfaces import ALL
 
 log = logging.getLogger(__name__)
 
@@ -83,7 +96,10 @@ class Doorbell:
         if not _SAFE_ID.match(decision_id):
             log.warning("refusing to ring for unsafe decision id %r", decision_id)
             return False
-        if surface_id is not None and not _SAFE_ID.match(surface_id):
+        # Registry membership, not a character class. The id is adapter-supplied; being one of
+        # the 77 strings this repository froze is what makes it ours to interpolate.
+        if surface_id is not None and surface_id not in ALL:
+            log.debug("dropping unregistered surface id %r from the nudge", surface_id)
             surface_id = None
         if shutil.which("tmux") is None:
             if not self._warned:

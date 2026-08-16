@@ -33,6 +33,7 @@ from dataclasses import dataclass, field
 from typing import Literal
 
 from .contract import Directive, Orders, WorldView
+from .surfaces import ALL
 
 #: A pending decision's lifecycle. ``claimed`` exists so two attached agents cannot both answer
 #: the same decision — the second one is told it was taken rather than silently losing the race.
@@ -163,7 +164,13 @@ class DecisionQueue:
                 live = [i for i in self._order if self._by_id[i].status in ("pending", "claimed")]
                 if len(live) >= self._max_depth:
                     raise QueueFull(f"{len(live)} decisions already waiting")
-                surface = world_view.surface_id or "decision"
+                # The prefix is a readability affordance, and it is also the string the
+                # doorbell types into a shell-adjacent pane. So it comes from the frozen
+                # registry or not at all: an adapter-stamped id that nothing here wrote down
+                # is not something to interpolate, and an unregistered surface is already
+                # counted as an instrumentation bug on the decision record. The counter alone
+                # still makes the id unique.
+                surface = world_view.surface_id if world_view.surface_id in ALL else "decision"
                 pending = Pending(
                     id=f"{surface}-{next(self._ids)}",
                     world_view=world_view,
