@@ -302,6 +302,22 @@ signing-identity key=".quipu/yupana-signing.pk8":
     echo "Read it first. Registering a key is declaring what you trust, and nothing"
     echo "downstream can tell a key you vouched for from one that vouched for itself."
 
+# Compare two runs' trajectories — the A/B half of na-6db that needs no game.
+#
+# Producing the two logs needs a running game; reading them does not, which is why this exists
+# now. Run the same save forward twice — llm_factions=0, then the brain — and point this at both
+# observation logs.
+#
+# It REFUSES a comparison whose arms do not share a fairness profile, rather than reporting one
+# with a caveat. An AI slot inherits handicaps a human slot does not (invariant 6), so comparing
+# across that gap measures the handicap and not the brain — and yields a clean number with a
+# confident sign, which is the dangerous kind of wrong. It also refuses a baseline containing
+# llm decisions, a brain arm containing none, and a run shorter than 30 turns.
+#
+# It reports no verdict. One save's trajectory is evidence, not a result.
+ab-outcomes baseline brain:
+    @scripts/ab_outcomes.py "{{baseline}}" "{{brain}}"
+
 # === Quipu (knowledge graph) ===
 
 # Needs `quipu` built with --features shacl,onnx (scripts/setup-environment.sh).
