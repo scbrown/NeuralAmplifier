@@ -180,6 +180,43 @@ yet. It is deliberately in `OBSERVED` and not `APPLIED`, because the applied cou
 how much of the game the brain drives and moving it for an observation would overstate the one
 number kept honest.
 
+### The instrumentable bucket is empty, and mostly not by instrumenting it
+
+`just surfaces` now reports **0** surfaces with a native path and a safe fallback still waiting.
+Ten were instrumented. The other nineteen were an **overcount**, and it is worth saying how,
+because the same mistake is easy to repeat: the bucket came from the registry partition — has a
+native path, is not unit-scope — which describes decisions *Alpha Centauri has*, not decision
+points *the Thinker adapter can hook*.
+
+Reading the fork for each, they fall into three groups, now `surfaces.SUBSUMED`:
+
+- **Already answered under another id.** `select_build` has one chooser returning one item, so
+  `base.facility`, `base.queue` and `base.hq_relocate` are all part of `base.production` — which
+  is applied. (`valid_relocate_base` is a legality predicate inside `can_build`, not a chooser.)
+  A second record for one decision inflates coverage and disagrees with itself when the two
+  disagree.
+- **Computed rather than chosen.** `mod_base_psych` is a survey — 72 scoring calls, then one that
+  applies pending SE. `mod_base_growth` and the support arithmetic compute values; the drone-riot
+  flag is state the engine sets and clears; `econ.commerce` computes income; `victory_done()` is
+  a predicate. Nothing weighs alternatives, so there is no native answer to record and nothing
+  for a brain to be measured against.
+- **Engine-internal, or an event.** `enemy_diplomacy` is a raw address with no override.
+  `act_of_aggression` *is* Thinker's, but it executes an aggression decided upstream — no
+  alternatives, no answer.
+
+Every id stays in the frozen registry; renaming or removing one invalidates every previously
+recorded run. `SUBSUMED` changes what is *counted as work*, nothing else. And it is evidence
+rather than a verdict: `base.retool` sat in the build-the-tier-first pile until someone read
+`select_build` and found the tier already there, which is this same mistake in the other
+direction.
+
+Three surfaces sit in `SUBSUMED` for a different reason worth not blurring — `base.workers`,
+`base.specialists` and `base.name` **are** instrumented, and the adapter records them. They are
+not in `OBSERVED` because their records carry no `action_space`: the contract's is pick-one, and
+neither an allocation over 21 tiles nor a name drawn from a data file is that shape. With nothing
+a brain could see and take, counting them as observed would claim a decision is available when
+none is.
+
 **The surface count is no longer the whole story.** Since na-8ja an agent can also command any
 unit or base *directly* — `move` / `skip` / `build` on the command channel, outside the engine's
 ask-and-answer cycle entirely. Those verbs cut across this registry rather than adding to it, and

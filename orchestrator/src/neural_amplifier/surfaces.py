@@ -146,6 +146,76 @@ NO_AI_PATH: Final[frozenset[str]] = frozenset(
 )
 
 
+#: Surfaces whose decision is **already made under another id**, or which the engine never
+#: actually decides. Every id here stays in the frozen registry — renaming or removing one
+#: invalidates every previously recorded run — but ``coverage()`` stops counting them as work
+#: waiting to be done.
+#:
+#: This exists because ``ready`` was overcounting badly. It was derived from the registry
+#: partition — has a native path, is not unit-scope — which describes decisions **the game
+#: has**, not decision points **the adapter can hook**. Reading the fork for na-yd4 found that
+#: most of what was left is one of three things, and none of them is instrumentable work:
+#:
+#: **Subsumed by an id that is already covered.** ``select_build`` has one chooser returning one
+#: item, so the facility pick, the queue and the HQ-relocation legality test are all part of
+#: ``base.production`` — which is APPLIED. A second record for one decision would inflate
+#: coverage and disagree with itself whenever the two disagreed.
+#:
+#: **Not a decision at all.** ``mod_base_psych`` is a survey (72 scoring calls, then one that
+#: applies pending SE); ``mod_base_growth`` and the support arithmetic compute values; the
+#: drone-riot flag is state the engine sets and clears; ``econ.commerce`` computes income;
+#: ``victory_done()`` is a predicate. Nothing weighs alternatives, so there is no native answer
+#: to record and nothing for a brain to be measured against.
+#:
+#: **Reachable only through engine code we cannot hook.** ``enemy_diplomacy`` is a raw address
+#: with no Thinker override. ``act_of_aggression`` *is* Thinker's, but it EXECUTES an aggression
+#: decided upstream — it has no alternatives and no answer, so a record there would be an event,
+#: not a decision.
+#:
+#: ``base.capture`` is here because its decidable content is the HQ escape, which is instrumented
+#: separately as ``base.hq_escape``.
+#:
+#: ``base.workers``, ``base.specialists`` and ``base.name`` are here for a different reason and
+#: it is worth not blurring: they ARE instrumented, and the adapter records them. They are not in
+#: OBSERVED because their records carry no ``action_space`` — the contract's is pick-one, and an
+#: allocation over 21 tiles or a name drawn from a file is not that shape. So there is nothing a
+#: brain could see and take, and counting them as observed would claim otherwise.
+#: **Confidence is not uniform, and this set should be read as evidence rather than as settled.**
+#: Most entries were established by reading the function; a few by grep plus a single read. The
+#: cautionary case is ``base.retool``, which sat in the build-the-tier-first pile until someone
+#: read ``select_build`` and found the tier already there — the same mistake in the other
+#: direction. An entry here that turns out to be a real decision point should be moved out, and
+#: that is a cheaper correction than the reverse, because nothing depends on this set except the
+#: count.
+SUBSUMED: Final[frozenset[str]] = frozenset(
+    {
+        # Answered by base.production's single chooser.
+        "base.facility",
+        "base.queue",
+        "base.hq_relocate",
+        # Computations and state, not choices.
+        "base.psych",
+        "base.growth",
+        "base.support",
+        "base.drone_riot",
+        "econ.commerce",
+        "victory.conquest",
+        "victory.diplomatic",
+        # Engine-internal or an event rather than a decision.
+        "diplo.ai_to_ai",
+        "faction.agenda",
+        "diplo.declare_war",
+        "diplo.treaty_break",
+        "diplo.atrocity",
+        "base.capture",
+        # Instrumented, but with no action space — see the note above.
+        "base.workers",
+        "base.specialists",
+        "base.name",
+    }
+)
+
+
 #: Surfaces an adapter reports — the brain sees the decision and a record is written, but the
 #: engine's own choice still executes.
 #:
@@ -277,8 +347,9 @@ def coverage() -> dict[str, int]:
     9 until the deterministic tier is built; ``ready`` already has a safe fallback.
     """
     remaining = ALL - OBSERVED
-    needs_tier_first = remaining & NO_AI_PATH
-    volume_bound = {s for s in remaining - NO_AI_PATH if scope_for(s) == "unit"}
+    needs_tier_first = remaining & NO_AI_PATH - SUBSUMED
+    volume_bound = {s for s in remaining - NO_AI_PATH - SUBSUMED if scope_for(s) == "unit"}
+    subsumed = remaining & SUBSUMED
     return {
         "total": len(ALL),
         "applied": len(APPLIED),
@@ -287,7 +358,8 @@ def coverage() -> dict[str, int]:
         "remaining": len(remaining),
         "needs_tier_first": len(needs_tier_first),
         "volume_bound": len(volume_bound),
-        "ready": len(remaining - needs_tier_first - volume_bound),
+        "subsumed": len(subsumed),
+        "ready": len(remaining - needs_tier_first - volume_bound - subsumed),
     }
 
 

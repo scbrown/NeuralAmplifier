@@ -136,6 +136,11 @@ def main(argv: list[str] | None = None) -> int:
             f"  {c['volume_bound']:>3}    unit-scope with a native path — mostly stay"
             " deterministic on volume grounds"
         )
+        print(
+            f"  {c['subsumed']:>3}    no separate decision to instrument — already answered under"
+            " another id,"
+        )
+        print("        computed rather than chosen, or engine-internal (surfaces.SUBSUMED)")
         print(f"  {c['ready']:>3}    have a native path and a safe fallback — instrumentable now")
         config = load_config()
         if config.source is None:

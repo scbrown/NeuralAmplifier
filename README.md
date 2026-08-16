@@ -266,9 +266,18 @@ other 13 uninstrumented ones were audited in the same pass; `base.retool` was th
 Of the 64 not yet instrumented, **25 are `unit`-scope** and mostly stay deterministic on volume
 grounds — see [docs/decision-inputs.md](docs/decision-inputs.md) §5 for why, and why revisiting
 them should mean deciding *operations* rather than tile moves. **20 still need their tier built.**
-That leaves **19 base and faction surfaces that already have a native path and so already have a
-safe fallback** — the bucket being worked through now, eight of them done. `just surfaces` prints
-the split from the registry rather than from this paragraph.
+
+The last bucket — "base and faction surfaces with a native path and a safe fallback" — is now
+**empty, and mostly not because it was instrumented.** Ten surfaces were, and reading the fork
+for the rest found that the bucket had been badly overcounted: it was derived from the registry
+partition, which describes decisions *the game has* rather than decision points *the adapter can
+hook*. Nineteen turned out to be one of three things — already answered under another id
+(`select_build` has one chooser, so the facility pick, the queue and the HQ-relocation test are
+all `base.production`), computed rather than chosen (`mod_base_psych` is a survey; the drone-riot
+flag is state), or reachable only through engine code with no override (`enemy_diplomacy` is a
+raw address). Those are now `surfaces.SUBSUMED`: still in the frozen registry, since renaming an
+id invalidates past runs, but no longer counted as work waiting to be done. `just surfaces`
+prints the split.
 
 Detail, including the seam and action-space quality per surface:
 **[docs/game-surface.md](docs/game-surface.md) §2.5**. What each surface needs in its world view:
@@ -335,7 +344,7 @@ and the rollout are in the [design doc](docs/knowledge-architecture.md).
 >
 > What is *not* proven: nothing has played a turn of Alpha Centauri yet.
 > **Track A (Thinker) is the current focus** — the complete, balanced game, controllable
-> today. The fork now instruments fourteen decision surfaces and *applies* four of them, intercepts
+> today. The fork now instruments fifteen decision surfaces and *applies* four of them, intercepts
 > in-game dialogs, and ships a side-effect-free probe for every surface. The wire is tested
 > against a real orchestrator under Wine with no game present.
 >

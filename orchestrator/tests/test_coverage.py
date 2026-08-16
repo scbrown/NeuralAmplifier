@@ -114,17 +114,23 @@ def test_missing_surface_id_is_counted_not_ignored(thinker_base: WorldView, tmp_
 
 
 def test_the_remaining_surfaces_partition_exactly() -> None:
-    """The three buckets must sum to what is left, or planning reads off a false number.
+    """The buckets must sum to what is left, or planning reads off a false number.
 
     They did not. `docs/game-surface.md` described the gap as "21 with no AI path", "32
     unit-scope", and "the rest" — which double-counts the seven surfaces that are both, and
-    understates the immediately-instrumentable pile as 20 when it is 27.
+    understated the immediately-instrumentable pile as 20 when it was 27.
+
+    A FOURTH bucket, `subsumed`, joined later and this test caught it being added without being
+    counted — which is the same class of error as the original, one bucket on. It carries the
+    same hazard too: a subsumed surface can also be unit-scope or lack a native path, so it is
+    subtracted from the other buckets rather than counted alongside them.
     """
     from neural_amplifier.surfaces import coverage
 
     c = coverage()
     assert c["observed"] + c["remaining"] == c["total"]
-    assert c["needs_tier_first"] + c["volume_bound"] + c["ready"] == c["remaining"]
+    parts = c["needs_tier_first"] + c["volume_bound"] + c["subsumed"] + c["ready"]
+    assert parts == c["remaining"]
 
 
 def test_applied_is_the_coverage_number_and_never_exceeds_observed() -> None:
@@ -161,3 +167,44 @@ def test_nothing_applied_lacks_a_fallback() -> None:
     from neural_amplifier.surfaces import APPLIED, NO_AI_PATH
 
     assert not (APPLIED & NO_AI_PATH)
+
+
+def test_subsumed_ids_stay_in_the_frozen_registry() -> None:
+    """Classifying is not removing.
+
+    Renaming or dropping an id invalidates every previously recorded run, which is why the
+    registry is frozen. SUBSUMED changes what `coverage()` counts as work waiting to be done and
+    nothing else — every id in it is still a real surface the game has.
+    """
+    from neural_amplifier.surfaces import ALL, SUBSUMED
+
+    assert SUBSUMED <= ALL
+
+
+def test_a_surface_is_never_both_observed_and_subsumed() -> None:
+    """The two answer different questions and must not blur.
+
+    OBSERVED means a record with an action space exists and the brain can see the decision.
+    SUBSUMED means there is no separate decision to see — either another id already covers it,
+    or the engine computes rather than chooses. A surface in both would be claiming a decision
+    is simultaneously visible and non-existent.
+    """
+    from neural_amplifier.surfaces import OBSERVED, SUBSUMED
+
+    assert not (OBSERVED & SUBSUMED)
+
+
+def test_instrumented_without_an_action_space_is_subsumed_not_observed() -> None:
+    """base.workers, base.specialists and base.name ARE instrumented — and still not coverage.
+
+    Their records carry no `action_space`, because the contract's is pick-one and neither an
+    allocation over 21 tiles nor a name drawn from a data file is that shape. With nothing a
+    brain could see and take, putting them in OBSERVED would claim a decision is available when
+    none is. This is the distinction that keeps "we record it" and "the brain can decide it"
+    from collapsing into one number.
+    """
+    from neural_amplifier.surfaces import OBSERVED, SUBSUMED
+
+    for surface in ("base.workers", "base.specialists", "base.name"):
+        assert surface in SUBSUMED, surface
+        assert surface not in OBSERVED, surface
