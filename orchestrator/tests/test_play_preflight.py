@@ -181,3 +181,46 @@ def test_the_repo_ships_an_mcp_config() -> None:
     pre.check_mcp_config(report, REPO)
 
     assert rows(report)["mcp config"][0] == pre.OK
+
+
+# --- the yupana replace check ------------------------------------------------
+
+
+class _ReplaceClient:
+    """A yupana that honours `replace` — two nodes in, one back after a replacing ingest."""
+
+    def __init__(self, honours: bool) -> None:
+        self.honours = honours
+        self.nodes: set[str] = set()
+
+    def call(self, tool: str, args: dict) -> dict:
+        if args.get("replace") and self.honours:
+            self.nodes.clear()
+        self.nodes.update(e["name"] for e in args.get("entities") or [])
+        return {"board": [len(self.nodes), 0]}
+
+
+def _run_replace_check(monkeypatch: pytest.MonkeyPatch, honours: bool) -> Any:
+    import neural_amplifier.yupana as yup
+
+    monkeypatch.setattr(yup, "McpClient", lambda url, *a, **k: _ReplaceClient(honours))
+    report = pre.Report()
+    pre.check_replace(report, "http://127.0.0.1:3040")
+    return report
+
+
+def test_a_yupana_that_honours_replace_passes(monkeypatch: pytest.MonkeyPatch) -> None:
+    assert rows(_run_replace_check(monkeypatch, honours=True))["yupana replace"][0] == pre.OK
+
+
+def test_a_yupana_that_ignores_replace_is_reported(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The silent regression this exists for. An older yupana does not reject the field, it
+    ignores it and merges — so the guard warns about bases you no longer own and `what_if` can
+    surface entities the world view never carried, with nothing anywhere saying why."""
+    report = _run_replace_check(monkeypatch, honours=False)
+    status, kind = rows(report)["yupana replace"]
+
+    assert status == pre.WARN
+    assert kind == "optional"  # a degraded guard is not a reason to refuse to play
+    assert not report.blocked
+    assert "IGNORED" in dict((r[2], r[3]) for r in report.rows)["yupana replace"]

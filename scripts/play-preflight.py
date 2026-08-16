@@ -24,6 +24,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import sys
 import urllib.error
 import urllib.request
 from pathlib import Path
@@ -247,6 +248,64 @@ def check_yupana(report: Report, url: str | None) -> None:
         report.add(WARN, False, "yupana (guard)", f"not reachable at {url}")
         return
     report.add(OK, False, "yupana (guard)", f"answering at {url}")
+    check_replace(report, url)
+
+
+def check_replace(report: Report, url: str) -> None:
+    """Does this yupana honour `replace` on ingest — the property the guard depends on?
+
+    A version check would be the obvious thing and the wrong one. `replace` landed in yupana
+    0.6.1; an older build does not reject the field, it **ignores** it and merges, so the
+    regression is silent and it is the exact bug the flag was added to fix: a base razed twenty
+    turns ago keeps matching policy selectors, and `what_if` can surface an entity the current
+    world view never carried — which breaches the MCP surface's no-second-source-of-board-state
+    rule.
+
+    So this tests the mechanism rather than a number: write two nodes, rewrite one with
+    `replace`, and ask whether the other is gone. That is true of a build that has the feature
+    and false of one that merely reports a version.
+
+    Its own scratch tenant, so a game in progress is untouched — and `replace` on a tenant this
+    function invented cannot clear anything a real one holds.
+    """
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "orchestrator" / "src"))
+    try:
+        from neural_amplifier.yupana import McpClient, YupanaError
+    except ImportError as exc:  # pragma: no cover - a broken checkout, not a game problem
+        report.add(WARN, False, "yupana replace", f"cannot import the client: {exc}")
+        return
+
+    client = McpClient(url.rstrip("/") + "/mcp")
+    tenant = {"game_id": "na-preflight", "faction_id": "preflight", "visibility": "private"}
+    node = lambda name: {"name": name, "type": "smac:BaseState", "attrs": {}}  # noqa: E731
+    try:
+        client.call("yupana_ingest", {**tenant, "entities": [node("a"), node("b")], "edges": []})
+        client.call(
+            "yupana_ingest", {**tenant, "replace": True, "entities": [node("a")], "edges": []}
+        )
+        after = client.call("yupana_ingest", {**tenant, "entities": [node("a")], "edges": []})
+    except YupanaError as exc:
+        report.add(
+            WARN,
+            False,
+            "yupana replace",
+            f"could not check: {exc} — the game-state tools may not be built "
+            "(--features mcp,game-state)",
+        )
+        return
+
+    nodes = (after.get("board") or [0])[0]
+    if nodes == 1:
+        report.add(OK, False, "yupana replace", "honoured — the board is stated, not patched")
+    else:
+        report.add(
+            WARN,
+            False,
+            "yupana replace",
+            f"IGNORED (board still holds {nodes} nodes) — this yupana predates 0.6.1. The guard "
+            "will warn about bases you no longer own, and what_if may report entities the world "
+            "view did not carry. Upgrade yupana",
+        )
 
 
 def main() -> int:
