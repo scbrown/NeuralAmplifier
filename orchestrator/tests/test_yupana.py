@@ -685,3 +685,134 @@ def test_a_store_with_no_board_policies_projects_nothing_rather_than_failing() -
     from neural_amplifier.yupana import policies_from_quipu
 
     assert policies_from_quipu([]) == []
+
+
+# --- order-scoped board effects (na-n72) ------------------------------------
+
+
+def disband_view(garrison: int = 1) -> WorldView:
+    """A unit-scope decision whose one option empties an exposed base."""
+    return WorldView(
+        engine="thinker",
+        scope="unit",
+        turn=42,
+        faction="GAIANS",
+        surface_id="unit.disband",
+        metrics={"energy_reserves": 100},
+        bases=[{"id": "base:1", "garrison_count": garrison, "defend_range": 8}],
+        action_space=[
+            Action(
+                id="disband:u7",
+                action="Disband the base:1 garrison",
+                board_effects=[
+                    {"op": "set_attr", "id": "base:1", "key": "garrison_count", "value": 0}
+                ],
+            ),
+            Action(id="keep:u7", action="Keep it"),
+        ],
+    )
+
+
+def test_a_board_effect_names_a_real_entity_and_is_namespaced() -> None:
+    """The adapter states plain names because the contract must not carry a graph's vocabulary.
+    An effect forwarded unprefixed would set an attribute no selector can see — silently, and
+    looking exactly like a policy that passed."""
+    (order,) = proposed(Orders(choices=[Choice(action_id="disband:u7")]), disband_view())
+
+    assert order["effects"] == [
+        {"op": "set_attr", "id": "base:1", "key": f"{VOCAB}garrison_count", "value": 0}
+    ]
+
+
+def test_board_effects_and_metric_deltas_both_travel() -> None:
+    """They answer different questions — one names an entity, the other lands on the faction
+    node — so an action declaring both must produce both."""
+    view = disband_view().model_copy(
+        update={
+            "action_space": [
+                Action(
+                    id="disband:u7",
+                    action="Disband",
+                    effects={"energy_reserves": -5.0},
+                    board_effects=[
+                        {"op": "set_attr", "id": "base:1", "key": "garrison_count", "value": 0}
+                    ],
+                )
+            ]
+        }
+    )
+    (order,) = proposed(Orders(choices=[Choice(action_id="disband:u7")]), view)
+
+    ids = [e["id"] for e in order["effects"]]
+    assert "base:1" in ids and FACTION_NODE in ids
+
+
+def test_an_op_yupana_does_not_know_is_dropped_not_forwarded() -> None:
+    """Forwarding it would be refused at the far end and take the whole guard call down, so one
+    adapter typo would cost the board check on every decision rather than the one effect it got
+    wrong."""
+    view = disband_view().model_copy(
+        update={
+            "action_space": [
+                Action(
+                    id="x",
+                    action="x",
+                    board_effects=[
+                        {"op": "teleport_base", "id": "base:1"},
+                        {"op": "set_attr", "id": "base:1", "key": "garrison_count", "value": 0},
+                    ],
+                )
+            ]
+        }
+    )
+    (order,) = proposed(Orders(choices=[Choice(action_id="x")]), view)
+
+    assert [e["op"] for e in order["effects"]] == ["set_attr"]
+
+
+def test_a_board_effect_that_is_not_an_object_is_refused_at_the_contract() -> None:
+    """Better than filtering it downstream: `board_effects` is typed as a list of objects, so a
+    malformed one fails where the adapter can still see the error, rather than being quietly
+    dropped on the way to the guard."""
+    from pydantic import ValidationError
+
+    # The specific error, not a blind `Exception` — that would pass on a typo in this very test.
+    with pytest.raises(ValidationError):
+        Action(id="x", action="x", board_effects=["not even an object"])
+
+
+def test_an_action_with_no_board_effects_is_unchanged() -> None:
+    (order,) = proposed(Orders(choices=[Choice(action_id="keep:u7")]), disband_view())
+    assert order["effects"] == []
+
+
+@live
+def test_an_order_that_empties_an_exposed_base_is_denied_not_merely_warned() -> None:
+    """na-n72's acceptance criterion, verbatim.
+
+    Before this the guard could only ever report the garrison policy as `pre_existing` — the
+    condition was true before the orders because no order could express changing it — so the
+    rule warned and never enforced. The distinction that matters is in the advisory too: a
+    denial blames the order, a pre-existing finding says "already true before these orders".
+    """
+    guard = YupanaGuard(url=YUPANA_URL, policies=[GARRISON], game_id="test-n72")
+
+    denied = guard.rule(Orders(choices=[Choice(action_id="disband:u7")]), disband_view())
+    assert denied.verdict == "deny"
+    assert denied.stripped == ("disband:u7",)
+    assert not any("already true before these orders" in a for a in denied.advisories)
+
+    kept = guard.rule(Orders(choices=[Choice(action_id="keep:u7")]), disband_view())
+    assert kept.verdict == "allow"
+
+
+@live
+def test_a_base_already_empty_still_only_warns() -> None:
+    """The other half, and the one that keeps the fix honest: an order must not be denied for a
+    condition it did not cause, however expressible that condition has become."""
+    guard = YupanaGuard(url=YUPANA_URL, policies=[GARRISON], game_id="test-n72-pre")
+
+    ruling = guard.rule(Orders(choices=[Choice(action_id="keep:u7")]), disband_view(garrison=0))
+
+    assert ruling.stripped == ()
+    assert any("already true before these orders" in a for a in ruling.advisories)

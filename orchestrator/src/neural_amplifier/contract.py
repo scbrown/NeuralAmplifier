@@ -197,6 +197,27 @@ class Action(_Model):
     #: this is not a place to predict how a decision turns out.
     effects: dict[str, float] | None = None
 
+    #: The same statement at BOARD granularity: what this action does to named entities, rather
+    #: than to faction-level measurements. ``[{"op": "set_attr", "id": "base:1",
+    #: "key": "garrison_count", "value": 0}]`` for a move that empties a base.
+    #:
+    #: ``effects`` above is keyed on the metrics vocabulary and lands on one synthetic faction
+    #: node, which is enough to answer "can this faction afford it" and structurally cannot
+    #: express "this order empties THAT base". Without this field the board guard can only ever
+    #: report a violation as ``pre_existing`` — true before the orders and therefore not theirs
+    #: to be denied for — so a rule like "a base near a hostile faction keeps a garrison" could
+    #: warn and never enforce (na-n72).
+    #:
+    #: Adapter-stated, never model-stated, and that is the whole discipline of the field. An
+    #: order's consequences are the engine's claim about itself; taking them from the answer
+    #: would let a brain describe its own move as harmless and be believed.
+    #:
+    #: Deliberately opaque to this layer. The orchestrator does not interpret the ops — it
+    #: forwards them to whatever evaluates the board — because giving the contract an opinion
+    #: about board semantics is how it would start learning which engine it is driving
+    #: (invariant 2). Key names are unprefixed here and namespaced on the way out.
+    board_effects: list[dict[str, Any]] | None = None
+
 
 class PriorChoice(_Model):
     """What this decision's subject was doing on an earlier turn.

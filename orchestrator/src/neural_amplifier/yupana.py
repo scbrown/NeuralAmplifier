@@ -45,7 +45,7 @@ import os
 import urllib.error
 import urllib.request
 import uuid
-from typing import Any
+from typing import Any, Final
 
 from .contract import Choice, Orders, WorldView
 from .knowledge import Ruling
@@ -124,6 +124,42 @@ def entities(world_view: WorldView) -> list[dict[str, Any]]:
     return out
 
 
+#: Effect ops yupana understands, and the key each one namespaces. Anything else is dropped
+#: rather than forwarded: an op yupana does not know is refused at the far end and takes the
+#: whole guard call down with it, so one adapter typo would cost the board check on every
+#: decision rather than the one effect it got wrong.
+_EFFECT_KEYS: Final[dict[str, tuple[str, ...]]] = {
+    "set_attr": ("key",),
+    "remove_node": (),
+    "upsert_node": (),
+    "add_edge": (),
+    "remove_edge": (),
+}
+
+
+def _board_effects(action: Any) -> list[dict[str, Any]]:
+    """An action's declared board deltas, with attribute names namespaced.
+
+    The adapter states plain names (``garrison_count``) because the contract must not carry a
+    graph's vocabulary; everything this module ingests is prefixed :data:`VOCAB`, so an effect
+    naming the unprefixed key would set an attribute no policy selector can see — silently, and
+    looking exactly like a policy that passed.
+    """
+    out: list[dict[str, Any]] = []
+    for effect in getattr(action, "board_effects", None) or []:
+        if not isinstance(effect, dict):
+            continue
+        op = str(effect.get("op", ""))
+        if op not in _EFFECT_KEYS:
+            continue
+        copied = dict(effect)
+        for key in _EFFECT_KEYS[op]:
+            if key in copied:
+                copied[key] = f"{VOCAB}{copied[key]}"
+        out.append(copied)
+    return out
+
+
 def proposed(orders: Orders, world_view: WorldView) -> list[dict[str, Any]]:
     """The choices, each carrying the board deltas the *engine* declared for it.
 
@@ -139,6 +175,14 @@ def proposed(orders: Orders, world_view: WorldView) -> list[dict[str, Any]]:
         action = by_id.get(choice.action_id)
         effects: list[dict[str, Any]] = []
         metrics = world_view.metrics or {}
+
+        # Board-scoped effects first, because they are the ones that can be DENIED. A metric
+        # delta lands on the synthetic faction node and answers affordability; only these name
+        # a real entity, so only these let a finding blame the order that caused it rather than
+        # coming back `pre_existing` and warning (na-n72).
+        for effect in _board_effects(action):
+            effects.append(effect)
+
         for key, delta in (action.effects or {}).items() if action else ():
             # Absolute, not relative: yupana's `set_attr` states the post-order value, and the
             # pre-order value is the one the adapter published this turn.

@@ -51,22 +51,31 @@ them. With it off, the base policies report `vacuous` rather than passing silent
 the guard strips the order, the brain is re-asked with the claim, and it takes the legal
 alternative — one decision, `repairs: 1`, not a lost turn.
 
-`garrison-exposed-bases` **can only warn today**, and it is worth understanding why before you
-rely on it. `Action.effects` is keyed on the *metrics* vocabulary and lands on the faction node,
-so "disbanding this unit empties that base's garrison" is not expressible as an order effect.
-Yupana's overlay therefore sees the board unchanged, the policy fires against the pre-order state,
-and yupana marks it `pre_existing` — which correctly warns rather than strips, because the order
-did not cause the condition:
+`garrison-exposed-bases` **denies too, once the adapter declares board effects.** An action can
+carry `board_effects` — `[{"op": "set_attr", "id": "base:1", "key": "garrison_count",
+"value": 0}]` — saying what it does to a named entity rather than to a faction-level measurement.
+Yupana then applies it to the overlay, the policy fires against the *post-order* board, and the
+finding blames the order:
+
+```text
+A base near a hostile faction must keep at least one garrison unit (?b=base:1, ?d=8)
+```
+
+Without them the guard could only ever report `pre_existing` — true before the orders, and so not
+theirs to be denied for — so the rule warned and never enforced (na-n72).
+
+**A base that was already empty still only warns**, and that is the half that keeps the fix
+honest. An order must not be denied for a condition it did not cause, however expressible that
+condition has become; yupana marks it `pre_existing` and the guard forwards it as an advisory:
 
 ```text
 A base near a hostile faction must keep at least one garrison unit
   — already true before these orders (?b=base:1, ?d=8)
 ```
 
-That is real and useful: the brain is told an exposed base is empty. It is not enforcement, and
-calling it enforcement would be the exact kind of claim this project walks back. na-n72 tracks
-the contract extension, and is deliberately not built yet — every surface whose orders would move
-a garrison is unit-scope and in `NO_AI_PATH`, so the brain cannot decide one today.
+The effects are **adapter-stated, never model-stated**. An order's consequences are the engine's
+claim about itself, and taking them from the answer would let a brain describe its own move as
+harmless and be believed.
 
 ## Reading `defend_range`
 
