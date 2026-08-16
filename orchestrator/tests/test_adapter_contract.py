@@ -643,6 +643,57 @@ BASE_PROJECT = {
     "applied": "native",
 }
 
+# na_write_head + na_build_faction_tech_steal. Turn scope: faction metrics, no base_state.
+FACTION_TECH_STEAL = {
+    "schema_version": "0.1",
+    "engine": "thinker",
+    "scope": "turn",
+    "surface_id": "faction.tech_steal",
+    "turn": 42,
+    "faction_id": 1,
+    "faction": "Gaians",
+    "run_id": "68ad1e40-0004e1c8-1a2c",
+    "trace": {"traceparent": "00-0000002a000000010000000907a1c0de-000000090000002b-01"},
+    "target_faction_id": 2,
+    "target_faction": "Hive",
+    # Which caller: a probe team's deliberate operation, or the free acquisition that comes
+    # with capturing a base. Same chooser, and comparing them as one would compare an operation
+    # against a side effect.
+    "acquisition": "probe_steal",
+    "metrics": {
+        "energy_reserves": 82,
+        "energy_income": 14,
+        "labs_output": 6,
+        "base_count": 2,
+        "pop_total": 5,
+        "military_units": 3,
+        "drone_total": 1,
+        "units_in_foreign_territory": 0,
+    },
+    "action_space": [
+        {
+            "id": "tech:12",
+            "action": "Industrial Automation",
+            "category": "tech",
+            "ai_weights": {"growth": 1, "tech": 0, "wealth": 3, "power": 0},
+        },
+        {
+            "id": "tech:18",
+            "action": "Nonlinear Mathematics",
+            "category": "tech",
+            "ai_weights": {"growth": 0, "tech": 1, "wealth": 0, "power": 3},
+        },
+    ],
+    "action_space_size": 2,
+    "action_space_truncated": False,
+    "subjects": ["Nonlinear Mathematics"],
+    "native_choice": "tech:18",
+    "native_choice_name": "Nonlinear Mathematics",
+    "native_choice_item": 18,
+    "tier": "deterministic",
+    "applied": "native",
+}
+
 ALL_RECORDS = [
     BASE_PRODUCTION,
     BASE_HURRY,
@@ -654,6 +705,7 @@ ALL_RECORDS = [
     COUNCIL_CALL,
     BASE_SATELLITE,
     BASE_PROJECT,
+    FACTION_TECH_STEAL,
 ]
 
 
@@ -1408,3 +1460,52 @@ def test_project_is_observed_not_applied() -> None:
     assert "base.project" in OBSERVED
     assert "base.project" not in APPLIED
     assert "base.project" not in NO_AI_PATH
+
+
+def test_tech_steal_offers_what_can_be_taken_not_what_can_be_researched() -> None:
+    """The distinction this surface exists to get right.
+
+    `faction.tech` enumerates `tech_avail` — what we could research. What can be STOLEN is what
+    the target holds and we do not, a different set and mostly a disjoint one: a tech we could
+    already research is usually one we are close enough to that taking it is worth less.
+    Reusing the research writer would have produced a plausible list of the wrong options, and
+    nothing downstream could have told.
+
+    Asserted structurally, since the fixture cannot hold a real tech table: every option carries
+    the same `ai_weights` shape `faction.tech` uses, so the two tech surfaces read in one unit.
+    """
+    world_view = WorldView.model_validate(FACTION_TECH_STEAL)
+    assert world_view.action_space
+    for action in world_view.action_space:
+        extra = action.model_dump()
+        assert set(extra["ai_weights"]) == {"growth", "tech", "wealth", "power"}, action.id
+    assert FACTION_TECH_STEAL["native_choice"] in {a.id for a in world_view.action_space}
+
+
+def test_tech_steal_names_which_caller_it_came_from() -> None:
+    """A probe operation and a capture side effect are not the same decision.
+
+    `steal_tech` is called from probe.cpp (a deliberate mission) and from base.cpp (free with a
+    captured base). Without `acquisition`, an eval measuring "how good are our steals" would
+    average a chosen operation together with something nobody chose.
+    """
+    assert FACTION_TECH_STEAL["acquisition"] in {"probe_steal", "base_capture"}
+
+
+def test_tech_steal_says_nothing_to_take_explicitly() -> None:
+    """9999 is the engine's own sentinel, and the record spells it as an id.
+
+    Emitting an ABSENT native_choice for "nothing to take" would be indistinguishable from an
+    adapter that forgot to write one — and the second is a bug the first would hide.
+    """
+    assert FACTION_TECH_STEAL["native_choice"].startswith("tech:")
+    # The adapter maps 9999 (and any out-of-range id) to this, rather than omitting the field.
+    assert "tech:none" not in {a["id"] for a in FACTION_TECH_STEAL["action_space"]}
+
+
+def test_tech_steal_is_observed_not_applied() -> None:
+    from neural_amplifier.surfaces import APPLIED, NO_AI_PATH, OBSERVED
+
+    assert "faction.tech_steal" in OBSERVED
+    assert "faction.tech_steal" not in APPLIED
+    assert "faction.tech_steal" not in NO_AI_PATH

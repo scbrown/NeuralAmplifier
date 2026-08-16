@@ -211,6 +211,14 @@ OBSERVED: Final[frozenset[str]] = frozenset(
         # local reconstruction would rank options differently from the engine for reasons no
         # reader could see, while carrying the engine's authority.
         "base.project",
+        # The sixth from na-yd4's 27. Its action space is what the TARGET holds and we do not —
+        # deliberately NOT the research menu `faction.tech` uses. Those are different sets and
+        # mostly disjoint, so reusing the research writer would have offered a plausible list of
+        # the wrong options.
+        #
+        # Records both callers and keeps them apart: a probe team's deliberate operation and the
+        # acquisition that comes free with a base capture. Same chooser, different provenance.
+        "faction.tech_steal",
     }
 )
 

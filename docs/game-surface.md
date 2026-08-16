@@ -71,7 +71,7 @@ Per-unit orders fire separately as the engine iterates units (`mod_enemy_turn`
 
 ## 2.5 Instrumentation status — measured 2026-07-29, amended 2026-08-03
 
-**4 of 77 surfaces the brain can actually decide**, plus **7 observed only**. The four apply:
+**4 of 77 surfaces the brain can actually decide**, plus **8 observed only**. The four apply:
 the choice executes, validated against the engine's own availability tests first, so an illegal
 order is rejected rather than applied. A surface is not covered until its decision can be applied
 — `just surfaces` reports it from the frozen registry rather than from this paragraph.
@@ -138,6 +138,18 @@ It admits its own cap. The walk stops at 32 options and says so in `action_space
 the same admission `na_audit` makes about its id lists — a partial list presented as a whole one
 is how a brain comes to believe it saw everything.
 
+`faction.tech_steal` is the sixth, and it is the one where reusing existing code would have been
+wrong in a way nothing downstream could detect. `faction.tech` enumerates `tech_avail` — what we
+could *research*. What can be *stolen* is what the target holds and we do not: a different set,
+and mostly a disjoint one, since a tech we could already research is usually one we are close
+enough to that taking it is worth less. Reusing the research writer would have produced a
+plausible list of the wrong options.
+
+It also records which caller it came from. `steal_tech` serves a probe team's deliberate
+operation and the acquisition that comes free with capturing a base; without `acquisition`, an
+eval asking "how good are our steals" would average a chosen operation together with something
+nobody chose.
+
 `econ.energy_sliders` is another observed-only one (na-yd4): the adapter records what
 `mod_allocate_energy` chose and every split that was legal, and nothing applies a brain's answer
 yet. It is deliberately in `OBSERVED` and not `APPLIED`, because the applied count is what says
@@ -181,6 +193,7 @@ not worth changing.
 | `council.call` | turn | `call_council` (AI-only) | convene / decline, with eligibility from `can_call_council` and the convened flag | `observe-council <faction_id>` |
 | `base.satellite` | base | `find_satellite` | all four orbitals with per-option availability, built count and faction goal, plus decline and build-the-complex-first | `observe-satellite <base_id>` |
 | `base.project` | base | `find_project` | every buildable secret project with the engine's own `facility_score` under this base's governor weights, and how many bases are already on it | `observe-project <base_id>` |
+| `faction.tech_steal` | turn | `steal_tech` → `mod_tech_pick` | every tech the target holds and we do not, with the same AI weights `faction.tech` reports; names which caller it came from | `observe-steal <faction_id> <target_id>` |
 | `base.governor_config` | base | `governor_priorities` | n/a — deterministic tier only so far; records the resolved weights and their source | `observe-gov <base_id>` |
 | `base.abandon` | base | `mod_base_production` (size-1 base, pod ready) | keep / spend the base, with the growth numbers the answer turns on | `observe-abandon <base_id>` |
 | `base.hq_escape` | base | `mod_capture_base` | relocate / don't, with the 1000-credit cost, the reserve, and the engine's chosen destination | `observe-hq-escape <base_id>` |
