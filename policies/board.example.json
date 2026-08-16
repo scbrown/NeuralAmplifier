@@ -16,35 +16,35 @@
     }
   },
   {
-    "label": "garrison-border-bases",
+    "label": "garrison-exposed-bases",
     "targets": "smac:BaseState",
-    "claim": "A border base must keep at least one defender",
+    "claim": "A base near a hostile faction must keep at least one garrison unit",
     "boundary": "order",
     "effect": "deny",
     "selector": {
       "selector_lang": "graph-pattern",
-      "evidence_source": "?b a smac:BaseState ; smac:isBorderBase true"
+      "evidence_source": "?b a smac:BaseState ; smac:defend_range ?d | ?d < 12"
     },
     "predicate": {
       "selector_lang": "graph-pattern",
       "match_type": "must-match",
-      "evidence_source": "?b a smac:BaseState ; smac:garrisonCount ?g | ?g >= 1"
+      "evidence_source": "?b a smac:BaseState ; smac:garrison_count ?g | ?g >= 1"
     }
   },
   {
-    "label": "hold-expansion-under-threat",
-    "targets": "smac:FactionState",
-    "claim": "Do not commit to a colony pod while a base is under threat",
+    "label": "meet-the-defence-goal-when-close",
+    "targets": "smac:BaseState",
+    "claim": "A base with an enemy very close should hold the defenders the engine asked for",
     "boundary": "order",
     "effect": "warn",
     "selector": {
       "selector_lang": "graph-pattern",
-      "evidence_source": "?b a smac:BaseState ; smac:underThreat true"
+      "evidence_source": "?b a smac:BaseState ; smac:defend_range ?d | ?d < 6"
     },
     "predicate": {
       "selector_lang": "graph-pattern",
-      "match_type": "must-not-match",
-      "evidence_source": "?f a smac:FactionState ; smac:expanding true"
+      "match_type": "must-match",
+      "evidence_source": "?b a smac:BaseState ; smac:garrison_count ?g ; smac:defend_goal ?goal | ?g >= 1"
     }
   }
 ]

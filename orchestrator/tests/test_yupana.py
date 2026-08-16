@@ -446,3 +446,62 @@ def test_the_guard_joins_the_chain_only_when_configured(monkeypatch: pytest.Monk
 
     assert len(with_board.guards) == len(without.guards) + 1
     assert type(with_board.guards[-1]).__name__ == "YupanaGuard"
+
+
+# --- the shape the Thinker adapter actually emits ---------------------------
+
+#: One base exactly as `na_write_bases` (thinker src/neural.cpp, na_board_state=1) emits it.
+#: Hand-maintained against that function, and deliberately so — the adapter is a different
+#: repository in a different language, so this is the seam written down rather than inferred.
+#: The same reasoning `test_metrics_vocabulary.py` gives for the metrics half.
+ADAPTER_BASE = {
+    "id": "base:1",
+    "name": "Song of Planet",
+    "pop_size": 3,
+    "garrison_count": 1,
+    "defend_range": 8,
+    "defend_goal": 2,
+    "mineral_surplus": 2,
+    "energy_surplus": 1,
+    "drone_total": 1,
+    "talent_total": 0,
+    "current_item": 12,
+    "current_item_name": "Scout Patrol",
+}
+
+
+def test_the_adapters_base_fields_survive_the_mapping() -> None:
+    """Every number the adapter publishes has to arrive under a name a policy can select on.
+    A field dropped here is a policy that matches nothing, which reads as a clean board."""
+    view = hurry_view(bases=[ADAPTER_BASE])
+    (base,) = [e for e in entities(view) if e["name"] == "base:1"]
+
+    for key in ADAPTER_BASE:
+        if key == "id":
+            continue  # the node's name, deliberately not repeated as an attribute
+        assert f"{VOCAB}{key}" in base["attrs"], key
+    assert base["attrs"][f"{VOCAB}defend_range"] == 8
+    assert base["attrs"][f"{VOCAB}garrison_count"] == 1
+
+
+def test_the_starter_policies_select_on_fields_the_adapter_publishes() -> None:
+    """The na-5vv failure, caught in CI rather than as a `vacuous` note on every decision of a
+    real game: a policy naming an attribute nothing emits matches zero nodes and produces zero
+    violations, which is indistinguishable from compliance."""
+    import json as _json
+    import re as _re
+
+    published = {f"{VOCAB}{k}" for k in ADAPTER_BASE} | {
+        f"{VOCAB}energy_reserves",
+        f"{VOCAB}turn",
+    }
+    policies = _json.loads((REPO / "policies" / "board.example.json").read_text())
+
+    for policy in policies:
+        for half in ("selector", "predicate"):
+            named = _re.findall(rf"{VOCAB}\w+", policy[half]["evidence_source"])
+            for name in named:
+                # Node kinds are `smac:FactionState` / `smac:BaseState`; the rest are attributes.
+                if name.endswith("State"):
+                    continue
+                assert name in published, f"{policy['label']}.{half} selects on unpublished {name}"

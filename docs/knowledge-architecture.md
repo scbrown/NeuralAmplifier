@@ -507,11 +507,23 @@ guide to writing one.
 
 **What is live today.** `reserves-stay-solvent` is verified end to end: reserves 40, a hurry
 costing 81, and the guard denies, the brain is re-asked with the policy's claim, and it takes the
-legal alternative — one decision, `repairs: 1`, not a lost turn. `garrison-border-bases` and
-`hold-expansion-under-threat` are inert, because they name board attributes the Thinker adapter
-does not yet publish into `WorldView.bases`; they are shipped anyway because yupana reports them
-as `vacuous` on every decision, which puts the gap on the record instead of letting it pass as
-compliance. They start firing when the adapter grows those fields, with no change on this side.
+legal alternative — one decision, `repairs: 1`, not a lost turn.
+
+The base policies now have a board to run against: the Thinker fork publishes this faction's own
+bases behind `na_board_state` (default off, because the array rides on every world view and the
+world view is the prompt). They ship the engine's own integers rather than derived booleans —
+`defend_range`, `garrison_count`, `defend_goal` — so the threshold that decides what "a border
+base" means lives in the policy, where it can change without a cross-compiler, rather than in the
+DLL. `defend_range` is a *weighted* exposure figure and not a distance; `policies/README.md` says
+so at length, because a policy written against a misreading of it is silently wrong.
+
+**What those base policies cannot do yet is deny.** `Action.effects` is keyed on the metrics
+vocabulary and lands on the faction node, so "this order empties that base's garrison" is not
+expressible; yupana's overlay sees the board unchanged and the finding comes back `pre_existing`,
+which correctly warns rather than strips. The brain is told an exposed base is empty, which is
+real — it is not enforcement, and na-n72 tracks the contract extension. Deliberately unbuilt:
+every surface whose orders would move a garrison is unit-scope and in `NO_AI_PATH`, so the brain
+cannot decide one today and the change would serve nothing.
 
 ## Document map (planned)
 

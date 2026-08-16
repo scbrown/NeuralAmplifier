@@ -14,30 +14,57 @@ Quipu and projected, and a copy compiled into this repository would enforce yest
 while looking current. The file is read per process so a run states which policy set it played
 under.
 
-## What is live today, and what is inert
+## Turning the board on
 
-`reserves-stay-solvent` **works now**, and is the one verified end to end: reserves 40, a hurry
-costing 81, and the guard denies the order, tells the brain the claim, and the brain picks the
-legal alternative — one decision, not a lost turn.
+The base policies need `WorldView.bases`, which the Thinker adapter publishes only when asked:
 
-`garrison-border-bases` and `hold-expansion-under-threat` are **inert today**, and deliberately
-shipped anyway. They name board attributes — `smac:isBorderBase`, `smac:garrisonCount`,
-`smac:underThreat`, `smac:expanding` — that the Thinker adapter does not yet emit into
-`WorldView.bases`. Their selectors therefore match nothing.
-
-That is not a silent failure, and it is the reason they are worth having in the file now. Yupana
-reports a selector that matched nothing under `vacuous`, and the guard forwards it as an advisory
-on every decision:
-
-```text
-policy matched nothing: garrison-border-bases — selector `?b a smac:BaseState ;
-smac:isBorderBase true` matched no node on the post-order board — the policy was never asked,
-which is not the same as satisfied
+```ini
+; thinker.ini
+na_board_state=1
 ```
 
-So the gap is stated on the record every turn rather than passing as a clean board. When the
-adapter starts publishing those fields the policies begin firing with no change here — and if
-someone renames an attribute on either side, the same `vacuous` line is what says so.
+Off by default there for a real reason — the array rides on every world view and the world view
+is the prompt, so a faction with thirty bases pays for thirty bases on a decision about one of
+them. With it off, the base policies report `vacuous` rather than passing silently.
+
+## What is enforceable today, and what only warns
+
+`reserves-stay-solvent` **denies**, and is verified end to end: reserves 40, a hurry costing 81,
+the guard strips the order, the brain is re-asked with the claim, and it takes the legal
+alternative — one decision, `repairs: 1`, not a lost turn.
+
+`garrison-exposed-bases` **can only warn today**, and it is worth understanding why before you
+rely on it. `Action.effects` is keyed on the *metrics* vocabulary and lands on the faction node,
+so "disbanding this unit empties that base's garrison" is not expressible as an order effect.
+Yupana's overlay therefore sees the board unchanged, the policy fires against the pre-order state,
+and yupana marks it `pre_existing` — which correctly warns rather than strips, because the order
+did not cause the condition:
+
+```text
+A base near a hostile faction must keep at least one garrison unit
+  — already true before these orders (?b=base:1, ?d=8)
+```
+
+That is real and useful: the brain is told an exposed base is empty. It is not enforcement, and
+calling it enforcement would be the exact kind of claim this project walks back. na-n72 tracks
+the contract extension, and is deliberately not built yet — every surface whose orders would move
+a garrison is unit-scope and in `NO_AI_PATH`, so the brain cannot decide one today.
+
+## Reading `defend_range`
+
+The one field a policy is most likely to get wrong. It is **not a distance in tiles**. Thinker
+computes it once per faction turn as a weighted enemy-proximity figure — `map_range` × 2 for a
+same-region enemy or × 3 otherwise, × 1 at war or × 4 at peace, halved, capped at 50 — so **lower
+means more exposed**, and the same neighbour scores 8 at war and 32 at peace. Thinker's own build
+code treats `< 12` as "wants perimeter defence", which is the nearest thing to a house definition
+of a border base, and is where the starter policy's threshold comes from.
+
+It also refreshes once per faction turn while world views are emitted at decision time, so within
+a turn it can lag a few unit moves.
+
+The threshold lives here, in the policy, and not in the adapter. That is deliberate: a threshold
+compiled into the DLL is one nobody can change without a cross-compiler, and "is this a border
+base" is a judgement, while `defend_range` is a fact.
 
 ## Writing one
 
