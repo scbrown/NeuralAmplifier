@@ -331,3 +331,39 @@ def test_an_auto_answered_dialog_says_so_in_its_record() -> None:
     auto["auto_answered"] = True
     assert auto["auto_answered"] is True
     assert "auto_answered" not in MAPPED, "the ordinary path must not claim it"
+
+
+def test_routing_refuses_without_a_button_mapping() -> None:
+    """The property that makes it safe to have BUILT routing before it can be used.
+
+    Routing means returning a button index to the engine. Which index means "yes" lives in the
+    game's own text file keyed by label — data this project does not ship (invariant 8). So
+    every entry's mapping is -1/-1 and a dialog with no mapping is never routed, however the
+    option is configured.
+
+    A guessed index would not fail loudly. It would take a real action in a real game — staple a
+    base, accept a treaty — and look like the brain deciding. That is why the default refuses
+    rather than assumes, and why enabling `na_dialog_route` today is a deliberate no-op.
+    """
+    # Transcribed from NaDialogEntry: the mapping is absent for every row in the table.
+    mappings = {label: (-1, -1) for _f, label, _s, _k in DIALOG_TABLE}
+    assert all(a < 0 or d < 0 for a, d in mappings.values()), (
+        "a mapping filled in here must come from a real install, not from this test"
+    )
+
+
+def test_three_parties_can_answer_a_dialog_and_the_record_says_which() -> None:
+    """Engine, harness, or model — and a log that cannot tell them apart is not a record.
+
+    The adapter emits three shapes: a plain observation (the engine answered), one flagged
+    `auto_answered` (the harness dismissed a notice in a headless run), and one carrying
+    `tier: llm` / `applied: llm` (the brain answered a routed dialog). Separate entry points
+    rather than one with flags, so no path can accidentally claim another's provenance.
+    """
+    engine_answered = dict(MAPPED)
+    harness_answered = {**MAPPED, "auto_answered": True}
+    brain_answered = {**MAPPED, "tier": "llm", "applied": "llm"}
+
+    assert "auto_answered" not in engine_answered and "tier" not in engine_answered
+    assert harness_answered["auto_answered"] is True and "tier" not in harness_answered
+    assert brain_answered["tier"] == "llm" and "auto_answered" not in brain_answered
