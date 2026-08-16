@@ -167,6 +167,21 @@ VOCABULARY: Final[dict[str, Metric]] = {
             "Superdrones and drones across all bases; the constraint that usually binds an "
             "SE choice.",
         ),
+        # The first name here that exists for a *diplomatic* commitment rather than an economic
+        # one, and the reason is na-nmg: a diplomacy answer is a promise about later turns, and
+        # a promise nothing can measure is one the game never notices was broken. Miriam asks
+        # the Peacekeepers to withdraw; "at once" is accepted, the troops stay, and the treaty
+        # breaks without anyone having decided to break it. A directive needs a name to be
+        # written against, and this is that name.
+        _m(
+            "units_in_foreign_territory",
+            "faction",
+            "units",
+            "lower",
+            "Own units standing on another faction's tiles, counting only factions we have "
+            "met. Position, not intent — a unit already marching home still counts until it "
+            "is out, which is what lets a withdrawal promise be seen to be kept.",
+        ),
         # --- base economy.
         _m(
             "mineral_surplus",

@@ -50,6 +50,7 @@
     "pop_total": 4,
     "military_units": 2,
     "drone_total": 1,
+    "units_in_foreign_territory": 0,
     "pop_size": 4,
     "mineral_surplus": 3,
     "minerals_remaining": 26,

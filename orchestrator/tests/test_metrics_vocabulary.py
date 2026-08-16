@@ -39,6 +39,9 @@ THINKER_FACTION = {
     "pop_total",
     "military_units",
     "drone_total",
+    # Swept over Vehs the way drone_total is swept over Bases, through whose_territory so an
+    # unmet faction's land does not count (na-nmg).
+    "units_in_foreign_territory",
 }
 #: ``turns_to_completion`` is emitted *conditionally* — the adapter omits the key when the base
 #: produces no mineral surplus, because a zero there would read as "completes this turn" when
@@ -136,3 +139,65 @@ def test_directives_on_a_real_world_view_are_measurable() -> None:
 
     unmeasurable = [s.directive.metric for s in statuses if s.satisfied is None]
     assert unmeasurable == []
+
+
+# --- the withdrawal promise (na-nmg) ----------------------------------------
+
+
+def test_a_withdrawal_promise_can_be_written_as_a_directive() -> None:
+    """na-nmg's first blocker, lifted.
+
+    The live case, turn 38: Miriam asks the Peacekeepers to withdraw from Believer territory
+    and "Withdraw troops to nearest base" is a promise about LATER turns. A directive is the
+    type that carries a commitment past the dialog, and `Directive.metric` must name something
+    in the vocabulary or it is refused at issue time — so with no name for "units in foreign
+    territory" the one directive that decision most obviously needs could not be written at all.
+    The answer was accepted, the troops stayed, and nothing noticed.
+
+    This asserts only that it is now *expressible and measurable*. Whether a comms surface
+    actually issues it is the rest of na-nmg and needs the dialog interception (na-4lr).
+    """
+    from neural_amplifier.contract import Directive
+    from neural_amplifier.directives import accept, evaluate
+
+    promise = Directive(
+        id="withdraw-from-believer-land",
+        intent="We told Miriam we would pull back at once. Honour it before it costs the treaty.",
+        metric="units_in_foreign_territory",
+        comparator="at_most",
+        target=0,
+        priority=8,
+    )
+    world_view = _fixture().model_copy(
+        update={"metrics": {**(_fixture().metrics or {}), "units_in_foreign_territory": 3}}
+    )
+
+    accepted, rejected = accept([promise], world_view)
+    assert rejected == [], rejected
+    assert [d.id for d in accepted] == ["withdraw-from-believer-land"]
+
+    (status,) = evaluate(accepted, world_view)
+    assert status.current == 3
+    assert status.satisfied is False  # three units still standing on her land
+
+
+def test_the_promise_reads_satisfied_once_the_troops_are_out() -> None:
+    """The other half, and the reason the metric is position rather than intent: it has to be
+    able to go to zero, or "kept" is unrepresentable and the directive nags forever."""
+    from neural_amplifier.contract import Directive
+    from neural_amplifier.directives import evaluate
+
+    promise = Directive(
+        id="withdraw",
+        intent="honour the withdrawal",
+        metric="units_in_foreign_territory",
+        comparator="at_most",
+        target=0,
+    )
+    home = _fixture().model_copy(
+        update={"metrics": {**(_fixture().metrics or {}), "units_in_foreign_territory": 0}}
+    )
+
+    (status,) = evaluate([promise], home)
+    assert status.current == 0
+    assert status.satisfied is True
