@@ -25,3 +25,19 @@ repos:
       - id: ruff
         args: [--fix]
       - id: ruff-format
+
+  # The beads tracker is a git-tracked file written by a tool whose auto-export is GATED:
+  # a second `bd` write shortly after the first does not export, exits 0, and says nothing
+  # (na-2a9, measured). A stale export is a well-formed file with the right id count and
+  # the wrong field values, so review cannot see it — this hook can.
+  #
+  # Check-only: it never writes during a commit. `just beads-export` is the fix, and it
+  # refuses to install an export that loses work relative to HEAD.
+  - repo: local
+    hooks:
+      - id: beads-export-current
+        name: beads export is current
+        entry: scripts/beads-export.py --check
+        language: system
+        files: ^\.beads/issues\.jsonl$
+        pass_filenames: false

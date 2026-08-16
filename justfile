@@ -153,6 +153,19 @@ eval cmd="list" id="":
 surfaces:
     @cd orchestrator && uv run neural-amplifier surfaces
 
+# Refresh the tracked beads JSONL from the store, refusing to write a regression.
+#
+# Use this instead of `bd export`. bd's auto-export on write is GATED — a second write
+# shortly after the first silently does not export (na-2a9) — and `bd export` with no -o
+# writes to stdout and touches no file at all. Both leave the tracked tracker stale with
+# no signal, which has cost two hand repairs on this repo.
+beads-export:
+    @scripts/beads-export.py
+
+# Is the tracked JSONL current with the store? Exits 1 if not. Runs in pre-commit.
+beads-check:
+    @scripts/beads-export.py --check
+
 # Fails if the brain was largely absent or an illegal action slipped through.
 # Summarise a decision log: surfaces fired, fallback rate, adherence
 coverage log="decisions.jsonl" max_degrade_rate="0.05":
