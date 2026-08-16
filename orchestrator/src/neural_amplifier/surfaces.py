@@ -193,6 +193,16 @@ OBSERVED: Final[frozenset[str]] = frozenset(
         # guess wearing the same clothes.
         "econ.corner_market",
         "council.call",
+        # The fourth from na-yd4's 27, and the first here with a genuinely ENUMERABLE action
+        # space: the orbital chooser picks among exactly four satellite types, and each one's
+        # availability is an engine predicate we can ask directly (has_tech for the
+        # prerequisite, satellite_count against satellite_goal for whether the faction still
+        # wants one). Most surfaces in this bucket are binary or open-ended.
+        #
+        # `available` on an option is its own eligibility, NOT a prediction of what
+        # find_satellite will pick — the chooser also weighs an aerospace-complex prerequisite
+        # and a randomised defence bias, so an option can be available and go unchosen.
+        "base.satellite",
     }
 )
 

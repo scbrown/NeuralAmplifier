@@ -469,6 +469,103 @@ COUNCIL_CALL = {
     "applied": "native",
 }
 
+# na_write_head + na_build_base_satellite + na_write_metrics + na_write_base_state.
+# The first record in this bucket with a genuinely enumerable action space.
+BASE_SATELLITE = {
+    "schema_version": "0.1",
+    "engine": "thinker",
+    "scope": "base",
+    "surface_id": "base.satellite",
+    "turn": 42,
+    "faction_id": 1,
+    "faction": "Gaians",
+    "run_id": "68ad1e40-0004e1c8-1a2c",
+    "trace": {"traceparent": "00-0000002a000000010000000707a1c0de-000000070000002b-01"},
+    "base_id": 0,
+    "base": "Gaia's Landing",
+    "has_orbital_access": True,
+    "subjects": [
+        "Orbital Defense Pod",
+        "Nessus Mining Station",
+        "Orbital Power Transmitter",
+        "Sky Hydroponics Lab",
+    ],
+    "metrics": {
+        "energy_reserves": 82,
+        "energy_income": 14,
+        "labs_output": 6,
+        "base_count": 2,
+        "pop_total": 5,
+        "military_units": 3,
+        "drone_total": 1,
+        "units_in_foreign_territory": 0,
+        "mineral_surplus": 2,
+        "minerals_remaining": 26,
+        "pop_size": 3,
+        "turns_to_completion": 13,
+    },
+    "base_state": {
+        "pop_size": 3,
+        "minerals_accumulated": 18,
+        "mineral_surplus": 2,
+        "nutrient_intake": 5,
+        "mineral_intake": 3,
+        "energy_intake": 4,
+        "eco_damage": 0,
+        "worked_tiles": 3,
+        "specialists": 0,
+        "queue_size": 1,
+        "current_item": -4,
+        "current_item_name": "Recycling Tanks",
+    },
+    "action_space": [
+        {
+            "id": "satellite:none",
+            "action": "Build no orbital this turn",
+            "category": "satellite",
+        },
+        # `available` is each option's OWN eligibility, never a prediction of the chooser.
+        # Nessus below is available and still not picked, which is the case that proves it.
+        {
+            "id": "satellite:57",
+            "action": "Orbital Defense Pod",
+            "category": "satellite",
+            "available": True,
+            "built": 0,
+            "goal": 2,
+        },
+        {
+            "id": "satellite:58",
+            "action": "Nessus Mining Station",
+            "category": "satellite",
+            "available": True,
+            "built": 1,
+            "goal": 3,
+        },
+        {
+            "id": "satellite:59",
+            "action": "Orbital Power Transmitter",
+            "category": "satellite",
+            "available": False,
+            "built": 0,
+            "goal": 2,
+        },
+        {
+            "id": "satellite:60",
+            "action": "Sky Hydroponics Lab",
+            "category": "satellite",
+            "available": False,
+            "built": 0,
+            "goal": 2,
+        },
+    ],
+    "action_space_size": 5,
+    "native_choice": "satellite:57",
+    "native_choice_item": -57,
+    "tier": "deterministic",
+    "applied": "native",
+}
+
 ALL_RECORDS = [
     BASE_PRODUCTION,
     BASE_HURRY,
@@ -478,6 +575,7 @@ ALL_RECORDS = [
     BASE_STAPLE,
     ECON_CORNER_MARKET,
     COUNCIL_CALL,
+    BASE_SATELLITE,
 ]
 
 
@@ -1112,3 +1210,59 @@ def test_both_endgame_surfaces_are_observed_not_applied() -> None:
         assert surface in OBSERVED, surface
         assert surface not in APPLIED, surface
         assert surface not in NO_AI_PATH, surface
+
+
+def test_satellite_availability_is_eligibility_not_a_prediction() -> None:
+    """`available` says the option is legal, NOT that the chooser would take it.
+
+    find_satellite also weighs an aerospace-complex prerequisite and a randomised defence bias,
+    so an available option can go unchosen every turn. If `available` were read as a ranking,
+    an eval would score the adapter as disagreeing with the engine on rows where they agree
+    completely.
+
+    The fixture is deliberately a board where TWO options are available and the chooser took
+    the first — the arrangement that makes the distinction observable at all.
+    """
+    world_view = WorldView.model_validate(BASE_SATELLITE)
+    options = [a for a in world_view.action_space if a.id != "satellite:none"]
+    available = [a for a in options if a.model_dump().get("available")]
+    assert len(available) == 2, "need more than one available option to make the point"
+    assert BASE_SATELLITE["native_choice"] in {a.id for a in available}
+    unchosen = [a for a in available if a.id != BASE_SATELLITE["native_choice"]]
+    assert unchosen, "an available-but-unchosen option is the whole point of the fixture"
+
+
+def test_satellite_reports_built_against_goal() -> None:
+    """The reason an available option goes unchosen, in the engine's own numbers.
+
+    find_satellite skips a type once `built + queued >= goal`. Emitting those two rather than a
+    derived `wanted` boolean keeps the threshold where it belongs — in the engine — so a later
+    change to satellite_goal does not silently reinterpret every past row.
+    """
+    for action in BASE_SATELLITE["action_space"]:
+        if action["id"] == "satellite:none":
+            continue
+        assert isinstance(action["built"], int), action["id"]
+        assert isinstance(action["goal"], int), action["id"]
+
+
+def test_satellite_names_the_prerequisite_answer_separately() -> None:
+    """ "Build the aerospace complex first" is not a decline.
+
+    find_satellite has three kinds of answer, and folding the middle one into `satellite:none`
+    would record a base actively working toward orbit as one that turned orbit down — the two
+    look identical afterwards and mean opposite things.
+    """
+    ids = {a["id"] for a in BASE_SATELLITE["action_space"]}
+    assert "satellite:none" in ids
+    # The adapter emits this id only when find_satellite returns -FAC_AEROSPACE_COMPLEX; it is
+    # not one of the offered options, because the chooser reaches it rather than being given it.
+    assert "satellite:aerospace_complex" not in ids
+
+
+def test_satellite_is_observed_not_applied() -> None:
+    from neural_amplifier.surfaces import APPLIED, NO_AI_PATH, OBSERVED
+
+    assert "base.satellite" in OBSERVED
+    assert "base.satellite" not in APPLIED
+    assert "base.satellite" not in NO_AI_PATH

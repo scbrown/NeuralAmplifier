@@ -71,7 +71,7 @@ Per-unit orders fire separately as the engine iterates units (`mod_enemy_turn`
 
 ## 2.5 Instrumentation status — measured 2026-07-29, amended 2026-08-03
 
-**4 of 77 surfaces the brain can actually decide**, plus **5 observed only**. The four apply:
+**4 of 77 surfaces the brain can actually decide**, plus **6 observed only**. The four apply:
 the choice executes, validated against the engine's own availability tests first, so an illegal
 order is rejected rather than applied. A surface is not covered until its decision can be applied
 — `just surfaces` reports it from the frozen registry rather than from this paragraph.
@@ -109,6 +109,22 @@ transition** instead: `STATE_COUNCIL_HAS_CONVENED` off before the call, on after
 engine's answer as a fact rather than an inference about one. Inferring it from
 `can_call_council` would have been wrong in the specific case that matters — eligible and still
 declining — and wrong in the direction that looks like agreement.
+
+`base.satellite` is the fourth from that bucket and the first with a genuinely **enumerable**
+action space. Most surfaces here are binary or open-ended; the orbital chooser picks among
+exactly four satellite types, and each one's availability is an engine predicate we can ask
+directly — `has_tech` for the prerequisite, `satellite_count` against `satellite_goal` for
+whether the faction still wants one. So the record offers the real options with the real
+reasons.
+
+Two distinctions in it are worth keeping straight. `available` is an option's own eligibility
+and **not** a prediction of what `find_satellite` will pick — the chooser also weighs an
+aerospace-complex prerequisite and a randomised defence bias, so an option can be available and
+go unchosen every turn. And "build the aerospace complex first" is recorded as its own answer
+rather than folded into a decline, because a base working toward orbit is not a base that
+turned orbit down. Its probe reports a decline instead of calling the chooser, since that
+chooser reads a randomised bias and a turn-parity skip — asking it twice in one turn can give
+two answers, and a probe must not consume one.
 
 `econ.energy_sliders` is another observed-only one (na-yd4): the adapter records what
 `mod_allocate_energy` chose and every split that was legal, and nothing applies a brain's answer
@@ -151,6 +167,7 @@ not worth changing.
 | `base.staple` | base | `consider_staple` | staple / leave, with drone, talent and specialist counts, prior staple count and riot state | `observe-staple <base_id> [stapled]` |
 | `econ.corner_market` | turn | `mod_faction_upkeep` (AI-only block) | corner / decline, with the live price, the reserve as it stood at decision time, and any corner already running | `observe-corner <faction_id>` |
 | `council.call` | turn | `call_council` (AI-only) | convene / decline, with eligibility from `can_call_council` and the convened flag | `observe-council <faction_id>` |
+| `base.satellite` | base | `find_satellite` | all four orbitals with per-option availability, built count and faction goal, plus decline and build-the-complex-first | `observe-satellite <base_id>` |
 | `base.governor_config` | base | `governor_priorities` | n/a — deterministic tier only so far; records the resolved weights and their source | `observe-gov <base_id>` |
 | `base.abandon` | base | `mod_base_production` (size-1 base, pod ready) | keep / spend the base, with the growth numbers the answer turns on | `observe-abandon <base_id>` |
 | `base.hq_escape` | base | `mod_capture_base` | relocate / don't, with the 1000-credit cost, the reserve, and the engine's chosen destination | `observe-hq-escape <base_id>` |
