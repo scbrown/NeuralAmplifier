@@ -333,6 +333,15 @@ Orders referencing an `action_id` not in the world view's `action_space` should 
 **structurally impossible** — that is the anti-hallucination guarantee of VISION §4. So a
 non-zero count is not a warning, it is a broken invariant. Assert exactly zero.
 
+**`repeated_actions` is the other half, and it is not the same number.** `validate()` also drops
+a choice naming an action already chosen in the same answer. That is legal — the id *was*
+offered — so it must not raise `adherence_violations`, or the one metric that means "broken
+invariant" starts firing on a brain that is merely sloppy. It gets its own count on the record
+and its own line in the coverage summary, with no ceiling to assert: a repeat costs nothing on
+its own, and a brain repeating one id fifty times is a model looping, which without this reads
+exactly like a clean one-choice turn. Both counts accumulate across repair attempts, so a second
+attempt that came back clean does not erase what the first one did.
+
 ### 5.5.1 Divergence — the check that covers rules nobody encoded
 
 Adherence (§5.5) and the adapter's legality gates test **what we thought to check**: the id

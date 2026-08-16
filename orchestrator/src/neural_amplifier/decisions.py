@@ -185,6 +185,15 @@ class DecisionRecord(BaseModel):
     #: impossible by design, so any non-zero value is a broken invariant.
     adherence_violations: int = 0
 
+    #: Choices dropped for naming an action already chosen in the same answer.
+    #: Kept apart from ``adherence_violations`` deliberately: a repeat is legal
+    #: — the id was offered — so folding it in would make the one number that
+    #: means "broken invariant" fire on a brain that is merely sloppy. It is
+    #: still worth counting, because a brain repeating one id fifty times is a
+    #: model looping, and without this the record of that answer is identical
+    #: to the record of a clean one-choice turn.
+    repeated_actions: int = 0
+
     #: What Quipu and Hank contributed (``docs/observability.md`` §7).
     knowledge: KnowledgeBlock = Field(default_factory=KnowledgeBlock)
 

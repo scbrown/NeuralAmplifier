@@ -187,9 +187,10 @@ OBSERVED: Final[frozenset[str]] = frozenset(
 #: - `faction.se` — `na_decide_faction_se`, in/out params read at `faction.cpp`.
 #: - `base.hurry` — `na_decide_base_hurry`, replacing the call at `build.cpp`.
 #:
-#: All four instrumented surfaces now apply, so this equals OBSERVED. That is a milestone, not
-#: a reason to relax the rule: the next surface instrumented starts observation-only and must
-#: not be added here until its own decide path lands, or this number goes back to claiming
+#: Four of the five observed surfaces apply. It briefly equalled OBSERVED, and then
+#: `econ.energy_sliders` was instrumented observation-only and the gap reopened — which is the
+#: rule working, not a regression. A newly instrumented surface starts observation-only and
+#: must not be added here until its own decide path lands, or this number goes back to claiming
 #: influence the brain does not have.
 APPLIED: Final[frozenset[str]] = frozenset(
     {

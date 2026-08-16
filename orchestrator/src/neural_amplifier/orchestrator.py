@@ -210,6 +210,9 @@ class Orchestrator:
         # measurement designed to catch that stop working. A corrected mistake is still a
         # mistake; it is just one that did not cost the turn.
         violations = 0
+        # Same accumulate-don't-overwrite reasoning, for the same reason: a repair attempt that
+        # stopped looping should not erase the evidence that the first attempt did.
+        repeats = 0
         while True:
             try:
                 orders = self.brain.decide(asked)
@@ -224,6 +227,7 @@ class Orchestrator:
 
             checked = validate(orders, asked)
             violations += len(checked.unknown)
+            repeats += len(checked.duplicates)
 
             # Precedence is order: engine legality first, so the guard never sees an
             # action the engine did not offer and cannot re-add one.
@@ -264,6 +268,7 @@ class Orchestrator:
             degrade_reason=degrade_reason,
             latency_ms=int((time.monotonic() - started) * 1000),
             unknown=violations,
+            repeated=repeats,
             fog=fog,
             knowledge=summarise(
                 grounding,
@@ -444,6 +449,9 @@ class Orchestrator:
         knowledge: Knowledge,
         plan: PlanBlock,
         tier: str = "llm",
+        #: Defaults to zero for the deterministic path, where it is not an omission: the brain
+        #: was never asked, so there is no answer that could have repeated itself.
+        repeated: int = 0,
     ) -> DecisionRecord:
         # Derive the ledger when the adapter stamped the *inputs* but not the entries.
         #
@@ -486,6 +494,7 @@ class Orchestrator:
             model=getattr(self.brain, "model", None) or self.brain.name,
             latency_ms=latency_ms,
             adherence_violations=unknown,
+            repeated_actions=repeated,
             knowledge=KnowledgeBlock(**asdict(knowledge)),
             plan=plan,
             redacted_deltas=fog.removed,

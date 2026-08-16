@@ -23,6 +23,10 @@ class Report:
     fired: Counter[str] = field(default_factory=Counter)
     degraded: int = 0
     adherence_violations: int = 0
+    #: Choices dropped as repeats of one already made in the same answer. Not an adherence
+    #: failure — the ids were legal — so it gets its own line rather than a ceiling to assert.
+    #: A run where this climbs is a brain looping, which reads as healthy on every other number.
+    repeated_actions: int = 0
     unknown_surface_ids: set[str] = field(default_factory=set)
     missing_surface_id: int = 0
     #: Decisions the brain was actually asked to make. `total` minus the surfaces
@@ -105,6 +109,7 @@ class Report:
             "deterministic_decisions": self.deterministic_decisions,
             "degrade_rate": round(self.degrade_rate, 4),
             "adherence_violations": self.adherence_violations,
+            "repeated_actions": self.repeated_actions,
             "unknown_surface_ids": sorted(self.unknown_surface_ids),
             "missing_surface_id": self.missing_surface_id,
             "handicaps": sorted(self.handicaps),
@@ -127,6 +132,7 @@ def report(records: Iterable[DecisionRecord]) -> Report:
         if record.degraded:
             out.degraded += 1
         out.adherence_violations += record.adherence_violations
+        out.repeated_actions += record.repeated_actions
         out.handicaps.update(record.fairness_profile)
         out.redacted_deltas += record.redacted_deltas
         if not record.fog_enforced:

@@ -150,6 +150,7 @@ def attributes(record: DecisionRecord) -> dict[str, Any]:
         f"{NAMESPACE}.action_space_size": record.action_space_size,
         f"{NAMESPACE}.degraded": record.degraded,
         f"{NAMESPACE}.adherence_violations": record.adherence_violations,
+        f"{NAMESPACE}.repeated_actions": record.repeated_actions,
         # Carried on every span so a result stays interpretable in the live
         # view too, not only in the JSONL after the fact.
         f"{NAMESPACE}.fairness.handicaps": handicaps,

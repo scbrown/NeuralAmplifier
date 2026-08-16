@@ -82,6 +82,74 @@ def test_an_illegal_choice_gets_one_chance_to_be_corrected(thinker_base: WorldVi
     assert brain.calls[1].advisories and "no legal choices" in brain.calls[1].advisories[0]
 
 
+def test_a_repeated_choice_is_counted_without_breaking_adherence(thinker_base: WorldView) -> None:
+    """`Validation.duplicates` used to be computed and then consumed nowhere, so a brain
+    repeating one id fifty times produced a record identical to a clean one-choice turn.
+
+    It gets its own count rather than being folded into `adherence_violations`: the id was
+    offered, so the repeat is legal, and the violation count is the number that means "broken
+    invariant" and must not fire on a brain that is merely looping.
+    """
+    brain = ScriptedBrain(
+        [Orders(choices=[Choice(action_id="a1"), Choice(action_id="a1"), Choice(action_id="a1")])]
+    )
+    result = Orchestrator(brain).decide(thinker_base)
+
+    assert [c.action_id for c in result.orders.choices] == ["a1"]
+    assert result.record.repeated_actions == 2
+    assert result.record.adherence_violations == 0
+    assert result.orders.degraded is False
+
+
+def test_repeats_accumulate_across_repair_attempts() -> None:
+    """Same reasoning as the violation count: a second attempt that came back clean must not
+    erase the evidence that the first one looped.
+
+    The first answer repeats an order the state cannot pay for, so the duplicate is dropped by
+    `validate` and the survivor is then denied by the guard — nothing left, and the decision is
+    re-asked. Taking the count from the last attempt would report zero.
+    """
+    from neural_amplifier.contract import Action
+    from neural_amplifier.hank import StateGuard
+
+    hurry = Action(id="hurry:now", action="Hurry production", effects={"energy_reserves": -81.0})
+    world_view = WorldView(
+        engine="thinker",
+        scope="base",
+        turn=42,
+        faction="Gaians",
+        surface_id="base.hurry",
+        action_space=[hurry, Action(id="hurry:none", action="Do not hurry")],
+        metrics={"energy_reserves": 40},
+    )
+    brain = ScriptedBrain(
+        responses=[
+            Orders(choices=[Choice(action_id="hurry:now"), Choice(action_id="hurry:now")]),
+            Orders(choices=[Choice(action_id="hurry:none")]),
+        ]
+    )
+    result = Orchestrator(brain, guard=StateGuard()).decide(world_view)
+
+    assert len(brain.calls) == 2
+    assert [c.action_id for c in result.orders.choices] == ["hurry:none"]
+    assert result.record.repeated_actions == 1
+    assert result.record.adherence_violations == 0
+
+
+def test_a_clean_decision_reports_no_repeats(thinker_base: WorldView) -> None:
+    """The baseline the count is read against — and the deterministic path, where the brain was
+    never asked, so there is no answer that could have repeated itself."""
+    from neural_amplifier.policy import SurfacePolicy
+
+    brain = ScriptedBrain([Orders(choices=[Choice(action_id="a1")])])
+    assert Orchestrator(brain).decide(thinker_base).record.repeated_actions == 0
+
+    off = SurfacePolicy(toggles={}, default=False, source=Path("na.toml"))
+    assert (
+        Orchestrator(ScriptedBrain(), policy=off).decide(thinker_base).record.repeated_actions == 0
+    )
+
+
 def test_partly_illegal_orders_keep_the_legal_part(thinker_base: WorldView) -> None:
     brain = ScriptedBrain([Orders(choices=[Choice(action_id="a1"), Choice(action_id="bogus")])])
     result = Orchestrator(brain).decide(thinker_base)
