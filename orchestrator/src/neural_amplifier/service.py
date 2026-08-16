@@ -495,6 +495,34 @@ def create_app(
                 ]
             }
 
+        @app.post("/agent/whatif")
+        def agent_whatif(body: dict[str, object]) -> dict[str, object]:
+            """Speculatively apply one offered action and report what it reaches.
+
+            Read-only on the game and on the queue: it neither answers the decision nor claims
+            it, so an agent can ask about three options and then submit a fourth. Yupana applies
+            the order to a copy-on-write overlay and commits nothing.
+
+            Never fails the request for want of a board. An unconfigured or unreachable yupana
+            comes back as ``unavailable`` with the reason, the same shape as an unknown action
+            id — this is a convenience mid-decision, and a 500 here would teach an agent to stop
+            asking rather than to read the answer.
+            """
+            decision_id = str(body.get("decision_id") or "")
+            action_id = str(body.get("action_id") or "")
+            pending = queue.peek(decision_id)
+            if pending is None:
+                raise HTTPException(status_code=404, detail=f"no decision {decision_id!r}")
+
+            from .yupana import YupanaGuard, what_if
+
+            guard = YupanaGuard(policies=load_policies(), game_id=orchestrator.game_id)
+            return {
+                "decision_id": decision_id,
+                "action_id": action_id,
+                "whatif": what_if(guard, pending.world_view, action_id),
+            }
+
     # ---------------------------------------------------------------- engine outcomes
     #
     # Mounted in EVERY mode, unlike /agent/*. This is the adapter reporting what the engine did,

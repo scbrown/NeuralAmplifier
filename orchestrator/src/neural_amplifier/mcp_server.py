@@ -98,6 +98,9 @@ class OrchestratorClient:
     def outcomes(self, cursor: int) -> dict[str, Any]:
         return self._call("/agent/outcomes", {"cursor": cursor})
 
+    def whatif(self, decision_id: str, action_id: str) -> dict[str, Any]:
+        return self._call("/agent/whatif", {"decision_id": decision_id, "action_id": action_id})
+
 
 class AgentError(RuntimeError):
     """Something the model should read and respond to, not a crash."""
@@ -246,6 +249,25 @@ def build_server(client: OrchestratorClient) -> Any:
         answered something, this is how to find out without guessing.
         """
         return json.dumps(client.waiting(), indent=2)
+
+    @server.tool()
+    def what_if(decision_id: str, action_id: str) -> str:
+        """Try an option on the board before you commit to it.
+
+        Speculative and free of consequence: the move is applied to a copy of this faction's
+        board, its reach is reported, and nothing is committed. It does not answer or claim the
+        decision, so you can ask about three options and then submit a fourth.
+
+        What comes back is STRUCTURAL — which board entities the move changes and what those
+        changes reach, ranked nearest-then-largest. It is not a verdict and not a
+        recommendation: "this move touches these four bases" is a fact, "this move is reckless"
+        is a judgement, and only the first is here. The guard is what holds judgements, as
+        policies, and it runs on submit whether or not you asked this.
+
+        `unavailable` with a reason means no board is attached to this game, or the action id is
+        not one this decision offered. That is an answer, not an error — carry on and decide.
+        """
+        return json.dumps(client.whatif(decision_id, action_id), indent=2)
 
     @server.tool()
     def issue_order(verb: str, args: list[int]) -> str:

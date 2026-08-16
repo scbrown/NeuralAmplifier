@@ -47,7 +47,7 @@ import urllib.request
 import uuid
 from typing import Any
 
-from .contract import Orders, WorldView
+from .contract import Choice, Orders, WorldView
 from .knowledge import Ruling
 
 #: Every node kind and attribute name this module ingests is prefixed with this, and the
@@ -284,7 +284,11 @@ class YupanaGuard:
         timeout: float = 2.0,
         client: Any | None = None,
     ) -> None:
-        self.url = (url or os.environ.get("NA_YUPANA_URL", "")).rstrip("/")
+        # ``None`` means "take it from the environment"; ``""`` means "explicitly none". They
+        # were the same thing until a test asked for a disabled guard inside a run that had
+        # NA_YUPANA_URL set and silently got a live one. A caller that passes a value should
+        # get the value it passed.
+        self.url = (os.environ.get("NA_YUPANA_URL", "") if url is None else url).rstrip("/")
         #: Passed on every call rather than held resident by yupana, deliberately: policies are
         #: authored in Quipu and projected, and a resident copy would enforce yesterday's
         #: governance while looking current.
@@ -310,6 +314,14 @@ class YupanaGuard:
                     # common knowledge, and a shared write carrying a faction is a fog leak —
                     # yupana refuses and counts it, which is a control we should never trip.
                     "visibility": "private",
+                    # This world view IS the board, not a patch on the last one. Without it
+                    # yupana's ingest merges, so a base razed twenty turns ago survives every
+                    # later decision that simply does not list it and goes on matching policy
+                    # selectors — the brain warned forever about a base it no longer owns.
+                    # Needs yupana >= 0.6.1; an older one ignores the field and merges, which
+                    # is the behaviour we had, so this degrades to the old bug rather than to
+                    # an error.
+                    "replace": True,
                     "entities": entities(world_view),
                     "edges": [],
                 },
@@ -329,6 +341,63 @@ class YupanaGuard:
             return Ruling(degraded=True, reason=f"{type(exc).__name__}: {exc}")
 
         return _ruling(report)
+
+
+def what_if(guard: YupanaGuard, world_view: WorldView, action_id: str) -> dict[str, Any]:
+    """What would this action change, and what do those changes reach — Hank role (e).
+
+    The question the guard cannot answer. A guard says "this breaks a rule"; this says "here is
+    what moves, and here is what it touches", which is what a player actually wants before
+    committing. Speculative throughout: yupana applies the order to a copy-on-write overlay and
+    nothing is committed, so asking is free of consequence.
+
+    Structural only, and deliberately. Yupana ranks what a change reaches over the adapter's own
+    vocabulary; it does not know that a base is "exposed" or a move "risky". Domain judgements
+    are graph-pattern policies and belong in the guard — building them in here would put a second
+    opinion about the game in a module whose whole value is having none.
+
+    Returns yupana's report, or a ``{"unavailable": reason}`` envelope. Never raises: this is a
+    convenience an agent calls mid-decision, and an unreachable yupana must cost the answer to
+    one question rather than the turn.
+    """
+    if guard.client is None:
+        return {"unavailable": "no yupana configured"}
+    if not any(a.id == action_id for a in world_view.action_space):
+        # The engine's action space is the whole truth about legality (invariant 1), and it is
+        # also the whole truth about what there is to ask about. Speculating on an id nobody
+        # offered would answer a question about a move that cannot be made.
+        return {"unavailable": f"{action_id!r} is not in this decision's action space"}
+
+    orders = proposed(Orders(choices=[Choice(action_id=action_id)]), world_view)
+    try:
+        guard.client.call(
+            "yupana_ingest",
+            {
+                "game_id": guard.game_id,
+                "faction_id": world_view.faction,
+                "visibility": "private",
+                # Same reason as the guard's, and here it is load-bearing for a different
+                # rule: `what_if` may only ever speak about entities THIS world view carried,
+                # or it becomes a second source of board state — which the MCP surface
+                # explicitly forbids (test_mcp_server.py). Replace is what makes that closure
+                # true rather than hoped for.
+                "replace": True,
+                "entities": entities(world_view),
+                "edges": [],
+            },
+        )
+        return guard.client.call(
+            "yupana_whatif",
+            {
+                "game_id": guard.game_id,
+                "faction_id": world_view.faction,
+                "orders": orders,
+            },
+        )
+    except YupanaError as exc:
+        return {"unavailable": str(exc)}
+    except Exception as exc:
+        return {"unavailable": f"{type(exc).__name__}: {exc}"}
 
 
 def _ruling(report: dict[str, Any]) -> Ruling:

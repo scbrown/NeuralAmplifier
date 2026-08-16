@@ -505,6 +505,29 @@ resident by yupana, because they are authored in Quipu and projected, and a resi
 enforce yesterday's governance while looking current. `policies/` holds a starter set and the
 guide to writing one.
 
+**Every ingest states the whole board, not a patch on it.** Yupana's ingest merges by default,
+which is right for a caller sending increments and wrong for this one: the world view *is* the
+board, so a base razed twenty turns ago would survive every later decision that simply does not
+list it and go on matching policy selectors — the brain warned forever about a base it no longer
+owns. The ingest is therefore sent with `replace` (yupana 0.6.1), which clears the tenant's
+private layer first. Scoping a fresh `game_id` per decision would not have worked: yupana's
+tenant cap refuses rather than evicting, deliberately, so it would exhaust 64 tenants and then
+refuse everything.
+
+### What-if (K6 role e)
+
+`what_if` on the MCP surface answers the question the guard cannot: not "does this break a rule"
+but "what does this move change, and what do those changes reach". Speculative — yupana applies
+the order to an overlay and commits nothing — and structural only, ranked nearest-then-largest
+over the adapter's own vocabulary. It neither claims nor answers the decision, so an agent can
+try three options and submit a fourth.
+
+It is the one tool on that surface that touches board state, and it qualifies only because of
+the `replace` behaviour above. The rule there is **no second source of board state**: `what_if`
+speculates over a board composed entirely from the decision's own world view, so it cannot report
+an entity the agent was not already handed. Without `replace` that closure is false, and the tool
+becomes exactly the thing the rule forbids.
+
 **What is live today.** `reserves-stay-solvent` is verified end to end: reserves 40, a hurry
 costing 81, and the guard denies, the brain is re-asked with the policy's claim, and it takes the
 legal alternative — one decision, `repairs: 1`, not a lost turn.

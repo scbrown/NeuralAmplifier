@@ -54,6 +54,24 @@ SOLVENCY = {
 }
 
 
+GARRISON = {
+    "label": "garrison-exposed-bases",
+    "targets": f"{VOCAB}BaseState",
+    "claim": "A base near a hostile faction must keep at least one garrison unit",
+    "boundary": "order",
+    "effect": "deny",
+    "selector": {
+        "selector_lang": "graph-pattern",
+        "evidence_source": f"?b a {VOCAB}BaseState ; {VOCAB}defend_range ?d | ?d < 12",
+    },
+    "predicate": {
+        "selector_lang": "graph-pattern",
+        "match_type": "must-match",
+        "evidence_source": f"?b a {VOCAB}BaseState ; {VOCAB}garrison_count ?g | ?g >= 1",
+    },
+}
+
+
 def hurry_view(reserves: float = 40, **extra: Any) -> WorldView:
     return WorldView(
         engine="thinker",
@@ -505,3 +523,104 @@ def test_the_starter_policies_select_on_fields_the_adapter_publishes() -> None:
                 if name.endswith("State"):
                     continue
                 assert name in published, f"{policy['label']}.{half} selects on unpublished {name}"
+
+
+# --- what-if (Hank role e) --------------------------------------------------
+
+
+def test_what_if_refuses_an_action_the_decision_never_offered() -> None:
+    """The engine's action space is the whole truth about legality (invariant 1) and also about
+    what there is to ask about. Speculating on an id nobody offered would answer a question
+    about a move that cannot be made — and would do it without ever calling yupana."""
+    from neural_amplifier.yupana import what_if
+
+    client = FakeClient()
+    answer = what_if(YupanaGuard(client=client), hurry_view(), "nuke:everything")
+
+    assert "not in this decision's action space" in answer["unavailable"]
+    assert client.calls == []
+
+
+def test_what_if_never_raises() -> None:
+    """A convenience an agent calls mid-decision. An unreachable yupana must cost the answer to
+    one question, not the turn."""
+    from neural_amplifier.yupana import what_if
+
+    guard = YupanaGuard(client=FakeClient(raises=YupanaError("connection refused")))
+    assert "connection refused" in what_if(guard, hurry_view(), "hurry:now")["unavailable"]
+
+    guard = YupanaGuard(client=FakeClient(raises=ValueError("kaboom")))
+    assert "ValueError" in what_if(guard, hurry_view(), "hurry:now")["unavailable"]
+
+    assert what_if(YupanaGuard(url=""), hurry_view(), "hurry:now")["unavailable"]
+
+
+def test_the_speculative_board_is_only_this_world_view() -> None:
+    """What makes `what_if` admissible on the MCP surface at all.
+
+    That surface forbids any tool that offers a second source of board state. `what_if`
+    qualifies only because the board it speculates over is composed entirely from the
+    decision's own world view — so it cannot surface an entity the agent was not already
+    handed. `replace` is what makes that true: without it yupana's ingest merges and a base
+    from an earlier decision survives into this one.
+    """
+    from neural_amplifier.yupana import what_if
+
+    client = FakeClient()
+    what_if(YupanaGuard(client=client), hurry_view(bases=[ADAPTER_BASE]), "hurry:now")
+
+    (tool, args) = client.calls[0]
+    assert tool == "yupana_ingest"
+    assert args["replace"] is True
+    assert {e["name"] for e in args["entities"]} == {FACTION_NODE, "base:1"}
+
+
+def test_the_guard_also_states_the_whole_board_rather_than_patching_it() -> None:
+    """The same fix, and on the guard it prevents a different symptom: a base razed twenty turns
+    ago surviving every later ingest that does not list it, and going on matching policy
+    selectors — the brain warned forever about a base it no longer owns."""
+    client = FakeClient()
+    YupanaGuard(client=client).rule(Orders(choices=[Choice(action_id="hurry:none")]), hurry_view())
+
+    (tool, args) = client.calls[0]
+    assert tool == "yupana_ingest"
+    assert args["replace"] is True
+
+
+@live
+def test_a_lost_base_stops_being_reported(tmp_path: Path) -> None:
+    """The staleness bug, end to end against a real yupana: warn about an exposed empty base on
+    turn 42, and say nothing about it on turn 60 once the world view stops listing it."""
+    from neural_amplifier.yupana import what_if  # noqa: F401  (imported for symmetry)
+
+    guard = YupanaGuard(url=YUPANA_URL, policies=[GARRISON], game_id="test-stale")
+    act = [Action(id="fac:4", action="Recycling Tanks")]
+    order = Orders(choices=[Choice(action_id="fac:4")])
+
+    held = WorldView(
+        engine="thinker",
+        scope="base",
+        turn=42,
+        faction="GAIANS",
+        surface_id="base.production",
+        metrics={"energy_reserves": 100},
+        action_space=act,
+        bases=[{"id": "base:9", "garrison_count": 0, "defend_range": 8}],
+    )
+    assert any("garrison" in a for a in guard.rule(order, held).advisories)
+
+    lost = held.model_copy(update={"turn": 60, "bases": []})
+    advisories = guard.rule(order, lost).advisories
+    assert not any("already true before these orders" in a for a in advisories)
+
+
+@live
+def test_what_if_reports_what_the_move_changes() -> None:
+    from neural_amplifier.yupana import what_if
+
+    guard = YupanaGuard(url=YUPANA_URL, policies=[], game_id="test-whatif")
+    answer = what_if(guard, hurry_view(reserves=200), "hurry:now")
+
+    assert "unavailable" not in answer
+    assert answer["committed"] is False  # speculative, always
+    assert any("energy_reserves" in c.get("detail", "") for c in answer["changes"])

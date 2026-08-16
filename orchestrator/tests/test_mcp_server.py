@@ -131,6 +131,15 @@ def test_the_surface_is_answering_plus_acting_and_nothing_that_reads_the_board()
     So the guard below is the one that actually protects the principle: no tool may offer to read
     the board. Keeping the count instead would have blocked a safe addition while permitting an
     unsafe one with a familiar name.
+
+    `what_if` is the addition that tested that reasoning, and it only qualifies because of a
+    property that had to be BUILT rather than assumed. It speculates over a board composed
+    entirely from the decision's own world view, so it cannot report an entity the agent was not
+    already handed — it derives from the one source rather than adding a second. That closure was
+    false when it was first written: yupana's ingest merges, so a base from an earlier decision
+    survived into this one and `what_if` would have surfaced it. It is true now because the
+    ingest is sent with `replace`, which makes the world view the whole of the board (yupana
+    0.6.1). Take that away and this tool becomes exactly the thing this test forbids.
     """
     named = tools(build_server(FakeClient()))
     assert set(named) == {
@@ -141,6 +150,7 @@ def test_the_surface_is_answering_plus_acting_and_nothing_that_reads_the_board()
         "issue_order",
         "issue_orders",
         "order_outcomes",
+        "what_if",
     }
 
 
