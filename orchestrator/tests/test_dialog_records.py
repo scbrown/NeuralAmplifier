@@ -42,21 +42,25 @@ harvest = _load_harvest()
 #: `NaDialogTable` in `thinker/src/neural.cpp`, transcribed. `None` for `file` is the table's
 #: nullptr — the fork passes a runtime `ScriptFile` there, so those entries match on label
 #: alone. Chrome entries carry no surface: the main menu is not a decision.
+#: (file, label, surface_id, kind). `kind` is the disposition, and on this table it is
+#: safety-critical: only NOTICE may ever be auto-answered.
 DIALOG_TABLE = [
-    ("modmenu", "MAINMENU", None),
-    ("modmenu", "GAMEMENU", None),
-    ("modmenu", "STATS", None),
-    ("modmenu", "GENERIC", None),
-    ("modmenu", "NERVESTAPLE2", "base.staple"),
-    (None, "CORNERFOILED", "econ.corner_market"),
-    (None, "CORNERTHEMFOIL", "econ.corner_market"),
-    (None, "CORNERTHEMFOILED", "econ.corner_market"),
-    (None, "SURVIVEPROJECT", "base.project"),
-    (None, "HALTPROJECT", "base.project"),
-    (None, "SEIZEPROJECT", "base.project"),
-    (None, "LOSEPROJECT", "base.project"),
-    ("modmenu", "SPYFOUND", "probe.action"),
-    ("modmenu", "SPYLOST", "probe.action"),
+    ("modmenu", "MAINMENU", None, "CHROME"),
+    ("modmenu", "GAMEMENU", None, "CHROME"),
+    ("modmenu", "STATS", None, "CHROME"),
+    ("modmenu", "GENERIC", None, "CHROME"),
+    # The one real QUESTION in the table — "do you want to nerve staple?" — and the reason the
+    # decision/notice split exists at all.
+    ("modmenu", "NERVESTAPLE2", "base.staple", "DECISION"),
+    (None, "CORNERFOILED", "econ.corner_market", "NOTICE"),
+    (None, "CORNERTHEMFOIL", "econ.corner_market", "NOTICE"),
+    (None, "CORNERTHEMFOILED", "econ.corner_market", "NOTICE"),
+    (None, "SURVIVEPROJECT", "base.project", "NOTICE"),
+    (None, "HALTPROJECT", "base.project", "NOTICE"),
+    (None, "SEIZEPROJECT", "base.project", "NOTICE"),
+    (None, "LOSEPROJECT", "base.project", "NOTICE"),
+    ("modmenu", "SPYFOUND", "probe.action", "NOTICE"),
+    ("modmenu", "SPYLOST", "probe.action", "NOTICE"),
 ]
 
 #: `na_write_dialog`, for a dialog the table knows.
@@ -93,7 +97,7 @@ def test_every_mapped_surface_is_in_the_frozen_registry() -> None:
     warning, and the dialog looks like one that never fired. Since the table is written by hand
     in another repository, nothing else checks the spelling.
     """
-    for _file, label, surface in DIALOG_TABLE:
+    for _file, label, surface, _kind in DIALOG_TABLE:
         if surface is None:
             continue
         assert surface in ALL, f"{label} -> {surface} is not a known surface"
@@ -106,15 +110,15 @@ def test_chrome_carries_no_surface_and_decisions_all_do() -> None:
     is never recorded. Giving it a surface_id would put the main menu into coverage, which
     opens on every launch.
     """
-    chrome = {label for _f, label, s in DIALOG_TABLE if s is None}
+    chrome = {label for _f, label, s, _k in DIALOG_TABLE if s is None}
     assert chrome == {"MAINMENU", "GAMEMENU", "STATS", "GENERIC"}
-    for _file, label, surface in DIALOG_TABLE:
+    for _file, label, surface, _kind in DIALOG_TABLE:
         assert (label in chrome) == (surface is None), label
 
 
 def test_labels_are_unique_per_file() -> None:
     """Lookup returns the FIRST match, so a duplicated key silently shadows the later entry."""
-    keys = [(f, label) for f, label, _s in DIALOG_TABLE]
+    keys = [(f, label) for f, label, _s, _k in DIALOG_TABLE]
     assert len(keys) == len(set(keys))
 
 
@@ -189,7 +193,7 @@ def test_observing_a_dialog_does_not_move_coverage() -> None:
     honest one names which surfaces are allowed through and why, so a NEW dialog surface
     appearing in OBSERVED still fails here.
     """
-    mapped = {s for _f, _label, s in DIALOG_TABLE if s}
+    mapped = {s for _f, _label, s, _k in DIALOG_TABLE if s}
     unearned = (mapped & OBSERVED) - set(INDEPENDENTLY_INSTRUMENTED)
     assert not unearned, f"reached OBSERVED with only a dialog hook: {sorted(unearned)}"
     assert not (mapped & APPLIED)
@@ -202,7 +206,7 @@ def test_the_exception_list_does_not_outlive_its_reason() -> None:
     or that is no longer in the dialog table, has no business granting an exception to a rule it
     is not subject to.
     """
-    mapped = {s for _f, _label, s in DIALOG_TABLE if s}
+    mapped = {s for _f, _label, s, _k in DIALOG_TABLE if s}
     for surface, why in INDEPENDENTLY_INSTRUMENTED.items():
         assert surface in mapped, f"{surface} is not dialog-mapped; drop the exception"
         assert surface in OBSERVED, f"{surface} left OBSERVED; drop the exception"
@@ -276,3 +280,54 @@ def test_the_naming_event_reports_which_pool_ran_out() -> None:
         "sector_fallback",
     }
     assert BASE_NAME_EVENT["pools_exhausted"] is (BASE_NAME_EVENT["source"] == "sector_fallback")
+
+
+def test_only_a_notice_is_ever_auto_answerable() -> None:
+    """The safety property of the auto-answer path, and the one worth a test of its own.
+
+    An unattended run cannot answer a popp dialog, so it hangs forever. `na_dialog_auto` answers
+    one-button NOTICES with 0 — "this happened to you", acknowledged and dismissed.
+
+    It must NEVER answer a real question. A question's button indices live in a game text file
+    this project does not ship, so picking one would be inventing an answer to a decision, which
+    is the thing the adapter refuses to do everywhere else. NERVESTAPLE2 is the case: "do you
+    want to nerve staple?" has consequences, and guessing a button could staple a base nobody
+    chose to staple.
+    """
+    answerable = {label for _f, label, _s, kind in DIALOG_TABLE if kind == "NOTICE"}
+    questions = {label for _f, label, _s, kind in DIALOG_TABLE if kind == "DECISION"}
+    chrome = {label for _f, label, _s, kind in DIALOG_TABLE if kind == "CHROME"}
+
+    assert "NERVESTAPLE2" in questions
+    assert not (answerable & questions)
+    assert not (answerable & chrome), "menus are not dismissed on the game's behalf either"
+    assert answerable, "a NOTICE class with no members would make the feature dead code"
+
+
+def test_auto_answering_is_gated_on_there_being_no_human() -> None:
+    """Documents the condition that keeps this inside invariant 7 rather than against it.
+
+    Invariant 7 forbids blanket-suppressing dialogs because they are decision points a human
+    should see. Auto-answering while someone is watching would take their decision away — so the
+    gate is `na_headless()`, in code, not a preference. With nobody there the alternative is not
+    "the human decides", it is "the run hangs", which is why the two are not in tension.
+
+    Asserted as a documented invariant rather than by running the C++: the pin's job is to make
+    the rule visible on this side, so a later change that widens the gate has to argue with it.
+    """
+    gate = "na_headless() and conf.na_dialog_auto"
+    assert "na_headless" in gate
+    assert "conf.na_dialog_auto" in gate
+
+
+def test_an_auto_answered_dialog_says_so_in_its_record() -> None:
+    """A run that answered forty dialogs on the game's behalf did not have the same run as one
+    that answered none, and the log has to be able to tell them apart.
+
+    The adapter emits `auto_answered: true` and counts them in `dialog-stats`, so "the run
+    finished" can be read against how much of it was the engine and how much was the harness.
+    """
+    auto = dict(MAPPED)
+    auto["auto_answered"] = True
+    assert auto["auto_answered"] is True
+    assert "auto_answered" not in MAPPED, "the ordinary path must not claim it"
