@@ -125,10 +125,19 @@ def test_orders_are_serialised(tmp_path: Path) -> None:
     """One command file, one result slot. Concurrency here does not go slowly wrong, it goes
     silently wrong — two orders in flight and a result belongs to whichever finished last."""
     seen: list[str] = []
+    # The adapter runs until the test says stop, not for a fixed number of polls. It used to
+    # loop 600 times at 5ms — exactly the 3s the issuers below allow — so on a loaded machine
+    # the fake adapter stopped serving before the last caller gave up, and the test failed
+    # claiming an order never arrived when what actually happened is that nobody was listening
+    # (na-5w2). The subject here is serialisation, so the clock should not be able to decide it.
+    done = threading.Event()
 
     def adapter() -> None:
         cmd = tmp_path / "na-command"
-        for _ in range(600):
+        # A safety net far above any real run, so a hang is still a failing test rather than a
+        # hung suite. It is not a deadline the test is expected to approach.
+        deadline = time.monotonic() + 30.0
+        while not done.is_set() and time.monotonic() < deadline:
             if cmd.exists():
                 line = cmd.read_text(encoding="utf-8").strip()
                 cmd.unlink()
@@ -137,9 +146,10 @@ def test_orders_are_serialised(tmp_path: Path) -> None:
                     json.dumps({"command": line.split()[0], "detail": line, "ok": True}),
                     encoding="utf-8",
                 )
-            time.sleep(0.005)
+            time.sleep(0.001)
 
-    threading.Thread(target=adapter, daemon=True).start()
+    serving = threading.Thread(target=adapter, daemon=True)
+    serving.start()
     channel = OrderChannel(tmp_path)
     results: list[str] = []
 
@@ -151,6 +161,8 @@ def test_orders_are_serialised(tmp_path: Path) -> None:
         t.start()
     for t in threads:
         t.join()
+    done.set()
+    serving.join(timeout=5.0)
 
     assert len(seen) == 4, "every order reached the adapter"
     assert sorted(results) == sorted(seen), "each caller got its OWN order's result"
