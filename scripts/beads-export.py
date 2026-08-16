@@ -107,9 +107,7 @@ def regressions(before: dict[str, dict], after: dict[str, dict]) -> list[str]:
         old_comments = len(old.get("comments") or [])
         new_comments = len(new.get("comments") or [])
         if new_comments < old_comments:
-            problems.append(
-                f"{issue_id}: comments {old_comments} -> {new_comments}"
-            )
+            problems.append(f"{issue_id}: comments {old_comments} -> {new_comments}")
 
     return problems
 

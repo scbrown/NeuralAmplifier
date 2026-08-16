@@ -472,7 +472,19 @@ Haiku, kept separate from the brain's model so the two can be priced independent
 - **K4 — Hank grounding (role a). Wired** — `just code-graph` promotes the Thinker fork's code
   structure and links each surface to the function that decides it via `smac:computedBy`
   (`datalinks/computed-by.ttl`). "How does the engine *actually* score this" is a graph hop.
-  Signing is still unkeyed.
+
+  **Signing is unkeyed, and the last step is deliberately a human's.** The mechanism is
+  complete on Yupana's side — ed25519 key generation with 0600 custody, verdict signing, and
+  spooling, all mirroring Quipu's own `signing.rs` so a Yupana-signed verdict verifies under
+  Quipu's root of trust. What is missing is a registration: a signature means nothing until its
+  public key is recorded in Quipu as an `aegis:VerifierRegistration`, and *that registration is
+  the root of trust*.
+
+  `just signing-identity` prints the key and the exact registration to knot — and stops there.
+  A tool that minted a key and registered it for you would produce something that looks
+  cryptographically trusted and is not: it would be asserting its own trustworthiness, which is
+  the one claim a signature cannot make about itself. Until a human knots that registration,
+  engine-observed facts are trusted-advisory, which is what this line has always said.
 - **K5 — Hank dev guardrails (role b). Wired** — `.bobbin/config.toml` holds structural rules
   over this repository's own invariants, run by `yupana hook pre-edit` from a `PreToolUse` hook.
   Advise-mode and fails open twice over (the shell guard, then yupana's own). `.bobbin/README.md`

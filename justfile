@@ -251,6 +251,42 @@ code-graph db=".quipu/code.db":
     # string reads to it as the start of a new recipe.
     quipu read 'PREFIX smac: <http://neuralamplifier.local/ontology/smac/> PREFIX bobbin: <http://aegis.gastown.local/ontology/> PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#> SELECT ?name ?fn ?file WHERE { ?s rdfs:label ?name ; smac:computedBy ?sym . ?sym bobbin:name ?fn ; bobbin:definedIn ?mod . ?mod bobbin:filePath ?file . }' --db "{{db}}"
 
+# Print yupana's signing identity and the exact registration to knot into Quipu.
+#
+# THE LAST STEP IS DELIBERATELY YOURS, NOT THIS RECIPE'S. Promotion signing is complete on
+# yupana's side — key generation, signing, verdict spooling — but a signature only means
+# something once its public key is registered in Quipu as an `aegis:VerifierRegistration`, and
+# that registration IS the root of trust. A tool that minted a key and registered it for you
+# would produce something that looks cryptographically trusted and is not: it would be asserting
+# its own trustworthiness, which is the one claim a signature cannot make about itself.
+#
+# So this prints. You read it, and you knot it if you agree.
+signing-identity key=".quipu/yupana-signing.pk8":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    mkdir -p "$(dirname "{{key}}")"
+    # Creates the key 0600 on first run; prints the existing one after that.
+    pub=$(yupana verifier --key-path "{{key}}" 2>/dev/null | tr -d '[:space:]')
+    if [ -z "$pub" ]; then
+        echo "yupana verifier produced no key — is yupana built with --features quipu?" >&2
+        exit 1
+    fi
+    echo "yupana signing identity"
+    echo "  key file   {{key}}   (private, 0600, never commit)"
+    echo "  public key $pub"
+    echo
+    echo "To make signatures from this identity mean something, knot this into Quipu:"
+    echo
+    echo "@prefix aegis: <http://aegis.gastown.local/ontology/> ."
+    echo "@prefix rdfs:  <http://www.w3.org/2000/01/rdf-schema#> ."
+    echo
+    echo "<http://aegis.gastown.local/ontology/verifier_yupana> a aegis:VerifierRegistration ;"
+    echo "    rdfs:label \"yupana\" ;"
+    echo "    aegis:publicKey \"$pub\" ."
+    echo
+    echo "Read it first. Registering a key is declaring what you trust, and nothing"
+    echo "downstream can tell a key you vouched for from one that vouched for itself."
+
 # === Quipu (knowledge graph) ===
 
 # Needs `quipu` built with --features shacl,onnx (scripts/setup-environment.sh).
