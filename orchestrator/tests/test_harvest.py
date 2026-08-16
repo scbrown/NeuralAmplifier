@@ -91,7 +91,7 @@ def test_the_play_directory_is_accepted_in_place_of_the_file(tmp_path: Path) -> 
 
 
 def test_each_capture_reports_which_sink_it_came_from(tmp_path: Path) -> None:
-    """"The store had it" and "only the log had it" are different facts about a run, and
+    """ "The store had it" and "only the log had it" are different facts about a run, and
     collapsing them would hide the very gap this fix closes."""
     store = write_store(tmp_path / "views", [view("base.production", history=["a"] * 40)])
     log = write_log(tmp_path / harvest.LOG_NAME, [view("base.production")])

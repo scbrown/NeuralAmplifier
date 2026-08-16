@@ -101,14 +101,17 @@ Run each turn, kept small:
 }
 ```
 
-> **Quipu's SPARQL engine implements neither `VALUES` nor `FILTER(?x IN (…))`.** Both return
-> `unsupported graph pattern` / `unsupported FILTER expression` (verified against quipu 0.3.11).
-> The working equivalent is a `||` disjunction — `FILTER(?x = "a" || ?x = "b")` — which
-> `datalinks/quipu.py` builds. `OPTIONAL` and property paths do work. Either the queries below
-> get rewritten as disjunctions, or Quipu grows `VALUES`; until then, treat every `VALUES` and
-> `IN` in this document as pseudocode for the disjunction. Filed upstream as
+> **`VALUES` and `FILTER(?x IN (…))` landed in quipu 0.3.13** — filed as
 > [quipu#51](https://github.com/scbrown/quipu/issues/51) and
-> [quipu#52](https://github.com/scbrown/quipu/issues/52).
+> [quipu#52](https://github.com/scbrown/quipu/issues/52), both closed. `datalinks/quipu.py` now
+> emits two `VALUES` blocks (one per bound variable) instead of the `||` disjunction it built
+> while quipu 0.3.11 answered `unsupported graph pattern` / `unsupported FILTER expression`. The
+> disjunction above is kept as a record of what the earlier shape looked like.
+>
+> **This makes quipu >= 0.3.13 a requirement.** An older store rejects the query, which the
+> knowledge seam turns into a degraded decision rather than a stalled turn — safe, but grounding
+> lost on every decision, so it is worth stating rather than discovering. `FILTER NOT EXISTS` is
+> still unimplemented; `OPTIONAL` and property paths do work.
 
 ## Semantic retrieval is blocked on an embedding model
 

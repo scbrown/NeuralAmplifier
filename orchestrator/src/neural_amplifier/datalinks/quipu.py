@@ -11,11 +11,25 @@ retrieval does not *filter* on it, the tag is decoration and a Thinker
 house-rule surfaces unchanged in a GLSMAC game. So the engine predicate is not
 optional here, and there is no code path that omits it.
 
-**Quipu's SPARQL engine does not support ``VALUES``**, which
-``docs/knowledge-architecture.md`` specifies for the batched action-space
-query, nor ``FILTER(?x IN (…))``. Both return ``unsupported graph pattern`` /
-``unsupported FILTER expression``. A ``||`` disjunction is the equivalent that
-works, and ``OPTIONAL`` works — verified against quipu 0.3.11.
+**The batched action-space query uses ``VALUES``**, as
+``docs/knowledge-architecture.md`` specifies. It did not always: quipu 0.3.11
+rejected both ``VALUES`` and ``FILTER(?x IN (…))`` with ``unsupported graph
+pattern`` / ``unsupported FILTER expression``, so this built a ``||``
+disjunction instead. Both landed upstream in **quipu 0.3.13** (quipu #51, #52)
+and the workaround is gone.
+
+That is a **minimum-version requirement**, not a preference: a store older than
+0.3.13 rejects the query outright. The failure is safe — the retriever raises,
+the knowledge seam degrades the decision rather than stalling the turn
+(``knowledge.py``) — but it is grounding lost on every decision, so the version
+is worth stating rather than discovering.
+
+``VALUES`` is also the construct that describes what is meant. The disjunction
+emitted one comparison per label per variable, so the ``FILTER`` grew linearly
+with the turn's action space — the exact prompt-bounded path ``build_query`` is
+trying to keep tight. An inline relation joins instead of filtering, so the
+engine can seed the BGP from it rather than scanning the graph and discarding
+afterwards.
 """
 
 from __future__ import annotations
@@ -86,9 +100,14 @@ def fact_id(iri: str) -> str:
     return f"{_IRI_PREFIXES.get(family, family)}:{name}"
 
 
-def _disjunction(variable: str, values: list[str]) -> str:
-    """``?v = "a" || ?v = "b"`` — Quipu rejects both VALUES and FILTER IN."""
-    return " || ".join(f'?{variable} = "{escape(v)}"' for v in values)
+def _values(variable: str, values: list[str]) -> str:
+    """``VALUES ?v { "a" "b" }`` — an inline relation, one line.
+
+    Still escaped. The literals are action names from the adapter either way, and moving them
+    out of a ``FILTER`` and into a pattern does not make the game's own data safe to paste into
+    a query.
+    """
+    return f"VALUES ?{variable} {{ " + " ".join(f'"{escape(v)}"' for v in values) + " }"
 
 
 def build_query(labels: list[str], engine: str) -> str:
@@ -103,11 +122,21 @@ def build_query(labels: list[str], engine: str) -> str:
     its components. Requiring the facility-shaped predicates matched zero units, so the
     retriever silently grounded nothing about the very options a model is most likely to
     misunderstand — which is how a Colony Pod got built to grow the base that built it.
+
+    Two separate ``VALUES`` blocks rather than one over both variables: the pair is a cross
+    product — every offered label, in either legitimate engine plane — and a single block would
+    have to enumerate it row by row, which is the linear growth this replaced. They lead the
+    group so the engine can seed the BGP from them; quipu joins a ``VALUES`` the same either
+    side of the pattern, so this is about intent being legible rather than about a rewrite.
+
+    Needs quipu >= 0.3.13. Older stores reject ``VALUES`` outright — see the module docstring.
     """
     engines = [UNIVERSAL_ENGINE] if engine == UNIVERSAL_ENGINE else [UNIVERSAL_ENGINE, engine]
     return f"""PREFIX smac: <{NAMESPACE}>
 PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
 SELECT ?f ?label ?effect ?role ?tier ?maint ?src WHERE {{
+  {_values("label", labels)}
+  {_values("eng", engines)}
   ?f rdfs:label ?label ;
      smac:sourcedFrom ?src ;
      smac:ruleTier ?tier ;
@@ -115,7 +144,6 @@ SELECT ?f ?label ?effect ?role ?tier ?maint ?src WHERE {{
   OPTIONAL {{ ?f smac:effectText ?effect }}
   OPTIONAL {{ ?f smac:role ?role }}
   OPTIONAL {{ ?f smac:maintenance ?maint }}
-  FILTER(({_disjunction("label", labels)}) && ({_disjunction("eng", engines)}))
 }}"""
 
 

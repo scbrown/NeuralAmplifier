@@ -2,13 +2,19 @@
 
 Split deliberately: the query construction and row formatting are pure and run
 everywhere, and a handful of integration tests skip unless a ``quipu-server``
-is actually reachable. Verified against quipu 0.3.11 during development.
+is actually reachable.
+
+The batched query needs **quipu >= 0.3.13**, where ``VALUES`` landed (quipu #51).
+Verified against 0.3.23 by loading ``datalinks/thinker/alphax.ttl`` into a real
+store and diffing the new query's rows against the old ``||`` disjunction's:
+identical, so the rewrite is a no-op in meaning and a saving in query size.
 """
 
 from __future__ import annotations
 
 import json
 import os
+import re
 import urllib.error
 
 import pytest
@@ -27,6 +33,19 @@ from neural_amplifier.orchestrator import Orchestrator
 QUIPU_URL = os.environ.get("NA_QUIPU_URL", "")
 
 
+def asked_labels(query: str) -> list[str]:
+    """The labels one built query binds — parsed out of the `VALUES ?label { … }` block.
+
+    A helper rather than a substring count because the shape is now a pattern rather than a
+    FILTER: counting `?label = ` occurrences was the old query's accident, and a test that
+    asserts on the accident stops testing the thing anyone cares about, which is *which options
+    got asked about*.
+    """
+    block = re.search(r"VALUES \?label \{(.*?)\}", query, re.S)
+    assert block, query
+    return re.findall(r'"((?:[^"\\]|\\.)*)"', block.group(1))
+
+
 def view(*actions: str, engine: str = "thinker") -> WorldView:
     return WorldView(
         engine=engine,
@@ -42,30 +61,42 @@ def view(*actions: str, engine: str = "thinker") -> WorldView:
 
 
 def test_the_engine_filter_is_never_omitted() -> None:
-    """Emission tags appliesToEngine; if retrieval does not filter on it the
+    """Emission tags appliesToEngine; if retrieval does not constrain on it the
     tag is decoration and a Thinker house-rule surfaces in a GLSMAC game. This
     is the half of the guardrail that protects an actual decision."""
     query = build_query(["Recycling Tanks"], "glsmac")
-    assert '?eng = "smac"' in query
-    assert '?eng = "glsmac"' in query
-    assert '?eng = "thinker"' not in query
+    assert 'VALUES ?eng { "smac" "glsmac" }' in query
+    assert "thinker" not in query
 
 
-def test_stock_smac_needs_no_second_engine_clause() -> None:
-    """smac facts are legitimate everywhere, so the disjunction collapses."""
-    query = build_query(["Recycling Tanks"], "smac")
-    assert query.count("?eng = ") == 1
+def test_stock_smac_needs_no_second_engine_binding() -> None:
+    """smac facts are legitimate everywhere, so the relation collapses to one row."""
+    assert 'VALUES ?eng { "smac" }' in build_query(["Recycling Tanks"], "smac")
 
 
-def test_the_query_uses_a_disjunction_not_values() -> None:
-    """Quipu's SPARQL engine rejects both VALUES and FILTER(?x IN (…)) with
-    'unsupported graph pattern' / 'unsupported FILTER expression', though
-    knowledge-architecture.md specifies VALUES for this batched query. A ||
-    chain is the equivalent that works."""
+def test_the_query_uses_values_as_the_architecture_specifies() -> None:
+    """It used to build a `||` chain: quipu 0.3.11 rejected both VALUES and FILTER(?x IN (…))
+    with 'unsupported graph pattern' / 'unsupported FILTER expression'. Both landed upstream in
+    0.3.13 (quipu #51, #52), so the workaround is gone and this is what
+    knowledge-architecture.md specified all along.
+
+    Not only tidier: the disjunction emitted one comparison per label per variable, so the
+    FILTER grew linearly with the turn's action space — on the exact path build_query exists to
+    keep bounded.
+    """
     query = build_query(["Recycling Tanks", "Energy Bank"], "thinker")
-    assert "VALUES" not in query
-    assert " IN (" not in query
-    assert '?label = "Recycling Tanks" || ?label = "Energy Bank"' in query
+    assert 'VALUES ?label { "Recycling Tanks" "Energy Bank" }' in query
+    assert "||" not in query
+    assert "FILTER" not in query
+
+
+def test_the_two_bindings_stay_separate_blocks() -> None:
+    """Label and engine are a cross product — every offered label, in either legitimate plane.
+    One block over both variables would have to enumerate the pairs row by row, reintroducing
+    the linear growth this replaced."""
+    query = build_query(["Recycling Tanks", "Energy Bank"], "thinker")
+    assert query.count("VALUES") == 2
+    assert "VALUES (" not in query  # the multi-variable form, which this deliberately is not
 
 
 def test_optional_maintenance_does_not_drop_rows() -> None:
@@ -146,7 +177,7 @@ def test_retrieval_is_bounded_to_the_action_space() -> None:
     retriever = FakeQuipu([])
     retriever.retrieve(view("Recycling Tanks", "Energy Bank"))
     query = retriever.queries[0]
-    assert query.count("?label = ") == 2
+    assert len(asked_labels(query)) == 2
 
 
 def test_one_batched_query_per_decision() -> None:
@@ -170,7 +201,7 @@ def test_the_limit_caps_the_result_not_the_query(fake_rows: list[dict[str, objec
     """
     retriever = FakeQuipu(fake_rows, limit=2)
     grounding = retriever.retrieve(view("A", "B", "C"))
-    assert retriever.queries[0].count("?label = ") == 3, "every option must be asked about"
+    assert len(asked_labels(retriever.queries[0])) == 3, "every option must be asked about"
     assert grounding.hits == 2, "the limit still bounds what reaches the prompt"
 
 
@@ -222,7 +253,7 @@ def test_an_empty_action_space_does_not_query_at_all() -> None:
 def test_duplicate_actions_are_asked_for_once() -> None:
     retriever = FakeQuipu([])
     retriever.retrieve(view("Recycling Tanks", "Recycling Tanks"))
-    assert retriever.queries[0].count("?label = ") == 1
+    assert len(asked_labels(retriever.queries[0])) == 1
 
 
 # --- subjects: surfaces that decide ABOUT an entity ------------------------
@@ -254,7 +285,11 @@ def test_a_surface_whose_actions_are_not_entities_retrieves_via_its_subject() ->
     """
     retriever = FakeQuipu([])
     retriever.retrieve(_hurry_view(["Colony Pod"]))
-    assert '?label = "Colony Pod"' in retriever.queries[0]
+    # The subject is asked about alongside the verbs, and first — `retrieve` puts subjects ahead
+    # of action labels so the budget sheds the verbs before the thing the decision is about.
+    asked = asked_labels(retriever.queries[0])
+    assert asked[0] == "Colony Pod"
+    assert "Hurry production" in asked
 
 
 def test_the_subject_survives_a_limit_that_drops_everything_else() -> None:
@@ -284,8 +319,8 @@ def test_no_subject_leaves_retrieval_exactly_as_it_was() -> None:
     unset = FakeQuipu([])
     unset.retrieve(_hurry_view(None))
 
-    assert with_field.queries[0].count("?label = ") == 2
-    assert unset.queries[0].count("?label = ") == 2  # the two action labels, as before
+    assert len(asked_labels(with_field.queries[0])) == 2
+    assert len(asked_labels(unset.queries[0])) == 2  # the two action labels, as before
 
 
 def test_a_subject_that_repeats_an_action_label_is_asked_for_once() -> None:
@@ -302,7 +337,7 @@ def test_a_subject_that_repeats_an_action_label_is_asked_for_once() -> None:
             subjects=["Colony Pod"],
         )
     )
-    assert retriever.queries[0].count("?label = ") == 1
+    assert len(asked_labels(retriever.queries[0])) == 1
 
 
 def test_a_rejected_query_raises_rather_than_returning_nothing() -> None:

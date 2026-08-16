@@ -359,16 +359,17 @@ First measured utilisation, Haiku on a real turn-35 base-production decision: **
 cited**. Six were paid for and unread — which is a retrieval-tuning signal that did not exist
 before the instrumentation.
 
-> **Quipu's SPARQL engine implements neither `VALUES` nor `FILTER(?x IN (…))`, and also rejects
-> `FILTER NOT EXISTS`.** The third was found writing a provenance-completeness check ("which
-> typed nodes lack `smac:sourcedFrom`"), and it means negation-shaped questions have to be
-> computed client-side. All three are the same request: a way to express "not in this set". Both return
-> `unsupported graph pattern` / `unsupported FILTER expression` (verified against quipu 0.3.11).
-> The working equivalent is a `||` disjunction — `FILTER(?x = "a" || ?x = "b")` — which
-> `datalinks/quipu.py` builds. `OPTIONAL` and property paths do work. Either the queries below
-> get rewritten as disjunctions, or Quipu grows `VALUES`; until then, treat every `VALUES` and
-> `IN` in this document as pseudocode for the disjunction — [quipu#51](https://github.com/scbrown/quipu/issues/51),
-> [quipu#52](https://github.com/scbrown/quipu/issues/52).
+> **`VALUES` and `FILTER(?x IN (…))` landed in quipu 0.3.13**
+> ([quipu#51](https://github.com/scbrown/quipu/issues/51),
+> [quipu#52](https://github.com/scbrown/quipu/issues/52)), so the `VALUES` in the queries below
+> is now literal rather than pseudocode and `datalinks/quipu.py` emits it. **That makes 0.3.13 a
+> minimum version**: an older store rejects the query outright with `unsupported graph pattern`,
+> which degrades the decision rather than stalling the turn but costs the grounding on every one.
+>
+> `FILTER NOT EXISTS` is still unimplemented. It was found writing a provenance-completeness
+> check ("which typed nodes lack `smac:sourcedFrom`"), and it means negation-shaped questions
+> have to be computed client-side — fine for a lint run at ingest time, but any such question
+> has to leave the store. `OPTIONAL` and property paths do work.
 
 ## Directives — the game's own standing intent
 
