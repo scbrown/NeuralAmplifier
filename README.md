@@ -335,7 +335,7 @@ and the rollout are in the [design doc](docs/knowledge-architecture.md).
 >
 > What is *not* proven: nothing has played a turn of Alpha Centauri yet.
 > **Track A (Thinker) is the current focus** — the complete, balanced game, controllable
-> today. The fork now instruments thirteen decision surfaces and *applies* four of them, intercepts
+> today. The fork now instruments fourteen decision surfaces and *applies* four of them, intercepts
 > in-game dialogs, and ships a side-effect-free probe for every surface. The wire is tested
 > against a real orchestrator under Wine with no game present.
 >

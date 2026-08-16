@@ -162,6 +162,18 @@ sorting pass and cannot be recovered afterwards, so the probe emits score 0 and 
 than inventing a number no engine computed — and a reader seeing cohort 0 knows the row came
 from a probe.
 
+`base.name` is instrumented too, and is the one that is deliberately **not** in the observed
+count. Its candidate names live in files read inside `mod_name_base`, so building an action
+space would mean re-reading those files on every base founding to produce a list nobody applies.
+With no action space there is nothing the brain could have chosen, so it emits the same compact
+event shape the dialog records use — and stays out of `OBSERVED`, because that set is for
+surfaces where a decision can actually be seen.
+
+Its payload is which name *pool* was used, not the name. `mod_name_base` falls through four in
+order: the faction's water list, the faction's land list, generic two-word combinations, and
+finally "Sector N". A base called "Sector 41" means every named pool was exhausted — a content
+problem surfacing as gameplay, which nothing else in the system reports.
+
 `econ.energy_sliders` is another observed-only one (na-yd4): the adapter records what
 `mod_allocate_energy` chose and every split that was legal, and nothing applies a brain's answer
 yet. It is deliberately in `OBSERVED` and not `APPLIED`, because the applied count is what says

@@ -218,3 +218,61 @@ def test_the_engines_answer_is_recorded() -> None:
     """
     for record in (MAPPED, UNMAPPED):
         assert isinstance(record["native_choice"], int)
+
+
+#: `na_name_base_observed`, transcribed. Like a dialog record and for the same reason: no
+#: action space, so nobody could have chosen. It carries a `surface_id` — which is precisely
+#: what makes the assertions below worth having.
+BASE_NAME_EVENT = {
+    "record": "base_name",
+    "engine": "thinker",
+    "surface_id": "base.name",
+    "turn": 42,
+    "faction_id": 1,
+    "name": "Sector 41",
+    "sea_base": False,
+    "source": "sector_fallback",
+    "pools_exhausted": True,
+}
+
+
+def test_a_naming_event_is_not_a_decision_record() -> None:
+    """`base.name` is instrumented, and deliberately does NOT enter OBSERVED.
+
+    The candidate names live in files read inside `mod_name_base`; enumerating them would mean
+    re-reading those files on every base founding to build a list nobody applies. With no action
+    space there is nothing the brain could have chosen, so this is an event, not an observation
+    of a decision — the same line the dialog records sit on.
+
+    Recording it in OBSERVED would move the coverage number for a surface where the brain has no
+    decision to see, which is the one thing that set is for.
+    """
+    from neural_amplifier.surfaces import ALL, APPLIED, OBSERVED
+
+    assert BASE_NAME_EVENT["surface_id"] in ALL, "still a real surface in the frozen registry"
+    assert BASE_NAME_EVENT["surface_id"] not in OBSERVED
+    assert BASE_NAME_EVENT["surface_id"] not in APPLIED
+    for key in ("tier", "applied", "action_space", "native_choice"):
+        assert key not in BASE_NAME_EVENT, key
+
+
+def test_a_naming_event_is_not_harvested_as_a_world_view() -> None:
+    """It carries a surface_id, so without the required-field check it would be picked as a
+    capture for `base.name` and overwrite nothing — but it would look like coverage."""
+    assert harvest._capture(BASE_NAME_EVENT) is None
+
+
+def test_the_naming_event_reports_which_pool_ran_out() -> None:
+    """The payload is `source`, not the name.
+
+    `mod_name_base` falls through four pools in order, and the last is "Sector N". A base called
+    that means every named pool was exhausted — a content problem surfacing as gameplay, which
+    nothing else in the system reports. `pools_exhausted` is the flag worth alerting on.
+    """
+    assert BASE_NAME_EVENT["source"] in {
+        "faction_sea",
+        "faction_land",
+        "generic_pool",
+        "sector_fallback",
+    }
+    assert BASE_NAME_EVENT["pools_exhausted"] is (BASE_NAME_EVENT["source"] == "sector_fallback")
