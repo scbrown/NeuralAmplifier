@@ -111,9 +111,22 @@ thinker cmd="build":
 # Deliberately starts NO tmux, pane or agent — the harness attaches itself, which is what
 # keeps it swappable (docs/agent-play.md; the play-alpha-centauri skill is the other half).
 # Serve decisions for an attached agent (Claude Code or any MCP client)
-play port="8000":
-    NA_BRAIN=agent NA_DECISION_LOG=decisions.jsonl \
-        uv run --directory orchestrator neural-amplifier serve --port {{port}}
+play cmd="serve" port="8000":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    case "{{cmd}}" in
+      serve)
+        NA_BRAIN=agent NA_DECISION_LOG=decisions.jsonl \
+            uv run --directory orchestrator neural-amplifier serve --port {{port}} ;;
+      # Everything that is silently wrong rather than loudly broken: the wrong brain (healthy
+      # in every way except that you will never see a decision), an llm_timeout_ms no agent
+      # can meet, and whether grounding and the guard are actually attached.
+      check)
+        uv run --directory orchestrator python ../scripts/play-preflight.py \
+            --url "http://127.0.0.1:{{port}}" ;;
+      *)
+        echo "just play [serve|check] [port]" >&2; exit 2 ;;
+    esac
 
 # === Integration ===
 

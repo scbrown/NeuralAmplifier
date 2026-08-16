@@ -189,7 +189,8 @@ Component-scoped work uses the `<component> <cmd>` form:
 just orchestrator test    # build install test lint fmt run
 just glsmac test          # build test lint fmt  (test = headless --gse-tests)
 just thinker build        # build test           (needs the Thinker toolchain)
-just play thinker GAIANS  # full observe→decide→act loop for an engine
+just play                 # serve decisions for an attached agent (NA_BRAIN=agent)
+just play check           # pre-game checklist: brain, timeout, grounding, guard
 ```
 
 ## Configuration

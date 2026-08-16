@@ -53,24 +53,32 @@ exactly as it does for a human player, and no decision resolves until you answer
 ## 1. Set yourself up
 
 Nothing launches you. The orchestrator serves decisions and never starts a terminal, a pane or
-an agent — so attaching is your job, and it is three steps.
+an agent — so attaching is your job.
 
-**Check the orchestrator is up.** It must be running with the agent brain:
-
-```bash
-curl -s http://127.0.0.1:8000/health
-```
-
-`"brain":"agent"` is what you need. If it says `scripted` or `claude`, decisions are being
-answered without you and the agent endpoints are not even mounted — say so rather than
-polling an empty queue forever. If it is not running at all, start it:
+**Run the preflight first.** One command, and it is the fastest way to find the two failures
+that do not look like failures — the wrong brain, and a timeout you cannot meet:
 
 ```bash
-NA_BRAIN=agent NA_DECISION_LOG=decisions.jsonl \
-  uv run --directory orchestrator neural-amplifier serve
+just play check
 ```
 
-**Attach the MCP server.** From the repository root:
+Every row is marked `blocking` or `optional`. Blocking means you cannot play; optional means
+the game is poorer and still playable, so do not stall on it. Exit status is 1 only if
+something blocking is wrong.
+
+**Start the orchestrator** if the preflight says it is down. It must run the agent brain:
+
+```bash
+just play          # NA_BRAIN=agent, port 8000
+```
+
+`"brain":"agent"` on `/health` is what you need. If it says `scripted` or `claude`, decisions
+are being answered without you and the agent endpoints are not even mounted — say so rather
+than polling an empty queue forever.
+
+**Attach the MCP server.** Nothing to do: the repository ships a `.mcp.json` naming the
+`neural-amplifier` server, so Claude Code offers it when you open the repo. Approve it once.
+Outside the repo, or for another MCP client:
 
 ```bash
 claude mcp add neural-amplifier -- \
