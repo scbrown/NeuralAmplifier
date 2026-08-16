@@ -385,7 +385,9 @@ def test_a_denial_drives_a_repair_rather_than_losing_the_turn() -> None:
 # --- loading the policy set -------------------------------------------------
 
 
-def test_a_relative_policy_path_resolves_from_the_repo_root(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_a_relative_policy_path_resolves_from_the_repo_root(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """`just play` runs the service with `--directory orchestrator`, so the obvious
     `NA_YUPANA_POLICIES=policies/board.example.json` typed at the repo root resolves one level
     too deep — and the failure mode is a guard that silently evaluates nothing."""

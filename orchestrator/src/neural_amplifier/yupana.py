@@ -152,7 +152,9 @@ def proposed(orders: Orders, world_view: WorldView) -> list[dict[str, Any]]:
                         "value": base + delta,
                     }
                 )
-        out.append({"id": choice.action_id, "kind": world_view.surface_id or "DECIDE", "effects": effects})
+        out.append(
+            {"id": choice.action_id, "kind": world_view.surface_id or "DECIDE", "effects": effects}
+        )
     return out
 
 
@@ -364,4 +366,6 @@ def _ruling(report: dict[str, Any]) -> Ruling:
         advisories.append(f"policy matched nothing: {note.get('policy')} — {note.get('reason')}")
 
     verdict = "deny" if stripped else ("warn" if advisories else "allow")
-    return Ruling(verdict=verdict, stripped=tuple(dict.fromkeys(stripped)), advisories=tuple(advisories))
+    return Ruling(
+        verdict=verdict, stripped=tuple(dict.fromkeys(stripped)), advisories=tuple(advisories)
+    )
