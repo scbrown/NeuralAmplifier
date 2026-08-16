@@ -19,7 +19,9 @@ REPO = Path(__file__).resolve().parents[2]
 
 
 def _module() -> Any:
-    spec = importlib.util.spec_from_file_location("ab_outcomes", REPO / "scripts" / "ab_outcomes.py")
+    spec = importlib.util.spec_from_file_location(
+        "ab_outcomes", REPO / "scripts" / "ab_outcomes.py"
+    )
     assert spec and spec.loader
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
@@ -29,8 +31,15 @@ def _module() -> Any:
 ab = _module()
 
 
-def arm(path: Path, tier: str, *, difficulty: str = "librarian", slot: str = "human",
-        turns: int = 40, growth: int = 1) -> Path:
+def arm(
+    path: Path,
+    tier: str,
+    *,
+    difficulty: str = "librarian",
+    slot: str = "human",
+    turns: int = 40,
+    growth: int = 1,
+) -> Path:
     with path.open("w") as handle:
         for turn in range(1, turns + 1):
             handle.write(
@@ -115,11 +124,17 @@ def test_a_short_run_is_refused(tmp_path) -> None:
 def test_the_profile_key_ignores_handicaps_somebody_chose(tmp_path) -> None:
     """A handicap someone selected is a legitimate difference between arms; one the engine
     imposed is the confound. Only `structural` entries are part of the key."""
-    chosen = {"slot": "ai", "difficulty": "thinker",
-              "handicaps": [{"name": "free_units", "selected_by": "player"}]}
+    chosen = {
+        "slot": "ai",
+        "difficulty": "thinker",
+        "handicaps": [{"name": "free_units", "selected_by": "player"}],
+    }
     plain = {"slot": "ai", "difficulty": "thinker", "handicaps": []}
     assert ab.profile_key(chosen) == ab.profile_key(plain)
 
-    imposed = {"slot": "ai", "difficulty": "thinker",
-               "handicaps": [{"name": "cheap_tech", "selected_by": "structural"}]}
+    imposed = {
+        "slot": "ai",
+        "difficulty": "thinker",
+        "handicaps": [{"name": "cheap_tech", "selected_by": "structural"}],
+    }
     assert ab.profile_key(imposed) != ab.profile_key(plain)

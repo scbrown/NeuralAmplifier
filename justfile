@@ -302,6 +302,22 @@ signing-identity key=".quipu/yupana-signing.pk8":
     echo "Read it first. Registering a key is declaring what you trust, and nothing"
     echo "downstream can tell a key you vouched for from one that vouched for itself."
 
+# Per-directive attention and override rates from a run's decision log — na-mmp.
+#
+# `just coverage` reports adherence in aggregate; this reports it PER DIRECTIVE, because the two
+# failures worth catching are invisible in an average: a priority-7 directive overridden every
+# time was mispriced, and one never overridden may be costing more than it admits. Both are
+# properties of one directive across many decisions.
+#
+# `unmeasurable` — the world view did not report the directive's metric — is an ADAPTER GAP, not
+# a directive that failed. It is excluded from the rates and reported separately, because the
+# fix for the two is in different repositories.
+#
+# Refuses a log too short for a rate to mean anything. Ten replays of one captured observation
+# show the mechanism works and say nothing about whether directives help.
+directive-report log="decisions.jsonl":
+    @scripts/directive_report.py "{{log}}"
+
 # Compare two runs' trajectories — the A/B half of na-6db that needs no game.
 #
 # Producing the two logs needs a running game; reading them does not, which is why this exists

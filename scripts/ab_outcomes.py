@@ -131,10 +131,14 @@ def main() -> int:
     # answers a different question than the one asked.
     if profile_key(base_fair) != profile_key(brain_fair):
         print("refusing: the two arms do not share a fairness profile.", file=sys.stderr)
-        print(f"  baseline  slot={base_fair.get('slot')} "
-              f"difficulty={base_fair.get('difficulty')}", file=sys.stderr)
-        print(f"  brain     slot={brain_fair.get('slot')} "
-              f"difficulty={brain_fair.get('difficulty')}", file=sys.stderr)
+        print(
+            f"  baseline  slot={base_fair.get('slot')} difficulty={base_fair.get('difficulty')}",
+            file=sys.stderr,
+        )
+        print(
+            f"  brain     slot={brain_fair.get('slot')} difficulty={brain_fair.get('difficulty')}",
+            file=sys.stderr,
+        )
         print(
             "\nAn AI slot inherits handicaps a human slot does not (invariant 6), so this\n"
             "comparison would measure the handicap and not the brain. Re-run both arms on\n"
@@ -172,8 +176,10 @@ def main() -> int:
 
     first, last = shared[0], shared[-1]
     print(f"turns {first}–{last} ({len(shared)} shared)")
-    print(f"fairness: slot={base_fair.get('slot')} difficulty={base_fair.get('difficulty')} "
-          f"structural handicaps={len(profile_key(base_fair)[2])}")
+    print(
+        f"fairness: slot={base_fair.get('slot')} difficulty={base_fair.get('difficulty')} "
+        f"structural handicaps={len(profile_key(base_fair)[2])}"
+    )
     print()
     print(f"{'metric':<20} {'baseline':>10} {'brain':>10} {'delta':>10}")
     for metric in TRENDED:
