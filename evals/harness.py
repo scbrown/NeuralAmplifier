@@ -94,6 +94,23 @@ def _adapter_action(index: int, name: str, rows: int, surplus: int) -> Action:
 
 def base_production(links_path: Path) -> tuple[WorldView, DatalinksRetriever]:
     """The world view both evals start from: University Base, turn 35, eight build options."""
+    if not links_path.is_file():
+        # A raw FileNotFoundError traceback here is worse than it looks. These evals cost real
+        # money to run — na-04v is ~$3.50, na-uwp ~$7 — and the thing that protects that spend
+        # is finding a misconfiguration BEFORE the calls, not after. `alphax.txt` is game data
+        # this repo deliberately does not ship (invariant 8), so its absence is the normal state
+        # of a fresh checkout and deserves an instruction rather than a stack trace.
+        raise SystemExit(
+            f"datalinks source not found: {links_path}\n"
+            "\n"
+            "These evals ground their prompts in the game's own facility data, so they cannot\n"
+            "run without it. It is not committed — it is copyrighted game data (invariant 8).\n"
+            "\n"
+            "Point THINKER_DIR at a checkout whose docs/alphax.txt exists:\n"
+            "    THINKER_DIR=/path/to/thinker just eval check\n"
+            "\n"
+            "Nothing has been spent."
+        )
     links = parse(links_path.read_text(errors="replace"))
     by_name = {f.name: f for f in links.facilities.values()}
     surplus = 3

@@ -76,16 +76,40 @@ EVALS = {
 
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("cmd", choices=["list", "prompts", "score", "check", "selftest", "harvest"])
+    ap.add_argument(
+        "cmd", choices=["list", "prompts", "score", "check", "cost", "selftest", "harvest"]
+    )
     ap.add_argument("eval_id", nargs="?", help=f"one of: {', '.join(EVALS)}")
     ap.add_argument("--links", type=Path, default=DEFAULT_LINKS)
     ap.add_argument("--out", type=Path, default=None)
+    ap.add_argument(
+        "--runs",
+        type=int,
+        default=None,
+        help="runs per arm for `cost`; default is each eval's own bead figure",
+    )
     args = ap.parse_args()
 
     if args.cmd == "list":
         for name, (_, question, answer) in EVALS.items():
             print(f"{name}\n  asks:  {question}\n  found: {answer}")
         return
+
+    if args.cmd == "cost":
+        # Deliberately BEFORE the eval-id validation below and before anything that touches
+        # --links: pricing reads only the committed task files, so it must work in a checkout
+        # with no game data. That is the state anyone deciding whether to spend is in.
+        from cost import MEASURED_USD_PER_CALL, report, runs_for
+
+        ids = [args.eval_id] if args.eval_id else list(EVALS)
+        rc = 0
+        for name in ids:
+            if name not in EVALS:
+                ap.error(f"unknown eval {name!r}; try one of: {', '.join(EVALS)}")
+            runs, source = runs_for(name, args.runs)
+            rc |= report(name, RUNS / name, runs, MEASURED_USD_PER_CALL, source)
+            print()
+        raise SystemExit(rc)
 
     if args.cmd == "check":
         ids = [args.eval_id] if args.eval_id else list(EVALS)

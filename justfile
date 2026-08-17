@@ -135,7 +135,7 @@ play cmd="serve" port="8000":
 # A behavioural question about the brain, not a unit test: what a decision does over many
 # runs, which `just test` cannot assert. `score` reads a committed run and needs no model,
 # no game and no sibling checkout; `prompts` regenerates the inputs and needs the rulebook.
-# Behavioural evals: just eval list | prompts <id> | score <id> | check [<id>]
+# Behavioural evals: just eval list | prompts <id> | score <id> | check [<id>] | cost [<id>]
 eval cmd="list" id="":
     #!/usr/bin/env bash
     set -euo pipefail

@@ -140,7 +140,9 @@ def main() -> int:
         return 1
 
     print(f"{decisions} decisions with a plan block\n")
-    header = f"{'directive':<22} {'pri':>3} {'in force':>9} {'attn':>6} {'override':>9} {'unmeas':>7}"
+    header = (
+        f"{'directive':<22} {'pri':>3} {'in force':>9} {'attn':>6} {'override':>9} {'unmeas':>7}"
+    )
     print(header)
     print("-" * len(header))
 
