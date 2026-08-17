@@ -90,6 +90,15 @@ APT_PID=$!
   # "embedded Dolt requires a CGO build".
   have bd || npm install -g @beads/bd >/dev/null 2>&1 || true
 
+  # bd wants .beads at 0700 and warns on EVERY invocation until it gets it — the directory
+  # holds the Dolt issue database, which on a shared machine is readable by anyone at 0755.
+  #
+  # Done here rather than left to the warning because git does not track directory permissions,
+  # so a chmod in one checkout helps nobody else, and a warning that fires on every single
+  # command is one people stop reading. It fired roughly forty times in one session before
+  # anybody acted on it, which is the argument for fixing it rather than for reading it harder.
+  [ -d .beads ] && chmod 700 .beads 2>/dev/null || true
+
   have pre-commit || pip install --quiet --break-system-packages pre-commit >/dev/null 2>&1 || true
 
   # mdBook renders docs/ into the docs site (`just docs build`). The release

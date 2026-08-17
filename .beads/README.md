@@ -70,6 +70,26 @@ bd init
 bd create "Try out Beads"
 ```
 
+## Two warnings this repo has met, and what to do about them
+
+**`.beads has permissions 0755 (recommended: 0700)`** — real, and now handled by
+`scripts/setup-environment.sh`. The directory holds the Dolt issue database, which at 0755 is
+readable by anyone on a shared machine. Git does not track directory permissions, so a `chmod`
+in one checkout helps nobody else; the setup script is the only place a fix propagates. It fired
+on roughly forty commands in a single session before anyone acted on it, which is the argument
+for fixing it rather than for reading it more carefully.
+
+**`beads.role not configured (GH#2950)`** — surfaced only once the louder one stopped, which is
+the more interesting half of the story: a noisy warning had been masking a quieter one for the
+whole session.
+
+It is **deliberately still unset**. `bd` offers `maintainer` or `contributor`, neither is
+documented in the local tooling or `bd help`, and the name suggests it governs who may write —
+so guessing is a claim about authority, not a configuration tidy-up. `git config beads.role
+<role>` when someone who knows the repo's intent can say which. The
+[Agent Context Profiles](../CLAUDE.md) section is the closest thing to an answer and is about
+agent behaviour rather than this setting.
+
 ## Learn More
 
 - **Documentation**: [github.com/steveyegge/beads/docs](https://github.com/steveyegge/beads/tree/main/docs)
