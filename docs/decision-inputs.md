@@ -283,9 +283,17 @@ playing until it happens to fire.
 
 ## 3. `tech.choose` — which technology to research
 
-**Status:** not yet implemented. Recommended as the **second** LLM-tier surface, and the first
-where Claude should be expected to *outperform* the deterministic tier rather than merely match
-it.
+> Registry id: **`faction.tech`**. This section predates the frozen registry and kept its
+> working name; `just surfaces` and every decision record use `faction.tech`.
+
+**Status:** **applied** — the registry calls it `faction.tech`, and this section's own
+recommendation is what it followed: it was the second LLM-tier surface, after `base.production`.
+`na_decide_faction_tech` posts the world view and the returned tech is assigned at `tech.cpp`,
+falling back to the engine's own answer on any failure. Probe: `observe-tech <faction_id>`.
+
+It remains the first surface where Claude should be expected to *outperform* the deterministic
+tier rather than merely match it, and that is still unmeasured — see na-6db, whose analysis half
+(`just ab-outcomes`) is built and waiting on a run.
 
 **Budget:** fires once per tech completion — every five to ten turns. Affordably rich. This is
 where to spend context.
@@ -310,7 +318,12 @@ is exactly what a language model is good at and a weight table is not.
 
 ## 4. `social.engineering` — choosing SE values
 
-**Status:** not yet implemented. Strong LLM fit; low frequency.
+> Registry id: **`faction.se`**. As above — the section name predates the registry.
+
+**Status:** **applied** — the registry calls it `faction.se`. `na_decide_faction_se` reads the
+returned social model through in/out params at `faction.cpp` and refuses one the faction cannot
+afford, so an unaffordable choice is rejected rather than applied. Probe: `observe-se
+<faction_id>`. Strong LLM fit; low frequency, as this section said.
 
 | # | Category | Fields |
 | --- | --- | --- |
