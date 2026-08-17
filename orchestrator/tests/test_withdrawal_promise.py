@@ -84,8 +84,12 @@ def test_the_promise_is_checkable_in_both_directions() -> None:
     """
     directive = withdrawal()
     broken = WorldView(
-        engine="thinker", scope="turn", surface_id="faction.tech", turn=41,
-        faction="Peacekeepers", metrics={"units_in_foreign_territory": 3},
+        engine="thinker",
+        scope="turn",
+        surface_id="faction.tech",
+        turn=41,
+        faction="Peacekeepers",
+        metrics={"units_in_foreign_territory": 3},
     )
     kept = broken.model_copy(update={"metrics": {"units_in_foreign_territory": 0}})
 

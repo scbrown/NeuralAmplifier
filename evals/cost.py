@@ -106,9 +106,8 @@ def report(
         print(f"  {arm:<42} {size:>7} bytes")
     print()
     print(f"  calls                 {result['calls']}")
-    print(
-        f"  approx input tokens   {result['approx_input_tokens']:,}  (at ~{CHARS_PER_TOKEN} chars/token)"
-    )
+    tokens = result["approx_input_tokens"]
+    print(f"  approx input tokens   {tokens:,}  (at ~{CHARS_PER_TOKEN} chars/token)")
     print(f"  USD per call          {result['usd_per_call']}")
     print(f"  ESTIMATED TOTAL       ${result['usd_total']}")
     print()

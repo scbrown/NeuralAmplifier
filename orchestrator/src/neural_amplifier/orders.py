@@ -33,6 +33,7 @@ success and does nothing.
 from __future__ import annotations
 
 import json
+import os
 import threading
 import time
 from dataclasses import dataclass, field
@@ -164,8 +165,23 @@ class OrderChannel:
                 )
 
             try:
-                # The adapter reads one line with fgets and removes the file before acting.
-                cmd_path.write_text(command + "\n", encoding="utf-8")
+                # WRITTEN ATOMICALLY, and the comment above is exactly why. The adapter polls
+                # for this file's existence, then reads one line with fgets and removes it
+                # before acting. `write_text` creates the file and THEN fills it, so a poll
+                # landing in that window sees a file that exists and is empty or half-written —
+                # and the adapter acts on a truncated command, or on nothing.
+                #
+                # os.replace is atomic on POSIX and on Windows (the game runs on Windows), so
+                # the adapter only ever sees the whole line or no file at all.
+                #
+                # This is not hypothetical. It is what made test_orders_are_serialised flaky:
+                # the fake adapter read "" and died on `line.split()[0]`, and every remaining
+                # caller then burned its full timeout — which is why a failing run took an exact
+                # multiple of that timeout rather than a random duration. Raising the timeout
+                # earlier made it rarer and left the race in place.
+                tmp_path = cmd_path.with_name(cmd_path.name + ".partial")
+                tmp_path.write_text(command + "\n", encoding="utf-8")
+                os.replace(tmp_path, cmd_path)
             except OSError as exc:
                 return OrderResult(
                     status="unknown", command=command, detail=f"could not write order: {exc}"

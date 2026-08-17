@@ -153,15 +153,18 @@ def test_orders_are_serialised(tmp_path: Path) -> None:
     channel = OrderChannel(tmp_path)
     results: list[str] = []
 
-    # Generous on BOTH sides, for the reason above. Fixing only the adapter's lifetime left the
-    # clock still holding a casting vote: `issue` starts its deadline once it owns the channel,
-    # so lock-wait is not the risk, but a 3s window for the poller to notice one file still
-    # loses on a machine under load — which is what happened, at 3x the suite's usual runtime,
-    # and it failed claiming an order never arrived (na-5w2 again, other half).
+    # 30s is a hang detector, not a latency budget. Nothing here asserts timing.
     #
-    # 30s is a hang detector, not a latency budget. Nothing here asserts timing; the subject is
-    # that four concurrent callers each get their OWN result, and a real deadlock still fails —
-    # just thirty seconds later instead of three.
+    # AND THE TIMEOUT WAS NEVER THE BUG. Raising it from 3s twice made this rarer and left the
+    # cause in place: `write_text` creates the command file and THEN fills it, so the adapter
+    # above could see a file that exists and is empty, die on `"".split()[0]`, and leave every
+    # remaining caller to burn its full deadline. That is why a failing run took 66s or 126s —
+    # exact multiples of the timeout — rather than a random duration, which is the clue that
+    # said "something is waiting the whole way out" and not "the machine is slow".
+    #
+    # Fixed at the cause in orders.py, which now writes atomically. See
+    # test_the_command_file_is_never_visible_half_written, which pins it with a reader as
+    # brittle as this one.
     def issue(n: int) -> None:
         results.append(channel.issue(f"skip {n}", timeout_s=30.0).detail)
 
@@ -332,3 +335,60 @@ def test_batch_over_http(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Non
     ).json()
     assert got["status"] == "ok"
     assert len(got["results"]) == 2
+
+
+def test_the_command_file_is_never_visible_half_written(tmp_path: Path) -> None:
+    """The race behind `test_orders_are_serialised`'s flakiness, pinned at its cause.
+
+    The adapter polls for the command file's existence, then reads one line with `fgets` and
+    removes it before acting. `write_text` creates the file and THEN fills it, so a poll landing
+    in that window sees a file that exists and is empty or half-written.
+
+    In the test suite that killed the fake adapter thread — `"".split()[0]` raises IndexError —
+    and every remaining caller burned its full timeout, which is why a failing run took an exact
+    multiple of that timeout rather than a random duration. Raising the timeout made it rarer
+    and left the race in place.
+
+    In a real game it is worse and quieter: the C++ adapter would act on a truncated command.
+    `move 12 40 21` read as `move 12 40` is a different order, not a rejected one.
+
+    This reader is deliberately as brittle as the original — it indexes into the split — so a
+    regression to a non-atomic write fails here rather than surfacing as an occasional slow run
+    somewhere else.
+    """
+    channel = OrderChannel(tmp_path)
+    cmd = tmp_path / "na-command"
+    partial: list[str] = []
+    done = threading.Event()
+
+    def adapter() -> None:
+        while not done.is_set():
+            if cmd.exists():
+                try:
+                    line = cmd.read_text(encoding="utf-8").strip()
+                    cmd.unlink()
+                except (FileNotFoundError, OSError):
+                    continue
+                try:
+                    verb = line.split()[0]
+                except IndexError:
+                    partial.append(repr(line))
+                    continue
+                if verb != "skip" or len(line.split()) != 2:
+                    partial.append(repr(line))
+                (tmp_path / "na-command-result").write_text(
+                    json.dumps({"command": verb, "detail": line, "ok": True}), encoding="utf-8"
+                )
+            time.sleep(0.0005)
+
+    serving = threading.Thread(target=adapter, daemon=True)
+    serving.start()
+    try:
+        for n in range(60):
+            channel.issue(f"skip {n}", timeout_s=30.0)
+    finally:
+        done.set()
+        serving.join(timeout=5.0)
+
+    assert not partial, f"the adapter saw a partial command file: {partial[:3]}"
+    assert not list(tmp_path.glob("*.partial")), "a temp file was left behind"
