@@ -67,7 +67,12 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: scbrown/thinker
-          ref: claude/neural-amplifier-smac-testing-uq1fcg
+          # master, not the branch the gate was first written on. This was
+          # pinned to claude/neural-amplifier-smac-testing-uq1fcg, which still
+          # exists but stopped moving on 2026-07-29 — so this job spent weeks
+          # reporting green for an adapter nobody was running, which is worse
+          # than red. If you need to pin a ref again, pin a tag.
+          ref: master
           path: thinker
       - name: Install the 32-bit MinGW toolchain
         run: |

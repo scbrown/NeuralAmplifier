@@ -167,9 +167,11 @@ Also note `BASE::gov_config()` (`engine_base.h:248`) returns `~0u` for AI but on
 bits for humans — so in Mode B/B+ the 21 governor permission flags become a real, recurring
 decision surface with **no AI policy to copy**.
 
-**Status: the gate is implemented** and has since landed on `scbrown/thinker`'s `master` (the
-old `claude/neural-amplifier-smac-testing-uq1fcg` branch no longer exists on the remote; current
-upstream-sync work is on `claude/thinker-upstream-sync-us8srt`). `Config.llm_factions` is a
+**Status: the gate is implemented** and has since landed on `scbrown/thinker`'s `master`. The
+branch this document used to cite, `claude/neural-amplifier-smac-testing-uq1fcg`, still exists
+but is where the gate was *first* added (tip `62b0b7b`, 2026-07-29) and is now well behind
+`master` (`f10683f`, 2026-08-16); read `master`, and current upstream-sync work is on
+`claude/thinker-upstream-sync-us8srt`. `Config.llm_factions` is a
 bitmask over faction slots (default `0` = stock Thinker, no bridge), `llm_endpoint` is the
 orchestrator base URL, and `llm_enabled(faction_id)` (`faction.cpp:171`) sits alongside
 `thinker_enabled` (`faction.cpp:152`) rather than
@@ -247,6 +249,24 @@ after the deduction records what survived the decision rather than what it was m
 > **Watch item:** re-pointing one table entry only intercepts *that* call site. `mod_base_upkeep`
 > calls `mod_base_hurry()` directly at `base.cpp:4263`, bypassing `na_base_hurry_observed`, and
 > it sits on the production path. Tracked as **na-4zs**; needs a real run to settle.
+
+### 5.3 When to sync with upstream
+
+**Sync on a trigger, not on noticing.** v5.5 was found by someone happening to look, and by then
+it was six commits and a structural refactor. The triggers, in order of authority:
+
+1. **The weekly drift job goes red** — `.github/workflows/upstream-drift.yml` in the fork
+   trial-merges `induktio/thinker` every Monday and re-runs the seam checks and the build. Red
+   means the merge no longer applies cleanly *or* a seam did not survive it. That is the signal
+   to sync, and it arrives while the gap is still small.
+2. **Upstream tags a release.** Upstream has tagged steadily (`v4.1` … `v5.5`), so a tag is a
+   well-defined trigger that needs nobody watching `master`.
+
+Sync on the fork's own branch (`claude/thinker-upstream-sync-…`), and expect the conflict count
+to understate the work: v5.5 produced **three** textual conflicts while actually requiring eight
+seams to be re-placed by hand, because git happily takes a deletion of code you have edited. The
+seam guard exists precisely for that gap — run `python3 tests/check_seams.py` after resolving,
+before believing the build.
 
 ## 6. Build & config
 
