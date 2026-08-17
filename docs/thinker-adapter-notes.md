@@ -208,6 +208,46 @@ surface consequences in [game-surface.md](game-surface.md); dialog handling in
   reusable logic lives in the orchestrator (which is unit-testable); the DLL just serializes
   state and applies the choice.
 
+### 5.2 Where a seam can live (and why the patch table almost never takes it)
+
+The adapter has 68 call sites and 17 of its own helper definitions sitting inside 13
+Thinker-owned files — the fork's whole merge-fragility surface, since `neural.cpp` and
+`na_http.cpp` cannot conflict with anything. They are enumerated in the fork's
+`tests/na_seams.tsv` and enforced by `tests/check_seams.py`.
+
+`na_base_hurry_observed` is the one seam that costs a single line in `patch.cpp` rather than an
+edit inside a function body, and it survived v5.5 needing no work at all. That makes it look
+like the pattern to generalise. **It is not**, and the reason is worth recording so nobody
+re-derives it:
+
+> It works because `mod_base_hurry()` takes **no arguments** and reads everything it needs from
+> globals (`*CurrentBaseID`), *and* because there was an existing patched call site (`0x4F7A38`)
+> to re-point. Both halves are required.
+
+Checked against every other candidate; none has both halves:
+
+| Seam host | Why the table cannot take it |
+| --- | --- |
+| `mod_base_build` | **Not in the patch table at all** — reached only from `mod_base_reset` (`base.cpp:1094`). No entry to re-point. |
+| `mod_tech_selection` | Seam must precede the `tech_research_id` assignment; a wrapper runs after it, and the world view would report the question as already settled. |
+| `mod_social_ai` | Needs the locals `sf`, `sm2`, `soc`. |
+| `move_upkeep` | Needs loop locals (`value`, cohort size) that only exist mid-iteration. |
+| `mod_capture_base` | Needs `best_base_id` / `old_name`, deep inside a conditional branch. |
+| `mod_base_production` | Needs `item_id`, in a nested branch. |
+| `mod_base_yield` | Placement after `base_update` is load-bearing and more code follows. |
+| `mod_base_swap`, `mod_energy_trade`, `mod_buy_tech` | Need mid-body locals (`cost_ask`, loan terms, tech price). |
+| `mod_base_reset` | Convertible in principle, but it has **20** table entries — converting would change 20 lines to save one seam. |
+| `faction_upkeep` | Mid-body, and now a whole-function `write_jump` (§2). |
+
+So the durable answer for the other 67 seams is not relocation but **verification**: keep each
+one a single line where possible, and let `check_seams.py` assert it is still present *and still
+in the right place*. Placement is what carries the argument — sampling the corner-market reserve
+after the deduction records what survived the decision rather than what it was made against.
+
+> **Watch item:** re-pointing one table entry only intercepts *that* call site. `mod_base_upkeep`
+> calls `mod_base_hurry()` directly at `base.cpp:4263`, bypassing `na_base_hurry_observed`, and
+> it sits on the production path. Tracked as **na-4zs**; needs a real run to settle.
+
 ## 6. Build & config
 
 - **Toolchain:** 32-bit **MinGW** (i686), C++11 — *not* MSVC. `CMakeLists.txt:16-18` pins
