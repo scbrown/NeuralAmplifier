@@ -41,8 +41,8 @@ MEASURED_USD_PER_CALL = 0.088
 #: to spend deserves the figure their own bead committed to, not a default that happens to be
 #: conservative.
 RUNS_PER_ARM = {
-    "na-qu8": 20,   # na-04v: 2 arms x 20 runs = 40 calls
-    "na-htm": 10,   # na-uwp: 8 arms x 10 runs = 80 calls
+    "na-qu8": 20,  # na-04v: 2 arms x 20 runs = 40 calls
+    "na-htm": 10,  # na-uwp: 8 arms x 10 runs = 80 calls
 }
 
 #: Used when an eval has no entry above. Stated rather than silently applied.
@@ -89,8 +89,9 @@ def runs_for(eval_id: str, override: int | None) -> tuple[int, str]:
     return DEFAULT_RUNS_PER_ARM, "the default — this eval's bead does not specify one"
 
 
-def report(eval_id: str, run_dir: Path, runs_per_arm: int, usd_per_call: float,
-           source: str = "given") -> int:
+def report(
+    eval_id: str, run_dir: Path, runs_per_arm: int, usd_per_call: float, source: str = "given"
+) -> int:
     if not run_dir.is_dir():
         print(f"no committed run at {run_dir} — run `just eval prompts {eval_id}` first")
         return 1
@@ -105,7 +106,9 @@ def report(eval_id: str, run_dir: Path, runs_per_arm: int, usd_per_call: float,
         print(f"  {arm:<42} {size:>7} bytes")
     print()
     print(f"  calls                 {result['calls']}")
-    print(f"  approx input tokens   {result['approx_input_tokens']:,}  (at ~{CHARS_PER_TOKEN} chars/token)")
+    print(
+        f"  approx input tokens   {result['approx_input_tokens']:,}  (at ~{CHARS_PER_TOKEN} chars/token)"
+    )
     print(f"  USD per call          {result['usd_per_call']}")
     print(f"  ESTIMATED TOTAL       ${result['usd_total']}")
     print()
