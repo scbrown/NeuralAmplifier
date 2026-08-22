@@ -44,6 +44,8 @@ from .knowledge import (
 from .policy import SurfacePolicy
 from .queued import QueuedAnswer, QueueStore
 from .telemetry import Emitter, Sink
+from .turnplan import PlanEntry, PlanStore
+from .turnplan import offered as plan_offered
 
 # One implementation of "read a field the contract keeps in pydantic extras". Private to
 # `turns`, imported rather than copied: its docstring documents a real pydantic asymmetry
@@ -193,6 +195,7 @@ class Orchestrator:
         policy: SurfacePolicy | None = None,
         deferrals: DeferralSet | None = None,
         queue: QueueStore | None = None,
+        turn_plan: PlanStore | None = None,
     ) -> None:
         self.brain = brain
         # How many times a decision whose every choice was thrown out may be re-asked with the
@@ -234,6 +237,9 @@ class Orchestrator:
         # afresh, which is how this behaved before the queue existed and is still a legitimate
         # way to run.
         self.queue = queue
+        # The bulk-turn plan table (na-7bk). Absent means no bulk mode, which is the same
+        # legitimate way to run as an absent queue.
+        self.turn_plan = turn_plan
 
     def decide(self, world_view: WorldView) -> Result:
         started = time.monotonic()
@@ -293,6 +299,37 @@ class Orchestrator:
         # never asked once, so there is nothing to repair.
         if not self.policy.allows(world_view.surface_id):
             return self._deterministic(world_view, fog, grounding, dropped, started)
+
+        # The bulk-turn plan, if the agent installed one for exactly this turn (na-7bk).
+        #
+        # Before the queued answers, deliberately: where both name the same decision, the plan
+        # entry is the fresher claim — written against this very turn's forecast — while a queued
+        # answer stands across turns on predicates. And before the brain for the same reason the
+        # queue is: answering from the table without waking anyone is the entire point.
+        if self.turn_plan is not None:
+            planned = self.turn_plan.find(world_view)
+            if planned is not None:
+                if plan_offered(planned, world_view):
+                    return self._planned(world_view, fog, grounding, dropped, started, planned)
+                # The planned action left the space between the forecast and the ask — built
+                # already, or its prerequisite lost. Retired so it cannot fail again this turn,
+                # and named in front of whoever answers instead: an agent re-raised with no
+                # explanation would plan the same answer into the next table.
+                # `miss_why`, not `why`: the repair loop below binds `why` to a list in this
+                # same function scope, and shadowing it here is the closure-repointing shape
+                # that slice 2's queue/DecisionQueue bug already demonstrated.
+                miss_why = f"{planned.action_id} is no longer in the action space"
+                faction_id = _extra(world_view, "faction_id", int)
+                if faction_id is not None:
+                    self.turn_plan.miss(faction_id, planned, miss_why)
+                world_view = world_view.model_copy(
+                    update={
+                        "advisories": [
+                            *(world_view.advisories or []),
+                            f"your plan entry for this decision missed: {miss_why}",
+                        ]
+                    }
+                )
 
         # A standing answer, if the agent left one and the board still agrees with it.
         #
@@ -541,6 +578,55 @@ class Orchestrator:
                 dropped=dropped,
             ),
             tier="queued",
+        )
+        self.telemetry.emit(record)
+        return Result(orders=orders, record=record)
+
+    def _planned(
+        self,
+        world_view: WorldView,
+        fog: Redaction,
+        grounding: Grounding,
+        dropped: list[str],
+        started: float,
+        entry: PlanEntry,
+    ) -> Result:
+        """Answer from the bulk-turn table, without asking anyone (na-7bk).
+
+        Recorded at `tier="plan"` and NOT degraded. The decision was made by an agent, for this
+        exact turn, from the turn forecast — the strongest freshness claim any non-live answer
+        here can make, which is why no predicate check stands between the table and the reply.
+        The one gate that ran is invariant 1's: the action is still in the space the engine
+        offered for THIS ask.
+        """
+        from .contract import Choice
+
+        entry.applied += 1
+        orders = Orders(
+            choices=[
+                Choice(
+                    action_id=entry.action_id,
+                    reason=f"turn plan: {entry.reason or 'planned by the agent'}",
+                )
+            ]
+        )
+        record = self._record(
+            world_view=world_view,
+            orders=orders,
+            degrade_reason=None,
+            latency_ms=int((time.monotonic() - started) * 1000),
+            unknown=0,
+            fog=fog,
+            knowledge=summarise(grounding, Ruling(), self.guard is not None),
+            plan=self._plan_block(
+                world_view,
+                orders,
+                issued=[],
+                rejected=[],
+                configured=self.plan is not None,
+                dropped=dropped,
+            ),
+            tier="plan",
         )
         self.telemetry.emit(record)
         return Result(orders=orders, record=record)

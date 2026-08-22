@@ -101,6 +101,9 @@ class OrchestratorClient:
     def whatif(self, decision_id: str, action_id: str) -> dict[str, Any]:
         return self._call("/agent/whatif", {"decision_id": decision_id, "action_id": action_id})
 
+    def plan(self, payload: dict[str, Any]) -> dict[str, Any]:
+        return self._call("/agent/plan", payload)
+
 
 class AgentError(RuntimeError):
     """Something the model should read and respond to, not a crash."""
@@ -331,6 +334,28 @@ def build_server(client: OrchestratorClient) -> Any:
         explained in one round trip.
         """
         return json.dumps(client.order({"orders": orders}), indent=2)
+
+    @server.tool()
+    def submit_turn_plan(faction_id: int, turn: int, entries: list[dict[str, Any]]) -> str:
+        """Set your whole turn's answers at once — bulk-turn mode.
+
+        Read the turn forecast first (`POST /agent/turn` — it lists every decision the turn is
+        expected to raise), decide them all at your own pace, then install the table:
+
+            submit_turn_plan(faction_id=2, turn=43, entries=[
+                {"surface_id": "base.production", "base_id": 7,
+                 "action_id": "facility:4", "reason": "finish the Tanks"},
+                {"surface_id": "faction.se", "action_id": "se:no-change"}])
+
+        Covered decisions are answered from the table in milliseconds, recorded at tier "plan";
+        you are woken only for decisions the table does not cover, and for a planned action the
+        engine stopped offering (the wake-up names it). The table is valid for exactly the turn
+        you state and replaces your previous one whole — install a new table each turn, and an
+        empty `entries` list means "wake me for everything".
+        """
+        return json.dumps(
+            client.plan({"faction_id": faction_id, "turn": turn, "entries": entries}), indent=2
+        )
 
     @server.tool()
     def order_outcomes(cursor: int = 0) -> str:

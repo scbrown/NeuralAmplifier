@@ -151,6 +151,9 @@ def test_the_surface_is_answering_plus_acting_and_nothing_that_reads_the_board()
         "issue_orders",
         "order_outcomes",
         "what_if",
+        # Answers, in bulk and in advance — the same axis as submit_orders, once per turn
+        # instead of once per wake-up (na-7bk). It writes the plan table and reads nothing.
+        "submit_turn_plan",
     }
 
 

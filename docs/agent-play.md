@@ -157,6 +157,17 @@ Answering — the three moments of a decision, plus a plan that outlives the tur
 | `submit_orders(decision_id, action_id, reason, cited, followed, overrode)` | Answer it, choosing from the action space |
 | `decisions_waiting()` | What is outstanding — for re-orienting after a reconnect or compaction |
 | `issue_directive(...)` | Set a standing plan later decisions will be shown. Call before submitting |
+| `submit_turn_plan(faction_id, turn, entries)` | Bulk-turn mode: install a table of answers for exactly one turn. Covered decisions are answered in milliseconds at tier `plan`; you are woken only for what the table does not cover |
+
+**Bulk-turn mode** (na-7bk) is the answer to per-decision latency: ~30–60 seconds of wake,
+reason and submit per decision makes a six-faction AI round painfully slow, and door 1 blocks
+synchronously so decision N+1 does not exist until N is answered. Read the turn forecast
+(`POST /agent/turn`), decide the whole turn at your own pace, and install the table
+(`POST /agent/plan`, keyed by faction, surface and base). The table is valid for exactly the
+turn it names and replaces your previous one whole; a planned action the engine has stopped
+offering wakes you with the miss named, and `GET /agent/plan` reports what answered and what
+missed. Records land at `tier="plan"` — distinct from `llm` and `queued` — so replay can tell
+strategy-driven answers from agent-driven ones.
 
 Acting — command a unit or base without waiting to be asked ([turn-scoped-play.md](turn-scoped-play.md)):
 

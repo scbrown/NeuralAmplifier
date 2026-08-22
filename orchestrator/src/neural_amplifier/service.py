@@ -37,6 +37,8 @@ from .pending import NotClaimable, Pending
 from .queued import Comparator, Predicate, QueuedAnswer, QueueError, QueueStore
 from .replay import WorldViewStore
 from .telemetry import OtelSink, Sink
+from .turnplan import PlanEntry, PlanError, PlanStore, TurnPlan
+from .turnplan import validate as validate_plan
 from .turns import TurnAnnouncement, TurnStore
 
 log = logging.getLogger(__name__)
@@ -433,6 +435,12 @@ def create_app(
     answer_queue = QueueStore()
     app.state.answer_queue = answer_queue
 
+    # The bulk-turn plan table (na-7bk). Same naming caution as `answer_queue` above — `plan`
+    # already means the DirectiveStore in this scope, and `plan_path` its configuration, so this
+    # is `turn_plan` everywhere or the endpoints close over the wrong object.
+    turn_plan = PlanStore()
+    app.state.turn_plan = turn_plan
+
     orchestrator = Orchestrator(
         brain=brain or build_brain(config),
         log=resolved_log,
@@ -444,6 +452,7 @@ def create_app(
         policy=config.surfaces,
         deferrals=deferrals,
         queue=answer_queue,
+        turn_plan=turn_plan,
     )
     app.state.orchestrator = orchestrator
 
@@ -1060,6 +1069,74 @@ def create_app(
             "standing": [a.summary() for a in standing],
             "count": len(standing),
             "retired": list(answer_queue.retired),
+        }
+
+    @app.post("/agent/plan")
+    def agent_plan_install(body: dict[str, object]) -> dict[str, object]:
+        """Install a faction's decision table for ONE turn — bulk-turn mode (na-7bk).
+
+        `{"faction_id": 2, "turn": 43, "entries": [
+           {"surface_id": "base.production", "base_id": 7, "action_id": "facility:4",
+            "reason": "finish the Tanks"}, ...]}`
+
+        The natural companion to `GET /agent/turn`: read the forecast, decide the whole turn at
+        your own pace, install the table, and the orchestrator answers covered decisions in
+        milliseconds at `tier="plan"` — waking you only for the ones the table does not cover.
+
+        The table replaces the faction's previous one whole, and answers nothing outside the
+        stated turn: by turn N+1 the engine has played turn N, so those answers were made
+        against a board that no longer exists. An empty `entries` list is a legitimate install
+        meaning "wake me for everything".
+        """
+        for required in ("faction_id", "turn"):
+            if body.get(required) in (None, ""):
+                raise HTTPException(
+                    422,
+                    f"{required} is required — a plan is faction-private and lives exactly one "
+                    "turn, so both are part of its identity",
+                )
+        faction_id = _as_int(body["faction_id"], "faction_id")
+        turn = _as_int(body["turn"], "turn")
+
+        raw_entries = body.get("entries")
+        if raw_entries is None:
+            raw_entries = []
+        if not isinstance(raw_entries, list):
+            raise HTTPException(422, "entries must be a list")
+        entries: dict[tuple[str, int | None], PlanEntry] = {}
+        for raw in raw_entries:
+            if not isinstance(raw, dict):
+                raise HTTPException(422, "each plan entry must be an object")
+            entry = PlanEntry(
+                surface_id=str(raw.get("surface_id") or ""),
+                action_id=str(raw.get("action_id") or ""),
+                base_id=_as_opt_int(raw.get("base_id"), "entries[].base_id"),
+                reason=str(raw["reason"]) if raw.get("reason") else None,
+            )
+            entries[(entry.surface_id, entry.base_id)] = entry
+
+        installed = TurnPlan(faction_id=faction_id, turn=turn, entries=entries)
+        try:
+            validate_plan(installed)
+        except PlanError as exc:
+            # 422 while the agent still holds the strategy and can fix the entry it got wrong.
+            raise HTTPException(422, str(exc)) from exc
+        turn_plan.install(installed)
+        return {"plan": installed.summary()}
+
+    @app.get("/agent/plan")
+    def agent_plan_list(faction_id: int | None = None) -> dict[str, object]:
+        """The installed tables, what each entry has answered, and what missed.
+
+        `missed` is the health signal: each entry there named an action that had left the space
+        by the time its decision arrived, so the plan was written against a board that changed
+        before the engine asked. A table that misses often is strategy set too early.
+        """
+        plans = turn_plan.plans(faction_id)
+        return {
+            "plans": [p.summary() for p in plans],
+            "count": len(plans),
+            "missed": list(turn_plan.missed),
         }
 
     @app.get("/agent/pending")

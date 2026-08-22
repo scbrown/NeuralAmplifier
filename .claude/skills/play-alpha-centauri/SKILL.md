@@ -225,7 +225,22 @@ decision that spends the resource you are saving finds this plan by walking out 
 Do not issue one on every decision. A plan per turn is noise; a plan that shapes twenty turns
 is the point.
 
-## 6. Read what `submit_orders` returns
+## 5b. Answer a whole turn at once — bulk-turn mode
+
+Waking per decision costs 30–60 seconds each, and the engine blocks on every one. When a turn
+is yours to plan, set it once:
+
+1. `POST /agent/turn` — the forecast of every decision this turn is expected to raise.
+2. Decide them all at your own pace.
+3. `submit_turn_plan(faction_id, turn, entries)` — one entry per decision:
+   `{"surface_id": "base.production", "base_id": 7, "action_id": "facility:4", "reason": "..."}`
+   (omit `base_id` for faction-scope surfaces like `faction.se`).
+
+Covered decisions are answered from the table in milliseconds, recorded at tier `plan`. You
+are woken only for what the table does not cover — and for a planned action the engine
+stopped offering, with the miss named, so answer that one live and move on. The table is
+valid for exactly the turn you state and replaces your previous one whole: install a fresh
+table each turn. `GET /agent/plan` shows what answered and what missed.
 
 It reports what **actually ran**, which is not always what you asked for. Validation and the
 policy guard sit between your order and the game.

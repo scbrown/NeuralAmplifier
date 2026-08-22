@@ -29,7 +29,11 @@ from pydantic import BaseModel, ConfigDict, Field
 #: and said in advance what would invalidate it, so it is not `deterministic`. Keeping it distinct
 #: is what makes the only question worth asking about the mechanism answerable afterwards: how
 #: often did a standing answer stand, and how often was it overtaken by the board?
-Tier = Literal["deterministic", "llm", "deferred", "queued"]
+#: `plan` is the fifth (na-7bk): an answer from the bulk-turn table the agent installed for
+#: exactly this turn. Not `queued` — nothing conditional is standing, the table dies with its
+#: turn — and the bead requires the distinction explicitly, so replay can tell strategy-driven
+#: answers from agent-driven ones.
+Tier = Literal["deterministic", "llm", "deferred", "queued", "plan"]
 
 
 def world_view_hash(payload: dict[str, Any]) -> str:
