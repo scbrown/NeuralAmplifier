@@ -92,7 +92,7 @@ log "prefix:  $WINEPREFIX"
 if [ "$cmd" = "restore" ]; then
     B="$PLAY_DIR/$BACKUP_SUBDIR"
     [ -d "$B" ] || die "no backup at $B — nothing to restore"
-    for f in thinker.dll thinker.exe thinker.ini; do
+    for f in thinker.dll thinker.exe thinker.ini modmenu.txt; do
         [ -f "$B/$f" ] && cp -p "$B/$f" "$PLAY_DIR/$f" && echo "  restored $f"
     done
     log "stock Thinker restored"
@@ -179,6 +179,7 @@ log "building thinker (release)"
 
 BUILT_DLL="$THINKER_DIR/build/release/thinker.dll"
 BUILT_EXE="$THINKER_DIR/build/release/thinker.exe"
+BUILT_MENU="$THINKER_DIR/build/release/modmenu.txt"
 [ -f "$BUILT_DLL" ] || die "build produced no thinker.dll"
 
 # Confirm we cross-compiled rather than accidentally building a host binary —
@@ -210,7 +211,60 @@ for f in thinker.dll thinker.exe thinker.ini; do
 done
 cp "$BUILT_DLL" "$PLAY_DIR/thinker.dll"
 [ -f "$BUILT_EXE" ] && cp "$BUILT_EXE" "$PLAY_DIR/thinker.exe"
+
+# ── The menu definitions are part of the build, not part of the install ─────
+#
+# Since the v5.5 merge, top_menu is OUR code and it builds the main menu by asking
+# Popup_start for the #TOPMENU section of modmenu.txt. That section did not exist before
+# v5.5, because the engine drew its own menu. A play directory carrying an older
+# modmenu.txt therefore has a DLL asking for a section that is not there — and the engine's
+# answer is to die on the splash screen with
+#
+#     Unable to allocate draw-buffer; terminating program.
+#
+# which names neither the file nor the section, and sends everyone to video settings. It
+# cost a night's play and a 25-commit bisect (na-nnn) before anyone read modmenu.txt.
+#
+# This script updated thinker.dll and left the data the DLL depends on alone, which is the
+# whole bug: the two must move together or not at all. They now do.
+if [ -f "$BUILT_MENU" ]; then
+    cp "$BUILT_MENU" "$PLAY_DIR/modmenu.txt"
+else
+    warn "no modmenu.txt in the build — an older Thinker checkout, or CMake did not stage it."
+    warn "If the game dies at the splash with a draw-buffer error, this is why (na-nnn)."
+fi
 log "installed our build"
+
+# Check the ARTIFACT, not the intent — the same rule as assert_flag_in_dll above. The copy
+# can be right and the file still wrong: a play directory whose modmenu.txt is read-only, a
+# build from a checkout predating the section, a hand-edited local menu.
+if ! grep -q '^#TOPMENU' "$PLAY_DIR/modmenu.txt" 2>/dev/null; then
+    # Two details here, both measured, both of which made this check quietly useless before:
+    #
+    # 1. Plain `strings`, NOT `strings -el`. assert_flag_in_dll above uses -el because the
+    #    command-line flags it checks are wchar_t literals (L"-na-autoload"); "TOPMENU" is an
+    #    ordinary char literal and lives in the DLL as 8-bit text. Copying the -el from there
+    #    found nothing and passed.
+    # 2. `grep -c` into a variable, NOT `grep -q` in a pipeline. This script runs under
+    #    `set -o pipefail`, and `-q` makes grep exit the instant it matches — which SIGPIPEs
+    #    `strings` mid-write, so the PIPELINE reports failure even though the match succeeded.
+    #    Measured 5/5 against this DLL: the `-q` form said "not present" every time while the
+    #    string was there. It is a function of how much the producer still has to write, so
+    #    it is invisible on small output and reliable on large — `strings -el` emits 13 lines
+    #    here and `strings` emits 14246, which is exactly why assert_flag_in_dll has never
+    #    shown the fault and this check failed on its first run.
+    menu_in_dll="$(strings "$PLAY_DIR/thinker.dll" 2>/dev/null | grep -cxF "TOPMENU" || true)"
+    if [ "${menu_in_dll:-0}" -gt 0 ]; then
+        die "$(printf '%s\n' \
+            "the installed thinker.dll builds its main menu from #TOPMENU in modmenu.txt," \
+            "and $PLAY_DIR/modmenu.txt does not contain that section." \
+            "  The game would die on the splash screen with:" \
+            "    Unable to allocate draw-buffer; terminating program." \
+            "  fix: $THINKER_DIR/docs/modmenu.txt is the source; rebuild so CMake stages it." \
+            "This is a refusal, not a warning: launching would waste a run on a fatal that" \
+            "names the wrong subsystem (na-nnn).")"
+    fi
+fi
 
 # ── Configure the gate ──────────────────────────────────────────────────────
 #
@@ -413,7 +467,13 @@ assert_flag_in_dll() {
         warn "A stale build would ignore it silently. Install binutils to get this check."
         return 0
     fi
-    if strings -el "$dll" 2>/dev/null | grep -qxF -- "$flag"; then
+    # Counted rather than `grep -q`-ed, for the pipefail/SIGPIPE reason documented at the
+    # modmenu check below. Today this one is safe by accident — `strings -el` emits ~13 lines,
+    # so grep consumes all of them before exiting and nothing is SIGPIPEd (verified 5/5) — but
+    # "safe because the producer is small" is not a property anyone will re-check when a few
+    # more wide literals land in the DLL, and the failure mode here is a REFUSAL TO LAUNCH
+    # over a flag that is present.
+    if [ "$(strings -el "$dll" 2>/dev/null | grep -cxF -- "$flag" || true)" -gt 0 ]; then
         return 0
     fi
     die "$(printf '%s\n' \
