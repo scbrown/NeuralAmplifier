@@ -226,6 +226,92 @@ def test_a_build_for_another_base_resolves_nothing(
     assert client.get("/agent/pending").json()["count"] == 1
 
 
+def batch_adapter(game_dir: Path, oks: list[bool]) -> None:
+    """Stand in for na_order_batch: one envelope, one entry per order it ran, in order."""
+
+    def run() -> None:
+        cmd = game_dir / "na-command"
+        for _ in range(400):
+            if cmd.exists():
+                lines = cmd.read_text(encoding="utf-8").strip().splitlines()
+                cmd.unlink()
+                results = [
+                    {"command": line.split()[0], "detail": "done" if ok else "refused", "ok": ok}
+                    for line, ok in zip(lines, oks, strict=False)
+                ]
+                (game_dir / "na-command-result").write_text(
+                    json.dumps(
+                        {
+                            "command": "batch",
+                            "results": results,
+                            "count": len(results),
+                            "dropped": 0,
+                            "ok": all(r["ok"] for r in results),
+                            "turn": 42,
+                            "halted": 0,
+                        }
+                    ),
+                    encoding="utf-8",
+                )
+                return
+            time.sleep(0.01)
+
+    threading.Thread(target=run, daemon=True).start()
+
+
+def test_a_confirmed_build_in_a_batch_resolves_the_deferral_it_answers(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Sweeping the pending set is the batch's main use — an agent that parked six decisions
+    answers them in one round trip, and each confirmed build must retire its deferral exactly as
+    a single one does. Before this path resolved, a swept batch left /agent/pending offering
+    work the agent had already done."""
+    monkeypatch.setenv("NA_GAME_DIR", str(tmp_path))
+    client = TestClient(create_app(brain=DeferringBrain()))
+    client.post("/decide", json=WORLD_VIEW)
+    assert client.get("/agent/pending").json()["count"] == 1
+
+    batch_adapter(tmp_path, oks=[True, True])
+    got = client.post(
+        "/order",
+        json={
+            "orders": [
+                {"verb": "move", "args": [3, 10, 10]},
+                {"verb": "build", "args": [7, -4]},
+            ]
+        },
+    ).json()
+
+    assert got["status"] == "ok"
+    assert got["resolved_deferrals"], "a confirmed build in a batch must close its deferral"
+    assert client.get("/agent/pending").json()["count"] == 0
+
+
+def test_an_unconfirmed_build_in_a_batch_leaves_the_deferral_open(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Confirmation is per ORDER: the move landing does not vouch for the build. Only the
+    build's own result entry can retire the deferral it answers."""
+    monkeypatch.setenv("NA_GAME_DIR", str(tmp_path))
+    client = TestClient(create_app(brain=DeferringBrain()))
+    client.post("/decide", json=WORLD_VIEW)
+
+    batch_adapter(tmp_path, oks=[True, False])
+    got = client.post(
+        "/order",
+        json={
+            "orders": [
+                {"verb": "move", "args": [3, 10, 10]},
+                {"verb": "build", "args": [7, -4]},
+            ]
+        },
+    ).json()
+
+    assert got["status"] == "refused"
+    assert "resolved_deferrals" not in got
+    assert client.get("/agent/pending").json()["count"] == 1
+
+
 # --- expiry is honest, not tidy ------------------------------------------------
 
 

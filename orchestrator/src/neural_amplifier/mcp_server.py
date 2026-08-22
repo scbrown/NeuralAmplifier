@@ -270,7 +270,7 @@ def build_server(client: OrchestratorClient) -> Any:
         return json.dumps(client.whatif(decision_id, action_id), indent=2)
 
     @server.tool()
-    def issue_order(verb: str, args: list[int]) -> str:
+    def issue_order(verb: str, args: list[int], intent: dict[str, Any] | None = None) -> str:
         """Command a unit or base DIRECTLY, without waiting to be asked.
 
         `next_decision` gives you what the engine chose to ask about, one at a time, in its order.
@@ -290,8 +290,25 @@ def build_server(client: OrchestratorClient) -> Any:
 
         Legality is the engine's call, not this tool's — an illegal move comes back `refused` with
         the engine's own reason rather than being guessed at here.
+
+        `intent` is optional, for a LONG-HORIZON order: why you gave it, and what should bring it
+        back for review. The engine keeps the goto; this keeps the reason, in your faction's own
+        graph, and recall puts it in front of any later decision naming that unit.
+
+            issue_order("move", [12, 40, 21], intent={
+                "faction_id": 2, "unit_id": 12,
+                "goal": "hold the land bridge", "until_turn": 60,
+                "triggers": [{"metric": "military_units",
+                              "comparator": "at_least", "target": 4}]})
+
+        It is recorded only if the game CONFIRMS the order, and refused up front (nothing issued)
+        if it has no horizon or no trigger — an intent nothing can bring back for review would
+        read forever as a plan somebody is watching.
         """
-        return json.dumps(client.order({"verb": verb, "args": args}), indent=2)
+        payload: dict[str, Any] = {"verb": verb, "args": args}
+        if intent:
+            payload["intent"] = intent
+        return json.dumps(client.order(payload), indent=2)
 
     @server.tool()
     def issue_orders(orders: list[dict[str, Any]]) -> str:
@@ -307,6 +324,11 @@ def build_server(client: OrchestratorClient) -> Any:
         succeeded; a batch that half-worked reports `refused`, and the per-order entries are the
         only place that says which ones. `dropped` is non-zero if you sent more than the adapter
         will run in one tick — those were not executed.
+
+        An entry may carry an `intent` — same shape as `issue_order`'s — and each is recorded
+        only if ITS order was individually confirmed. The reply's `intents` list says which were
+        written, by position. A batch of moves with intents is how an army gets both ordered and
+        explained in one round trip.
         """
         return json.dumps(client.order({"orders": orders}), indent=2)
 

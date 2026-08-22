@@ -337,6 +337,20 @@ def test_batch_over_http(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Non
     assert len(got["results"]) == 2
 
 
+def test_an_empty_order_line_in_a_batch_is_refused(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The channel silently filters blank lines, so one in the middle of a batch would shift
+    every later result onto the wrong order. Per-order confirmation is positional (that is what
+    intents and deferral resolution read), so the alignment has to be refused into existence
+    rather than repaired after the fact."""
+    monkeypatch.setenv("NA_GAME_DIR", str(tmp_path))
+    client = TestClient(create_app())
+    resp = client.post("/order", json={"orders": ["move 1 2 3", "   "]})
+    assert resp.status_code == 422
+    assert not (tmp_path / "na-command").exists(), "nothing may have been issued"
+
+
 def test_the_command_file_is_never_visible_half_written(tmp_path: Path) -> None:
     """The race behind `test_orders_are_serialised`'s flakiness, pinned at its cause.
 

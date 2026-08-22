@@ -296,6 +296,14 @@ true without anyone maintaining it.
   per-order entries and `dropped` reports anything past the cap that was never executed. Only
   order verbs batch; `shot` / `click` / `key` / `load` stay one-per-file, because for an operator
   command a second line is far likelier to be a mistake than an intent.
+
+  The per-order entries are what the orchestrator's own attachments read, positionally: a batch
+  entry may carry a unit intent (na-7bk — recorded only when *its* order is confirmed) and a
+  confirmed `build` retires the deferral it answers, exactly as a single order does. An order
+  with no result entry — past the cap, or an old DLL that read only the first line — is
+  unconfirmed, and unconfirmed is never upgraded to applied. Positional matching is also why a
+  blank order line is refused at `POST /order` rather than filtered: the channel dropping it
+  would shift every later result onto the wrong order.
 - **Tile visibility.** `move` now refuses a destination the faction has not explored, using the
   engine's own `is_known(x, y, faction_id)`. Per the correction in §5 this is not a second line
   behind an orchestrator gate — for tiles it is the only gate there is. It does not make an

@@ -162,9 +162,19 @@ Acting — command a unit or base without waiting to be asked ([turn-scoped-play
 
 | Tool | For |
 | --- | --- |
-| `issue_order(verb, args)` | `move` / `skip` / `build` one unit or base, now |
-| `issue_orders([...])` | Several in one round trip — the channel costs ~250 ms each, so fifty units ordered singly is twelve seconds of a turn |
+| `issue_order(verb, args, intent?)` | `move` / `skip` / `build` one unit or base, now |
+| `issue_orders([...])` | Several in one round trip — the channel costs ~250 ms each, so fifty units ordered singly is twelve seconds of a turn. Each entry may carry its own `intent` |
 | `order_outcomes(cursor)` | What the ENGINE did with your orders, including divergences |
+
+**An order may carry an `intent`** — why the order was given, a horizon (`until_turn`) and
+review triggers from the measured metric vocabulary. The engine keeps the goto; the intent keeps
+the reason, in the ordering faction's own graph, and recall puts it in front of any later
+decision naming that unit. It is recorded only once the game confirms the order — in a batch,
+only for the entries the adapter individually confirmed (the reply's `intents` list says which,
+by position) — and an intent with no horizon or no trigger is refused up front, before anything
+is issued: mid-batch is the worst possible moment for a 422, and an intent nothing can bring
+back for review would read forever as a plan somebody is watching. A confirmed `build` in a
+batch also resolves the deferral it answers, exactly as a single one does.
 
 **The rule is no second source of board state, not a tool count.** This section said "four tools"
 and "anything more would invite the model to go looking for game state"; the principle is right

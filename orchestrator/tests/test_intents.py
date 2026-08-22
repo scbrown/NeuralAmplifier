@@ -163,6 +163,189 @@ def test_an_order_with_no_intent_is_unaffected(
     assert store.by_scope == {}
 
 
+def test_a_bad_intent_is_refused_before_the_order_is_issued(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The 422 must reach the agent while it still holds the WHOLE act.
+
+    Validated after issuing, a refused annotation would throw away the confirmation of an order
+    the game already ran — the caller would see an error for a move that happened. No adapter
+    runs here, so the assertion that no command file exists is the assertion that nothing was
+    sent at all.
+    """
+    client, store = app_with_store(tmp_path, monkeypatch)
+    resp = client.post(
+        "/order",
+        json={"verb": "move", "args": [12, 40, 21], "intent": {**INTENT, "until_turn": None}},
+    )
+    assert resp.status_code == 422
+    assert not (tmp_path / "na-command").exists(), "the order must not have been issued"
+    assert store.by_scope == {}
+
+
+# --- batches: an army ordered and explained in one round trip (na-7bk) ---------------
+
+
+def batch_adapter(game_dir: Path, oks: list[bool], dropped: int = 0) -> None:
+    """Stand in for na_order_batch: one envelope, one entry per order it ran, in order."""
+
+    def run() -> None:
+        cmd = game_dir / "na-command"
+        for _ in range(400):
+            if cmd.exists():
+                lines = cmd.read_text(encoding="utf-8").strip().splitlines()
+                cmd.unlink()
+                results = [
+                    {"command": line.split()[0], "detail": "done" if ok else "refused", "ok": ok}
+                    for line, ok in zip(lines, oks, strict=False)
+                ]
+                (game_dir / "na-command-result").write_text(
+                    json.dumps(
+                        {
+                            "command": "batch",
+                            "results": results,
+                            "count": len(results),
+                            "dropped": dropped,
+                            "ok": all(r["ok"] for r in results) and dropped == 0,
+                            "turn": 40,
+                            "halted": 0,
+                        }
+                    ),
+                    encoding="utf-8",
+                )
+                return
+            time.sleep(0.01)
+
+    threading.Thread(target=run, daemon=True).start()
+
+
+def test_each_confirmed_order_in_a_batch_records_its_own_intent(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    client, store = app_with_store(tmp_path, monkeypatch)
+    batch_adapter(tmp_path, oks=[True, True])
+
+    got = client.post(
+        "/order",
+        json={
+            "orders": [
+                {"verb": "move", "args": [12, 40, 21], "intent": INTENT},
+                {"verb": "move", "args": [13, 41, 21], "intent": {**INTENT, "unit_id": 13}},
+            ]
+        },
+    ).json()
+
+    assert got["status"] == "ok"
+    assert [n["recorded"] for n in got["intents"]] == [True, True]
+    assert sorted(i.unit_id for i in store.by_scope[memory_scope(GAME, 2)]) == [12, 13]
+
+
+def test_only_the_confirmed_half_of_a_batch_records_its_intent(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Confirmation is per ORDER, not per envelope. A batch that half-worked reports `refused`
+    overall, and the order that DID land still deserves its reason — while the one that did not
+    must not leave a remembered plan no unit is executing."""
+    client, store = app_with_store(tmp_path, monkeypatch)
+    batch_adapter(tmp_path, oks=[True, False])
+
+    got = client.post(
+        "/order",
+        json={
+            "orders": [
+                {"verb": "move", "args": [12, 40, 21], "intent": INTENT},
+                {"verb": "move", "args": [13, 9, 9], "intent": {**INTENT, "unit_id": 13}},
+            ]
+        },
+    ).json()
+
+    assert got["status"] == "refused"
+    by_order = {n["order"]: n for n in got["intents"]}
+    assert by_order[0]["recorded"] is True
+    assert by_order[1]["recorded"] is False
+    recorded = store.by_scope[memory_scope(GAME, 2)]
+    assert [i.unit_id for i in recorded] == [12]
+
+
+def test_a_bad_intent_refuses_the_whole_batch_before_anything_is_issued(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Mid-batch is the worst possible moment for a 422: half the army has already moved. So a
+    refusable intent anywhere in the list refuses the list, while the agent still holds it."""
+    client, store = app_with_store(tmp_path, monkeypatch)
+    resp = client.post(
+        "/order",
+        json={
+            "orders": [
+                {"verb": "move", "args": [12, 40, 21], "intent": INTENT},
+                {"verb": "move", "args": [13, 41, 21], "intent": {**INTENT, "until_turn": None}},
+            ]
+        },
+    )
+    assert resp.status_code == 422
+    assert "horizon" in resp.json()["detail"]
+    assert not (tmp_path / "na-command").exists(), "nothing may have been issued"
+    assert store.by_scope == {}
+
+
+def test_a_batch_answered_without_per_order_results_records_nothing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Fail-closed on the envelope. An adapter that answers `ok` without per-order entries — an
+    old DLL that read only the first line is the live case — has confirmed no individual order,
+    and the envelope's own `ok` says everything worked, not which things did."""
+    client, store = app_with_store(tmp_path, monkeypatch)
+    fake_adapter(tmp_path, ok=True)  # the single-envelope shape: no `results` list
+
+    got = client.post(
+        "/order",
+        json={"orders": [{"verb": "move", "args": [12, 40, 21], "intent": INTENT}]},
+    ).json()
+
+    assert got["intents"][0]["recorded"] is False
+    assert store.by_scope == {}
+
+
+def test_a_dropped_orders_intent_is_not_recorded(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """An order past the adapter's per-tick cap was NOT executed; it has no result entry, and no
+    result entry means unconfirmed, never 'probably fine'."""
+    client, store = app_with_store(tmp_path, monkeypatch)
+    batch_adapter(tmp_path, oks=[True], dropped=1)
+
+    got = client.post(
+        "/order",
+        json={
+            "orders": [
+                {"verb": "move", "args": [12, 40, 21], "intent": INTENT},
+                {"verb": "move", "args": [13, 41, 21], "intent": {**INTENT, "unit_id": 13}},
+            ]
+        },
+    ).json()
+
+    assert got["dropped"] == 1
+    by_order = {n["order"]: n for n in got["intents"]}
+    assert by_order[0]["recorded"] is True
+    assert by_order[1]["recorded"] is False
+    assert [i.unit_id for i in store.by_scope[memory_scope(GAME, 2)]] == [12]
+
+
+def test_a_body_level_intent_on_a_batch_is_refused(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A batch-level intent names no order, and guessing which one it meant would attach a
+    reason to a move nobody explained."""
+    client, store = app_with_store(tmp_path, monkeypatch)
+    resp = client.post(
+        "/order",
+        json={"orders": [{"verb": "move", "args": [12, 40, 21]}], "intent": INTENT},
+    )
+    assert resp.status_code == 422
+    assert not (tmp_path / "na-command").exists()
+    assert store.by_scope == {}
+
+
 # --- the reason comes back -------------------------------------------------------
 
 

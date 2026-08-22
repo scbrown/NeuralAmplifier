@@ -70,24 +70,22 @@ def build_brain(config: Config | None = None) -> Brain:
     return ClaudeBrain(**kwargs)
 
 
-def _record_intent(
-    orchestrator: Orchestrator, body: dict[str, object], command: str, outcome: dict[str, object]
-) -> dict[str, object] | None:
-    """Write the WHY behind a long-horizon order into the ordering faction's graph.
+def _parse_intent(raw: object, command: str) -> tuple[UnitIntent, int] | None:
+    """Validate an intent while the agent still holds the order — BEFORE anything is issued.
 
-    Attached to the order rather than posted separately, deliberately: the reason and the order
-    are one act, and a second endpoint would make it possible to have either without the other —
-    an unexplained goto, or a remembered plan no unit is carrying out.
+    Split from the write half deliberately. Validation and recording want opposite moments: an
+    unacceptable intent must be refused before the order goes out (a 422 after the game confirmed
+    a move would throw away the confirmation the caller needs to see), while the write must wait
+    for that confirmation (a remembered reason for an order that never landed describes a plan no
+    unit is executing). One function doing both forced validation to the wrong side of `issue()`,
+    and in a batch it would fire mid-flight, after some orders had already gone.
 
     Faction comes from the CALLER, never inferred from the unit id. Units are numbered in one
     engine-wide sequence, so inferring would be a coincidence away from writing one faction's
     private plan into another's graph, which is the fog boundary this all turns on.
     """
-    raw = body.get("intent")
     if not isinstance(raw, dict):
         return None
-    if str(outcome.get("status")) != "ok":
-        return {"recorded": False, "why": "the order was not confirmed, so no intent was written"}
 
     faction_id = raw.get("faction_id")
     if not isinstance(faction_id, int | float | str) or faction_id == "":
@@ -122,7 +120,18 @@ def _record_intent(
         # 422 while the agent is still holding the decision. An intent nothing could bring back
         # for review is worse than none: it reads in every later prompt as a plan under review.
         raise HTTPException(422, str(exc)) from exc
+    return intent, _as_int(faction_id, "intent.faction_id")
 
+
+def _write_intent(
+    orchestrator: Orchestrator, intent: UnitIntent, faction_id: int
+) -> dict[str, object]:
+    """Write the WHY behind a confirmed long-horizon order into the ordering faction's graph.
+
+    Attached to the order rather than posted separately, deliberately: the reason and the order
+    are one act, and a second endpoint would make it possible to have either without the other —
+    an unexplained goto, or a remembered plan no unit is carrying out.
+    """
     store = getattr(getattr(orchestrator, "retriever", None), "store", None)
     game_id = getattr(getattr(orchestrator, "retriever", None), "game_id", None)
     if store is None or not game_id:
@@ -131,7 +140,7 @@ def _record_intent(
             "why": "no memory store is bound, so there is nowhere to remember it",
             "intent": intent.summary(),
         }
-    store.write_intent(intent, memory_scope(str(game_id), int(faction_id)))
+    store.write_intent(intent, memory_scope(str(game_id), faction_id))
     return {"recorded": True, "intent": intent.summary()}
 
 
@@ -837,7 +846,11 @@ def create_app(
     def order(body: dict[str, object]) -> dict[str, object]:
         """Command a unit or base directly, without waiting for the engine to ask.
 
-        `{"verb": "move", "args": [12, 40, 21]}` or `{"command": "move 12 40 21"}`.
+        `{"verb": "move", "args": [12, 40, 21]}` or `{"command": "move 12 40 21"}`, or a batch:
+        `{"orders": [{"verb": "move", "args": [12, 40, 21]}, ...]}`. An order — single or a batch
+        entry — may carry an `intent` (na-7bk slice 3): the WHY behind a long-horizon order,
+        written into the ordering faction's graph, but only once the game confirms that order
+        individually.
 
         Whether the order is *legal* is the engine's question and is asked there — the adapter
         wraps the engine's own functions and its own validators. What this refuses is a shape the
@@ -846,13 +859,28 @@ def create_app(
         A `status` of `unknown` means exactly that: the order may or may not have happened. It is
         never reported as applied on the strength of not having heard otherwise.
         """
-        # A batch: [{"verb": ..., "args": [...]}, ...] or ["move 1 2 3", ...]
+        # A batch: [{"verb": ..., "args": [...], "intent": {...}?}, ...] or ["move 1 2 3", ...]
         raw_orders = body.get("orders")
         if isinstance(raw_orders, list) and raw_orders:
+            if isinstance(body.get("intent"), dict):
+                raise HTTPException(
+                    422,
+                    "in a batch, attach each intent to its own order entry — "
+                    "a body-level intent names no order",
+                )
             lines: list[str] = []
+            intents: list[tuple[UnitIntent, int] | None] = []
             for entry in raw_orders:
                 if isinstance(entry, str):
-                    lines.append(entry)
+                    # A blank line would be silently dropped by the channel, and every result
+                    # after it would then be matched to the wrong order. Refused, not filtered:
+                    # the caller built this list and can fix it; we cannot re-align it.
+                    if not entry.strip():
+                        raise HTTPException(
+                            422, "an empty order line in a batch would desync every later result"
+                        )
+                    lines.append(entry.strip())
+                    intents.append(None)
                     continue
                 if not isinstance(entry, dict):
                     raise HTTPException(422, "each order must be a string or {verb, args}")
@@ -864,9 +892,51 @@ def create_app(
                     )
                 except (TypeError, ValueError) as exc:
                     raise HTTPException(422, str(exc)) from exc
+                # Validated NOW, before anything is issued: a bad intent must refuse the whole
+                # batch while the agent still holds it, not surface after half the army moved.
+                intents.append(_parse_intent(entry.get("intent"), lines[-1]))
             raw_timeout_b = body.get("timeout_s")
             timeout_b = float(raw_timeout_b) if isinstance(raw_timeout_b, int | float) else None
-            return order_channel.issue_batch(lines, timeout_s=timeout_b).as_dict()
+            batch = order_channel.issue_batch(lines, timeout_s=timeout_b)
+            envelope = batch.as_dict()
+
+            # Per-order confirmation is POSITIONAL, and fail-closed. The adapter answers a batch
+            # with one entry per order it ran, in order; an order with no entry — dropped past
+            # the per-tick cap, or an old adapter that read only the first line — is unconfirmed,
+            # and unconfirmed is never upgraded to "applied". The envelope's own `ok` is not
+            # consulted for this: it says whether EVERYTHING worked, not which things did.
+            confirmed = [
+                i < len(batch.results) and bool(batch.results[i].get("ok"))
+                for i in range(len(lines))
+            ]
+            notes: list[dict[str, object]] = []
+            for i, parsed in enumerate(intents):
+                if parsed is None:
+                    continue
+                intent, intent_faction = parsed
+                note: dict[str, object] = (
+                    _write_intent(orchestrator, intent, intent_faction)
+                    if confirmed[i]
+                    else {
+                        "recorded": False,
+                        "why": "this order was not individually confirmed, "
+                        "so no intent was written",
+                    }
+                )
+                notes.append({"order": i, "command": lines[i], **note})
+            if notes:
+                envelope["intents"] = notes
+
+            # A confirmed build in a batch retires its deferral exactly as a single one does —
+            # sweeping the pending set is the batch's main use, so this path not resolving would
+            # leave /agent/pending offering work the agent already did.
+            resolved_b: list[str] = []
+            for i, line in enumerate(lines):
+                if confirmed[i]:
+                    resolved_b += _resolve_deferrals_for(deferrals, line, {"status": "ok"})
+            if resolved_b:
+                envelope["resolved_deferrals"] = resolved_b
+            return envelope
 
         raw_command = body.get("command")
         if isinstance(raw_command, str) and raw_command.strip():
@@ -885,16 +955,28 @@ def create_app(
             except ValueError as exc:
                 raise HTTPException(422, str(exc)) from exc
 
+        # An intent, if the caller attached one (na-7bk slice 3) — validated BEFORE the order is
+        # issued, so a refusal reaches the agent while it still holds the whole act, and a
+        # confirmed order's outcome is never thrown away by a 422 about its annotation.
+        parsed_intent = _parse_intent(body.get("intent"), command)
+
         raw_timeout = body.get("timeout_s")
         timeout_s = float(raw_timeout) if isinstance(raw_timeout, int | float) else None
         outcome = order_channel.issue(command, timeout_s=timeout_s).as_dict()
 
-        # An intent, if the caller attached one to this order (na-7bk slice 3). Recorded only on
-        # an order the game CONFIRMED, for the same reason a deferral is only resolved on one:
-        # the engine keeps the goto, and a remembered reason for an order that never landed would
-        # describe a plan no unit is executing.
-        intent_note = _record_intent(orchestrator, body, command, outcome)
-        if intent_note:
+        # Recorded only on an order the game CONFIRMED, for the same reason a deferral is only
+        # resolved on one: the engine keeps the goto, and a remembered reason for an order that
+        # never landed would describe a plan no unit is executing.
+        if parsed_intent is not None:
+            intent, intent_faction = parsed_intent
+            intent_note: dict[str, object] = (
+                _write_intent(orchestrator, intent, intent_faction)
+                if str(outcome.get("status")) == "ok"
+                else {
+                    "recorded": False,
+                    "why": "the order was not confirmed, so no intent was written",
+                }
+            )
             outcome = {**outcome, "intent": intent_note}
         # A build that lands closes whatever deferral it answers. Reported back in the response
         # rather than only recorded, so an agent sweeping its pending set learns the parked
