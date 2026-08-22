@@ -24,7 +24,12 @@ from pydantic import BaseModel, ConfigDict, Field
 #: later, through door 2. Both hand the engine its own pick, and collapsing them would make a
 #: working mechanism indistinguishable from an absent brain in `degrade_rate` — the one number
 #: that exists to catch a run where nothing was thinking.
-Tier = Literal["deterministic", "llm", "deferred"]
+#: `queued` is the fourth, and it is not a flavour of the other three either (na-7bk slice 2). No
+#: brain was asked for this decision, so it is not `llm`; an agent chose the answer deliberately
+#: and said in advance what would invalidate it, so it is not `deterministic`. Keeping it distinct
+#: is what makes the only question worth asking about the mechanism answerable afterwards: how
+#: often did a standing answer stand, and how often was it overtaken by the board?
+Tier = Literal["deterministic", "llm", "deferred", "queued"]
 
 
 def world_view_hash(payload: dict[str, Any]) -> str:

@@ -42,6 +42,7 @@ from .knowledge import (
     summarise,
 )
 from .policy import SurfacePolicy
+from .queued import QueuedAnswer, QueueStore
 from .telemetry import Emitter, Sink
 
 # One implementation of "read a field the contract keeps in pydantic extras". Private to
@@ -191,6 +192,7 @@ class Orchestrator:
         repair_attempts: int | None = None,
         policy: SurfacePolicy | None = None,
         deferrals: DeferralSet | None = None,
+        queue: QueueStore | None = None,
     ) -> None:
         self.brain = brain
         # How many times a decision whose every choice was thrown out may be re-asked with the
@@ -228,6 +230,10 @@ class Orchestrator:
         # nowhere to put the deferral — the alternative is accepting responsibility for coming
         # back on behalf of a component that cannot.
         self.deferrals = deferrals
+        # Standing answers with invalidation predicates. Absent means every decision is asked
+        # afresh, which is how this behaved before the queue existed and is still a legitimate
+        # way to run.
+        self.queue = queue
 
     def decide(self, world_view: WorldView) -> Result:
         started = time.monotonic()
@@ -287,6 +293,41 @@ class Orchestrator:
         # never asked once, so there is nothing to repair.
         if not self.policy.allows(world_view.surface_id):
             return self._deterministic(world_view, fog, grounding, dropped, started)
+
+        # A standing answer, if the agent left one and the board still agrees with it.
+        #
+        # After grounding and the fog gate, because the predicates are measured against THIS
+        # world view and it has to be the finished one. Before the brain, because not waking the
+        # brain is the entire purpose — a queued answer that still cost a round trip would be a
+        # slower way to get the same answer.
+        if self.queue is not None:
+            standing = self.queue.find(world_view)
+            if standing is not None:
+                holds, violated = standing.check(world_view)
+                if holds and not standing.offered(world_view):
+                    # Its action is gone from the space — built already, or its prerequisite
+                    # lost. Not a predicate failure and not an error: the answer simply no
+                    # longer names anything the engine is offering.
+                    holds, violated = (
+                        False,
+                        [f"{standing.action_id} is no longer in the action space"],
+                    )
+                if holds:
+                    return self._queued(world_view, fog, grounding, dropped, started, standing)
+                # Overtaken. Retire it and put the reason in front of the brain, so the agent is
+                # told what changed rather than merely asked again — being woken with no
+                # explanation is how it re-queues the same answer into the next wake-up.
+                self.queue.retire(standing, violated)
+                world_view = world_view.model_copy(
+                    update={
+                        "advisories": [
+                            *(world_view.advisories or []),
+                            "your queued answer "
+                            f"{standing.action_id} for this decision no longer holds: "
+                            + "; ".join(violated),
+                        ]
+                    }
+                )
 
         # Ask, check, and — where something is repairable — ask once more with the reason.
         #
@@ -452,6 +493,54 @@ class Orchestrator:
                 dropped=dropped,
             ),
             tier="deterministic",
+        )
+        self.telemetry.emit(record)
+        return Result(orders=orders, record=record)
+
+    def _queued(
+        self,
+        world_view: WorldView,
+        fog: Redaction,
+        grounding: Grounding,
+        dropped: list[str],
+        started: float,
+        standing: QueuedAnswer,
+    ) -> Result:
+        """Apply a standing answer whose predicates still hold, without asking anyone.
+
+        Recorded at `tier="queued"` and NOT degraded. The decision was made by an agent — earlier,
+        and conditionally, but made — and the conditions were checked against this board before it
+        was applied. That is a stronger claim than most `llm` decisions can make, since those are
+        checked against nothing after the fact.
+        """
+        from .contract import Choice
+
+        standing.applied += 1
+        orders = Orders(
+            choices=[
+                Choice(
+                    action_id=standing.action_id,
+                    reason=f"standing answer: {standing.reason or 'queued by the agent'}",
+                )
+            ]
+        )
+        record = self._record(
+            world_view=world_view,
+            orders=orders,
+            degrade_reason=None,
+            latency_ms=int((time.monotonic() - started) * 1000),
+            unknown=0,
+            fog=fog,
+            knowledge=summarise(grounding, Ruling(), self.guard is not None),
+            plan=self._plan_block(
+                world_view,
+                orders,
+                issued=[],
+                rejected=[],
+                configured=self.plan is not None,
+                dropped=dropped,
+            ),
+            tier="queued",
         )
         self.telemetry.emit(record)
         return Result(orders=orders, record=record)

@@ -13,6 +13,7 @@ import logging
 import os
 from collections.abc import Sequence
 from pathlib import Path
+from typing import cast
 
 from fastapi import FastAPI, HTTPException
 from pydantic import ValidationError
@@ -30,6 +31,7 @@ from .orchestrator import Orchestrator
 from .orders import OrderChannel, build_command
 from .outcomes import EngineOutcome, OutcomeStore
 from .pending import NotClaimable, Pending
+from .queued import Comparator, Predicate, QueuedAnswer, QueueError, QueueStore
 from .replay import WorldViewStore
 from .telemetry import OtelSink, Sink
 from .turns import TurnAnnouncement, TurnStore
@@ -63,6 +65,26 @@ def build_brain(config: Config | None = None) -> Brain:
     if cfg.effort:
         kwargs["effort"] = cfg.effort
     return ClaudeBrain(**kwargs)
+
+
+def _as_int(value: object, field: str) -> int:
+    """A JSON body is `object`-valued, so a number off the wire needs narrowing somewhere.
+
+    Here rather than inline, so a 422 names the field the caller got wrong instead of surfacing a
+    bare ValueError from several call sites.
+    """
+    if isinstance(value, bool) or not isinstance(value, int | float | str):
+        raise HTTPException(422, f"{field} must be a number")
+    try:
+        return int(value)
+    except (TypeError, ValueError) as exc:
+        raise HTTPException(422, f"{field} must be a number: {exc}") from exc
+
+
+def _as_opt_int(value: object, field: str) -> int | None:
+    if value is None or value == "":
+        return None
+    return _as_int(value, field)
 
 
 def _expire_deferrals(deferrals: DeferralSet, turn: int | None) -> list[str]:
@@ -324,6 +346,16 @@ def create_app(
     deferrals = DeferralSet()
     app.state.deferrals = deferrals
 
+    # Standing answers with invalidation predicates (na-7bk slice 2).
+    #
+    # NOT called `queue`: further down, `queue` is rebound to the AgentBrain's DecisionQueue, and
+    # since both live in this one function scope the endpoints below would close over whatever
+    # that name ended up meaning — the decision queue, not this. Caught by mypy rather than by a
+    # test, because the tests exercising these endpoints use a non-agent brain and the rebinding
+    # never happens for them. It would have failed only against a real attached agent.
+    answer_queue = QueueStore()
+    app.state.answer_queue = answer_queue
+
     orchestrator = Orchestrator(
         brain=brain or build_brain(config),
         log=resolved_log,
@@ -334,6 +366,7 @@ def create_app(
         plan=DirectiveStore(Path(plan_path)) if plan_path else None,
         policy=config.surfaces,
         deferrals=deferrals,
+        queue=answer_queue,
     )
     app.state.orchestrator = orchestrator
 
@@ -795,6 +828,81 @@ def create_app(
         if resolved:
             outcome = {**outcome, "resolved_deferrals": resolved}
         return outcome
+
+    @app.post("/agent/queue")
+    def agent_queue_install(body: dict[str, object]) -> dict[str, object]:
+        """Queue a standing answer, with the conditions under which it stops standing.
+
+        `{"faction_id": 2, "surface_id": "base.production", "base_id": 7,
+          "action_id": "facility:4", "until_turn": 60, "reason": "...",
+          "predicates": [{"metric": "mineral_surplus", "comparator": "at_least", "target": 2}]}`
+
+        A predicate names a metric from the measured vocabulary, a comparator and a number, and
+        it reads as the condition under which the answer REMAINS valid. At least one is required
+        and an unmeasurable one is REFUSED here — 422, while the agent is still holding the
+        decision and can be told why. That refusal is the feature: an answer whose invalidation
+        condition can never fire is a script, and a script keeps building Recycling Tanks through
+        a drone riot.
+        """
+        for required in ("faction_id", "surface_id", "action_id"):
+            if body.get(required) in (None, ""):
+                raise HTTPException(422, f"{required} is required")
+        faction_id = _as_int(body["faction_id"], "faction_id")
+        surface_id = str(body["surface_id"])
+        action_id = str(body["action_id"])
+
+        raw_predicates = body.get("predicates") or []
+        if not isinstance(raw_predicates, list):
+            raise HTTPException(422, "predicates must be a list")
+        predicates = []
+        for raw in raw_predicates:
+            if not isinstance(raw, dict):
+                raise HTTPException(422, "each predicate must be an object")
+            target = raw.get("target")
+            if raw.get("metric") in (None, "") or not isinstance(target, int | float | str):
+                raise HTTPException(422, "a predicate needs a metric and a numeric target")
+            try:
+                predicates.append(
+                    Predicate(
+                        metric=str(raw["metric"]),
+                        comparator=cast(Comparator, str(raw.get("comparator", "at_least"))),
+                        target=float(target),
+                    )
+                )
+            except (TypeError, ValueError) as exc:
+                raise HTTPException(422, f"a predicate needs metric and target: {exc}") from exc
+
+        answer = QueuedAnswer(
+            faction_id=faction_id,
+            surface_id=surface_id,
+            action_id=action_id,
+            predicates=predicates,
+            base_id=_as_opt_int(body.get("base_id"), "base_id"),
+            until_turn=_as_opt_int(body.get("until_turn"), "until_turn"),
+            reason=str(body["reason"]) if body.get("reason") else None,
+        )
+        try:
+            answer_queue.install(answer)
+        except QueueError as exc:
+            # 422 rather than 400: the request is well-formed and the CONTENT is unusable, which
+            # is a distinction an agent can act on.
+            raise HTTPException(422, str(exc)) from exc
+        return {"queued": answer.summary()}
+
+    @app.get("/agent/queue")
+    def agent_queue_list(faction_id: int | None = None) -> dict[str, object]:
+        """Standing answers, and the ones the board has already overtaken.
+
+        `retired` is the more interesting half: each entry is a moment when something the agent
+        said in advance would matter actually happened. A queue that never retires anything is
+        either a very quiet game or a set of predicates that cannot fire.
+        """
+        standing = answer_queue.standing(faction_id)
+        return {
+            "standing": [a.summary() for a in standing],
+            "count": len(standing),
+            "retired": list(answer_queue.retired),
+        }
 
     @app.get("/agent/pending")
     def agent_pending(full: bool = False) -> dict[str, object]:
