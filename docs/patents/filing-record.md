@@ -8,7 +8,7 @@
 ## C — this repository
 
 | Field | Value |
-|---|---|
+| --- | --- |
 | **Application number** | **`64/135,421`** |
 | Confirmation number | `3156` |
 | Attorney docket | `SCB-003-PRV` |
@@ -74,7 +74,7 @@ novelty, no grace period — and are not part of the plan.
 ## The sibling filings
 
 | | Repo | Application | Disposition |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | A | quipu | `64/135,410` | backup |
 | B | bobbin | `64/135,383` | 🎯 convert |
 | C | **NeuralAmplifier** (this one) | **`64/135,421`** | lapse |

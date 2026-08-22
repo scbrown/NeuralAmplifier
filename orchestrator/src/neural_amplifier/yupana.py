@@ -45,7 +45,7 @@ import os
 import urllib.error
 import urllib.request
 import uuid
-from typing import Any, Final
+from typing import Any, Final, Literal
 
 from .contract import Choice, Orders, WorldView
 from .knowledge import Ruling
@@ -551,7 +551,9 @@ def _ruling(report: dict[str, Any]) -> Ruling:
     for note in report.get("vacuous") or []:
         advisories.append(f"policy matched nothing: {note.get('policy')} — {note.get('reason')}")
 
-    verdict = "deny" if stripped else ("warn" if advisories else "allow")
+    verdict: Literal["allow", "warn", "deny"] = (
+        "deny" if stripped else ("warn" if advisories else "allow")
+    )
     return Ruling(
         verdict=verdict, stripped=tuple(dict.fromkeys(stripped)), advisories=tuple(advisories)
     )
