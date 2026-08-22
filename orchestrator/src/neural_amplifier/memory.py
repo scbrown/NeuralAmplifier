@@ -67,6 +67,32 @@ def game_group(game_id: str) -> str:
 #: Durable memories: wall-clock valid-time, confidence rising and falling across games.
 DURABLE_GROUP = "memory:durable"
 
+#: The property every memory node carries to say whose it is, and the ONLY thing a read can
+#: filter on.
+#:
+#: The fog design specifies named graphs — "a GRAPH clause in every SPARQL it issues". Measured
+#: against the store this orchestrator actually reads (na-7bk): `GRAPH` is a hard error there,
+#: and `FROM` is SILENTLY IGNORED — `FROM <a-graph-that-cannot-exist>` still returns rows. A
+#: boundary built on `FROM` would look exactly like scoping and enforce nothing, which is the
+#: failure the design's own mandatory leak-probe exists to catch. Stores DIFFER: another
+#: deployment of this same store does not ignore `FROM`. Probe the store you are about to
+#: read; never generalise from another one.
+#:
+#: So the scope is a TRIPLE, not a graph name. It is the same string either way, so a store that
+#: grows real named-graph support later can adopt it without a migration.
+SCOPE_KEY = "memoryScope"
+
+
+def memory_scope(game_id: str, faction_id: int | str) -> str:
+    """The graph one faction's memories live in.
+
+    Per-FACTION, not merely per-game. An agent deciding for faction F must not decide with
+    knowledge of another faction's private state, and a per-game group puts all six in one
+    bucket — the boundary has to be drawn where the ruling draws it.
+    """
+    return f"{game_group(game_id)}:faction:{faction_id}"
+
+
 #: How many times a surface must resolve the same way before it is worth calling a tactic.
 #: Two is a coincidence; three is a habit. Deliberately low, because the confidence attached to
 #: the claim is what carries the doubt — a tactic seen three times is *recorded* at low
@@ -229,7 +255,18 @@ class MemoryStore:
     def available(self) -> bool:
         return self._quipu is not None
 
-    def write(self, extraction: Extraction) -> dict[str, int]:
+    @staticmethod
+    def _scoped(nodes: list[dict[str, Any]], scope: str) -> list[dict[str, Any]]:
+        """Stamp every node with the scope it belongs to.
+
+        On the node, not on the episode. `group_id` is an episode-level label the write side
+        applies and no read can filter on — which is why the read path was global despite the
+        groups looking like a partition. A property survives into the triples, so a query can
+        name it.
+        """
+        return [{**node, SCOPE_KEY: scope} for node in nodes]
+
+    def write(self, extraction: Extraction, faction_id: int | str | None = None) -> dict[str, int]:
         """Post a game's memories. Returns what was sent, per group.
 
         Two episodes, not one, because they belong to different time axes and different
@@ -240,13 +277,21 @@ class MemoryStore:
             return {"game": 0, "durable": 0}
 
         sent = {"game": 0, "durable": 0}
+        # Unattributed memories are not written to a faction graph, because there is no honest
+        # graph to write them to: a node whose faction is unknown cannot be scoped, and scoping
+        # it to a guess is how one faction's private observation reaches another's prompt.
+        scope = (
+            memory_scope(extraction.game_id, faction_id)
+            if faction_id is not None
+            else game_group(extraction.game_id)
+        )
         if extraction.nodes:
             self._post(
                 {
                     "name": f"neural-amplifier game {extraction.game_id}",
-                    "group_id": game_group(extraction.game_id),
+                    "group_id": scope,
                     "source": "neural-amplifier",
-                    "nodes": extraction.nodes,
+                    "nodes": self._scoped(extraction.nodes, scope),
                     "edges": extraction.edges,
                 }
             )
@@ -257,7 +302,11 @@ class MemoryStore:
                     "name": f"neural-amplifier tactics from {extraction.game_id}",
                     "group_id": DURABLE_GROUP,
                     "source": "neural-amplifier",
-                    "nodes": extraction.tactics,
+                    # Durable tactics are cross-game, cross-faction BY DESIGN: game-agnostic
+                    # claims about SMAC mechanics, which any faction could have read in the
+                    # manual. They are scoped to the shared group so a decision-loop read can
+                    # union them in explicitly, rather than reaching them by having no filter.
+                    "nodes": self._scoped(extraction.tactics, DURABLE_GROUP),
                     "edges": [],
                 }
             )
@@ -277,23 +326,62 @@ class MemoryStore:
         with self._quipu._opener.open(request, timeout=self.timeout) as response:
             response.read()
 
-    def recall(self, limit: int = 10) -> list[str]:
-        """Durable tactics, highest confidence first, as prompt lines.
+    def recall(self, scope: str, limit: int = 10) -> list[str]:
+        """What this faction has learned, highest confidence first, as prompt lines.
+
+        `scope` is REQUIRED and there is no default. That is the fog boundary, and a default
+        would be the hole in it: every caller that forgot the argument would read every
+        faction's memories and look exactly like a caller that meant to. The decision loop must
+        not be able to make a global read by omission — only by naming
+        `recall_across_factions`, which is a different method with a different name for a
+        different job.
+
+        Fail-CLOSED. An empty scope recalls nothing and does not issue a query. The alternative —
+        treating "no scope" as "everything" — is the same hole wearing a runtime cost.
+
+        The deciding faction's own graph UNION `memory:durable`. Both, deliberately: durable
+        tactics are game-agnostic claims about SMAC mechanics, which any faction could have read
+        in the manual, so sharing them is not a leak. They are reached by being NAMED here, not
+        by the query having no filter — the distinction that makes this testable.
 
         Returns strings rather than structures for the same reason grounding does: the brain is
-        told what was learned, not handed a graph to traverse.
+        told what was learned, not handed a graph to traverse. Any failure yields nothing: a
+        store that is down costs an unaugmented prompt, and a turn that stalls waiting on last
+        game's lessons has the priority exactly backwards.
+        """
+        if self._quipu is None or not scope or not scope.strip():
+            return []
+        return self._recall(limit, scopes=(scope, DURABLE_GROUP))
 
-        Any failure yields nothing. A store that is down costs an unaugmented prompt, and a turn
-        that stalls waiting on last game's lessons has the priority exactly backwards.
+    def recall_across_factions(self, limit: int = 10) -> list[str]:
+        """Every faction's memories, unscoped. **Never in the decision loop.**
+
+        Exists because analysis genuinely needs it — a post-game review reads all six factions,
+        and that is not a leak because no decision is being made. Named this way so it cannot be
+        reached by forgetting an argument, and so a call site that does not belong in the
+        decision path is visible as one word in a diff.
         """
         if self._quipu is None:
             return []
+        return self._recall(limit, scopes=None)
+
+    def _recall(self, limit: int, scopes: tuple[str, ...] | None) -> list[str]:
+        assert self._quipu is not None
         # `description` lands as rdfs:comment and the properties as aegis:<key>, which is
         # quipu's own mapping — established by writing an episode and reading the triples back.
+        #
+        # The scope filter is a plain triple pattern plus VALUES, NOT a GRAPH clause and NOT a
+        # FROM. Measured on the store this reads (na-7bk): GRAPH is a hard error and FROM is
+        # silently ignored there, so the two forms the design named would either refuse or —
+        # worse — return unfiltered rows while looking scoped.
+        scope_block = ""
+        if scopes is not None:
+            values = " ".join(f'"{s}"' for s in scopes)
+            scope_block = f"  VALUES ?scope {{ {values} }}\n  ?t aegis:{SCOPE_KEY} ?scope .\n"
         query = f"""PREFIX aegis: <{MEM_IRI}>
 PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
 SELECT ?desc ?confidence ?observations WHERE {{
-  ?t a aegis:Tactic ;
+{scope_block}  ?t a aegis:Tactic ;
      rdfs:comment ?desc ;
      aegis:confidence ?confidence ;
      aegis:observations ?observations .
@@ -342,24 +430,65 @@ class RememberingRetriever:
     presented as a rule is the same failure the ``tier`` tag exists to prevent on the datalinks
     plane.
 
-    Recall happens ONCE and is cached. Durable tactics are written between games, not during
-    one, so asking per decision would be a network round trip on every turn for an answer that
-    cannot have changed. The cache is the process, which is the same lifetime as the game.
+    Recall is cached PER FACTION, and the per-faction part is the fog boundary at this layer.
+    Durable tactics are written between games, not during one, so asking per decision would be a
+    network round trip every turn for an answer that cannot have changed — but a single cache
+    shared across factions is the leak in miniature: recall once while deciding for faction 2,
+    then hand those lines to faction 4 without a query being issued at all. Scoping the store
+    and sharing the cache would enforce nothing.
+
+    The scope is derived per decision from the world view being answered, which is what "the
+    orchestrator constructs the retriever per decision with the deciding faction's scope" means
+    in practice — one object, one scope per call, never a scope carried over from the last one.
 
     Works with no inner retriever at all: memory is worth having in an ungrounded run, and
     arguably worth more, because the brain has less else to go on.
     """
 
-    def __init__(self, inner: Any | None, store: MemoryStore | None = None, limit: int = 10):
+    def __init__(
+        self,
+        inner: Any | None,
+        store: MemoryStore | None = None,
+        limit: int = 10,
+        game_id: str | None = None,
+    ):
         self.inner = inner
         self.store = store if store is not None else MemoryStore()
         self.limit = limit
-        self._recalled: tuple[str, ...] | None = None
+        self.game_id = game_id
+        self._recalled: dict[str, tuple[str, ...]] = {}
 
-    def _tactics(self) -> tuple[str, ...]:
-        if self._recalled is None:
-            self._recalled = tuple(self.store.recall(self.limit)) if self.store.available else ()
-        return self._recalled
+    def bind_game(self, game_id: str) -> None:
+        """Tell the retriever which game it is serving.
+
+        Separate from construction because the retriever is built before the Orchestrator that
+        mints the game id. Until it is bound there is no scope to read under, and an unbound
+        retriever recalls NOTHING rather than everything — the same fail-closed rule as
+        `MemoryStore.recall`, at the layer above it.
+        """
+        self.game_id = game_id
+
+    def _scope_for(self, world_view: WorldView) -> str | None:
+        """The deciding faction's graph, or None when we cannot say whose decision this is.
+
+        None means no recall. A decision whose faction we cannot identify is exactly the one
+        where guessing puts another faction's private memories into the prompt.
+        """
+        if not self.game_id:
+            return None
+        faction_id = getattr(world_view, "faction_id", None)
+        if faction_id is None:
+            return None
+        return memory_scope(self.game_id, faction_id)
+
+    def _tactics(self, scope: str | None) -> tuple[str, ...]:
+        if scope is None:
+            return ()
+        if scope not in self._recalled:
+            self._recalled[scope] = (
+                tuple(self.store.recall(scope, self.limit)) if self.store.available else ()
+            )
+        return self._recalled[scope]
 
     def retrieve(self, world_view: WorldView) -> Grounding:
         base = (
@@ -367,7 +496,7 @@ class RememberingRetriever:
             if self.inner is not None
             else Grounding(reason="no retriever configured")
         )
-        learned = self._tactics()
+        learned = self._tactics(self._scope_for(world_view))
         if not learned:
             return base
         # Appended, never prepended. The rulebook facts are about the options actually on the

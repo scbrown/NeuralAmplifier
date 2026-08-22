@@ -111,8 +111,21 @@ def main(argv: list[str] | None = None) -> int:
             # put it, which is a configuration answer rather than a failure of the game.
             print("\nno memory store configured (set NA_MEMORY_QUIPU_URL); nothing written")
             return 1
+        # No faction argument, deliberately and visibly: one log holds every faction's
+        # decisions, and splitting the extraction per faction is not done yet (na-7bk slice 2).
+        # So these nodes land in the per-GAME group, unattributed.
         sent = store.write(extraction)
         print(f"\nwrote {sent['game']} to the game group, {sent['durable']} durable")
+        if sent["game"]:
+            # Said out loud because the alternative is a silent asymmetry: the read path is
+            # scoped per faction and fail-closed (na-7bk), so nodes written without a faction
+            # are NOT reachable by a decision-loop recall. That is the safe direction — no
+            # leak — but somebody will write memories, see recall return nothing, and go
+            # looking for a bug in the query.
+            print(
+                "  note: written unattributed, so a per-faction recall will not return these.\n"
+                "        Durable tactics are unaffected — they are shared by design."
+            )
         return 0
 
     if args.command == "surfaces":

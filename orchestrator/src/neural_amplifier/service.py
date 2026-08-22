@@ -337,6 +337,15 @@ def create_app(
     )
     app.state.orchestrator = orchestrator
 
+    # The memory retriever needs the game id to build a faction scope, and the Orchestrator is
+    # what mints it — so binding happens here, after construction, rather than at build time.
+    # Until it is bound the retriever recalls NOTHING (fail-closed): an unscoped read is the leak
+    # the scope exists to prevent, so "we do not know which game" must not become "read all of
+    # them" (na-7bk).
+    bind = getattr(resolved_retriever, "bind_game", None)
+    if callable(bind):
+        bind(orchestrator.game_id)
+
     # Engine-side outcomes (outcomes.py). Distinct from the brain's `publish_outcome`, which
     # reports what the ORCHESTRATOR applied; this is what the ENGINE did with it afterwards.
     outcome_store = OutcomeStore()

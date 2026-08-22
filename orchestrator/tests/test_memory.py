@@ -165,32 +165,50 @@ def test_no_store_configured_writes_nothing_rather_than_raising() -> None:
         "game": 0,
         "durable": 0,
     }
-    assert MemoryStore("").recall() == []
+    assert MemoryStore("").recall("memory:game:g:faction:1") == []
 
 
 # --- recall -----------------------------------------------------------------
 
 
 class FakeStore(MemoryStore):
-    def __init__(self, lines: list[str]) -> None:
+    """Records WHICH SCOPE it was asked for, because that is the property under test.
+
+    `lines` may be a dict keyed by scope, which is how the leak probes plant one faction's
+    memory and then ask as another.
+    """
+
+    def __init__(self, lines: list[str] | dict[str, list[str]]) -> None:
         super().__init__("http://memory.invalid")
         self.lines = lines
         self.calls = 0
+        self.scopes: list[str] = []
 
-    def recall(self, limit: int = 10) -> list[str]:
+    def recall(self, scope: str, limit: int = 10) -> list[str]:
         self.calls += 1
+        self.scopes.append(scope)
+        if isinstance(self.lines, dict):
+            return list(self.lines.get(scope, []))
         return self.lines
 
 
-def view() -> WorldView:
+def view(faction_id: int = 1, faction: str = "GAIANS") -> WorldView:
     return WorldView(
         engine="thinker",
         scope="base",
         turn=1,
-        faction="GAIANS",
+        faction=faction,
+        faction_id=faction_id,
         surface_id="base.production",
         action_space=[Action(id="fac:4", action="Recycling Tanks")],
     )
+
+
+def remembering(inner: object | None, store: FakeStore, game_id: str = "g1"):
+    """A retriever bound to a game, which is what makes a scope derivable at all."""
+    r = RememberingRetriever(inner, store)
+    r.bind_game(game_id)
+    return r
 
 
 class StubRetriever:
@@ -201,7 +219,7 @@ class StubRetriever:
 def test_tactics_are_appended_behind_the_rulebook() -> None:
     """The rulebook facts are about the options actually on the table; a tactic is a standing
     habit. Putting the weaker claim first would give it the stronger position."""
-    retriever = RememberingRetriever(StubRetriever(), FakeStore(["prefer fac:4 [x3]"]))
+    retriever = remembering(StubRetriever(), FakeStore(["prefer fac:4 [x3]"]))
     grounding = retriever.retrieve(view())
 
     assert grounding.facts == ("Recycling Tanks; Bonus Resources", "prefer fac:4 [x3]")
@@ -217,19 +235,28 @@ def test_a_tactic_is_never_given_a_citable_id() -> None:
 
 def test_memory_works_with_no_rulebook_retrieval_at_all() -> None:
     """Worth having in an ungrounded run, and arguably worth more — the brain has less else."""
-    grounding = RememberingRetriever(None, FakeStore(["prefer fac:4 [x3]"])).retrieve(view())
+    grounding = remembering(None, FakeStore(["prefer fac:4 [x3]"])).retrieve(view())
     assert grounding.facts == ("prefer fac:4 [x3]",)
 
 
-def test_recall_happens_once_per_process() -> None:
-    """Durable tactics are written BETWEEN games, not during one, so asking per decision is a
-    round trip per turn for an answer that cannot have changed."""
-    store = FakeStore(["prefer fac:4 [x3]"])
-    retriever = RememberingRetriever(StubRetriever(), store)
-    for _ in range(5):
-        retriever.retrieve(view())
+def test_recall_happens_once_per_faction_not_once_per_process() -> None:
+    """Cached, because durable tactics are written BETWEEN games — but cached PER FACTION.
 
-    assert store.calls == 1
+    A single process-wide cache is the leak in miniature: recall once while deciding for faction
+    2, then hand those lines to faction 4 with no query issued at all. Scoping the store and
+    sharing the cache would enforce nothing, and would be invisible to any test that only counts
+    round trips.
+    """
+    store = FakeStore(["prefer fac:4 [x3]"])
+    retriever = remembering(StubRetriever(), store)
+    for _ in range(5):
+        retriever.retrieve(view(faction_id=1))
+    assert store.calls == 1, "one faction, asked five times, must be one round trip"
+
+    for _ in range(5):
+        retriever.retrieve(view(faction_id=4))
+    assert store.calls == 2, "a different faction must be a different question"
+    assert store.scopes == ["memory:game:g1:faction:1", "memory:game:g1:faction:4"]
 
 
 def test_nothing_learned_leaves_the_grounding_untouched() -> None:
