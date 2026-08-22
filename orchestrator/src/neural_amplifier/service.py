@@ -365,19 +365,46 @@ def create_app(
             trade-offs already injected — because that assembly happens before the brain is
             called and this *is* the brain.
             """
-            # A JSON body is `object`-valued, so `wait` is whatever the caller sent. A
+            # A JSON body is `object`-valued, so the wait is whatever the caller sent. A
             # non-numeric one means "do not block" rather than a 500: this endpoint is the
             # agent's only way to collect work, and failing it over a malformed optional
             # costs more than ignoring the field.
-            raw_wait = (body or {}).get("wait", 0) or 0
+            #
+            # Two spellings, because the field has two names in the wild and only one of them
+            # ever worked. The wire name is `wait`; the MCP tool's parameter is `wait_seconds`
+            # (mcp_server.next_decision), and the skill doc's examples show only the MCP name.
+            # So a raw-HTTP caller copying the name it had been shown sent a field this
+            # endpoint had never heard of, and the leniency above swallowed it: an instant
+            # empty poll, indistinguishable from "no decisions are waiting".
+            #
+            # Measured 2026-08-21 (na-c1d): {"wait_seconds": 8} returned in 0s, {"wait": 8}
+            # blocked the full 8s. The cost was not a confusing API — it was a delegated
+            # decision loop burning through its 30-empty-polls exit condition in 68 seconds
+            # and abandoning a game that was blocked, waiting, and visible in this very queue.
+            body = body or {}
+            raw_wait: object = 0
+            for name in ("wait", "wait_seconds"):
+                if body.get(name) is not None:
+                    raw_wait = body[name] or 0
+                    break
             wait = float(raw_wait) if isinstance(raw_wait, int | float | str) else 0.0
             pending = queue.claim(wait=min(wait, 110.0))
+
+            # The other half of the same bug, and the half that generalises: silence. An
+            # unknown key is still not a 422 — the reasoning above has not changed, and a
+            # caller sending one extra field should not lose its claim over it — but it is no
+            # longer SILENT. A caller that guesses a field name now gets the name back, which
+            # is the difference between a poll it can debug and a queue it believes is empty.
+            ignored = sorted(set(body) - {"wait", "wait_seconds"})
+            extra: dict[str, object] = {"ignored_fields": ignored} if ignored else {}
+
             if pending is None:
-                return {"decision_id": None, "waiting": 0}
+                return {"decision_id": None, "waiting": 0, **extra}
             return {
                 "decision_id": pending.id,
                 "surface_id": pending.world_view.surface_id,
                 "world_view": pending.world_view.model_dump(exclude_none=True),
+                **extra,
             }
 
         @app.post("/agent/directive")

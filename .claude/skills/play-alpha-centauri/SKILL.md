@@ -91,6 +91,21 @@ You now have `next_decision`, `submit_orders`, `decisions_waiting` and `issue_di
 
 - **Poll.** `next_decision(wait_seconds=60)` blocks server-side until something arrives. Loop
   on it. This needs no configuration and cannot be misconfigured.
+
+  Over raw HTTP the field is **`wait`**, not `wait_seconds` — `wait_seconds` is this MCP
+  tool's parameter name, and the two differ:
+
+  ```bash
+  curl -s http://127.0.0.1:8000/agent/next -H 'content-type: application/json' \
+    -d '{"wait": 60}'          # blocks up to 60s. {"wait_seconds": 60} does NOT.
+  ```
+
+  The endpoint is deliberately lenient about fields it does not know, so the wrong spelling
+  is not an error — it returns instantly with an empty queue, which looks exactly like "no
+  decisions are waiting". A loop with an empty-poll exit condition then exits in seconds and
+  abandons a game that is blocked and waiting (na-c1d, measured). It now names any field it
+  ignored back to you in `ignored_fields`; if you see your wait field listed there, that is
+  why the poll returned at once.
 - **Be nudged.** If the orchestrator has `NA_TMUX_TARGET` set to a tmux pane you are running
   in, it types a one-line notice there when a decision opens. Convenience only — the nudge
   carries no game data and can be silently lost, so never treat its absence as "no decision

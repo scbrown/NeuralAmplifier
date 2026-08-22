@@ -891,3 +891,69 @@ def test_a_directive_naming_an_unknown_metric_is_refused_while_the_agent_can_fix
     assert good.status_code == 200
     thread.join(timeout=5)
     assert results["body"]["choices"][0]["action_id"] == "unit:0"
+
+
+# ---------------------------------------------------------------------------
+# The wait field has two names in the wild, and only one of them ever worked (na-c1d).
+# ---------------------------------------------------------------------------
+
+
+def test_wait_seconds_blocks_exactly_as_wait_does(agent_app) -> None:
+    """`wait_seconds` is the name the MCP tool and the skill doc show; `wait` is the wire.
+
+    A raw-HTTP caller copying the name it had been shown sent a field this endpoint had never
+    heard of, and the endpoint's deliberate leniency swallowed it — so the poll returned
+    instantly with an empty queue, which is indistinguishable from "nothing is waiting". That
+    is not a cosmetic API wart: measured 2026-08-21, a delegated decision loop burned through
+    its 30-empty-polls exit condition in 68 seconds and walked away from a game that was
+    blocked, waiting, and visible in this very queue.
+
+    The assertion is that a *blocking* poll spelled `wait_seconds` returns the decision that
+    arrives after it starts — which it can only do by having blocked.
+    """
+    app, _ = agent_app
+    client = TestClient(app)
+    results: dict = {}
+
+    assert client.post("/agent/next", json={"wait_seconds": 0}).json()["decision_id"] is None
+
+    thread = _post_decision(client, results)
+    claimed = client.post("/agent/next", json={"wait_seconds": 5}).json()
+    assert claimed["decision_id"], "wait_seconds must block like wait, not poll and give up"
+
+    client.post(
+        "/agent/submit",
+        json={"decision_id": claimed["decision_id"], "action_id": "unit:0"},
+    )
+    thread.join(timeout=5)
+    assert results["body"]["choices"][0]["action_id"] == "unit:0"
+
+
+def test_the_canonical_name_wins_when_both_are_sent(agent_app) -> None:
+    """Deterministic, rather than whichever the dict happened to yield first."""
+    app, _ = agent_app
+    client = TestClient(app)
+    started = time.monotonic()
+    # `wait` is 0, so this must return at once despite the larger alias beside it.
+    assert (
+        client.post("/agent/next", json={"wait": 0, "wait_seconds": 30}).json()["decision_id"]
+        is None
+    )
+    assert time.monotonic() - started < 5, "the canonical `wait` must win over the alias"
+
+
+def test_an_unrecognised_field_is_named_back_instead_of_swallowed(agent_app) -> None:
+    """Still lenient — still not silent.
+
+    Rejecting unknown keys outright would cost a caller its claim over one stray field, and
+    this endpoint is an agent's only way to collect work. But swallowing them is what made the
+    bug above undiagnosable from the caller's side: the request looked accepted and the queue
+    looked empty. Naming the field back is the difference between a poll you can debug and a
+    queue you believe.
+    """
+    app, _ = agent_app
+    client = TestClient(app)
+    payload = client.post("/agent/next", json={"wait": 0, "timeout_s": 9, "zzz": 1}).json()
+    assert payload["ignored_fields"] == ["timeout_s", "zzz"]
+    # A well-formed request says nothing extra.
+    assert "ignored_fields" not in client.post("/agent/next", json={"wait": 0}).json()

@@ -153,7 +153,7 @@ Answering — the three moments of a decision, plus a plan that outlives the tur
 
 | Tool | For |
 | --- | --- |
-| `next_decision(wait_seconds)` | Collect the decision waiting for you, with its full world view |
+| `next_decision(wait_seconds)` | Collect the decision waiting for you, with its full world view (raw HTTP: `POST /agent/next {"wait": N}` — the wire field is `wait`, and an unknown one comes back in `ignored_fields` rather than blocking, na-c1d) |
 | `submit_orders(decision_id, action_id, reason, cited, followed, overrode)` | Answer it, choosing from the action space |
 | `decisions_waiting()` | What is outstanding — for re-orienting after a reconnect or compaction |
 | `issue_directive(...)` | Set a standing plan later decisions will be shown. Call before submitting |
