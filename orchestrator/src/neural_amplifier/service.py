@@ -24,6 +24,7 @@ from .config import load as load_config
 from .contract import Choice, Directive, Orders, WorldView
 from .coverage import report
 from .decisions import DecisionLog
+from .deferrals import DeferralSet
 from .directives import DirectiveStore, accept
 from .orchestrator import Orchestrator
 from .orders import OrderChannel, build_command
@@ -62,6 +63,41 @@ def build_brain(config: Config | None = None) -> Brain:
     if cfg.effort:
         kwargs["effort"] = cfg.effort
     return ClaudeBrain(**kwargs)
+
+
+def _expire_deferrals(deferrals: DeferralSet, turn: int | None) -> list[str]:
+    """Close deferrals the turn has moved past. Returns the ids, for logging."""
+    if turn is None:
+        return []
+    return [d.id for d in deferrals.expire_before(turn)]
+
+
+def _resolve_deferrals_for(
+    deferrals: DeferralSet, command: str, result: dict[str, object]
+) -> list[str]:
+    """Link a door-2 order back to the deferral it answers.
+
+    The agent resolves a parked build by issuing `build <base_id> <item_id>` — the verb that
+    already exists — rather than by calling a second endpoint meaning the same thing. So the link
+    has to be reconstructed from the order's own arguments, and `base_id` is the term both sides
+    hold.
+
+    Only on an order the game CONFIRMED. `OrderChannel` reports `unknown` when it cannot tell,
+    and `unknown` is a real outcome that is never upgraded to "applied" on silence (`/order`'s
+    own docstring). Closing a deferral on an unconfirmed order would retire the agent's
+    outstanding work on the strength of a message that may never have been read.
+    """
+    if str(result.get("status")) != "ok":
+        return []
+    parts = command.split()
+    if len(parts) < 2 or parts[0] != "build":
+        return []
+    try:
+        base_id = int(parts[1])
+    except ValueError:
+        return []
+    closed = deferrals.resolve_for_base(base_id, resolution=command)
+    return [d.id for d in closed]
 
 
 def _build_retriever(config: Config) -> object | None:
@@ -281,6 +317,13 @@ def create_app(
     # Absent path stays absent — no `NA_PLAN` means no store, which is a legitimate way to run and
     # is what `plan_absent` is for.
     plan_path = config.run.plan
+    # Where a deferred decision waits for the agent to come back to it (na-7bk). Always built:
+    # a deferral costs nothing until a brain returns `defer`, and a configuration where the
+    # mechanism silently is not there is one where an agent's considered "later" degrades into
+    # "the brain got it wrong" with no way to tell from the record.
+    deferrals = DeferralSet()
+    app.state.deferrals = deferrals
+
     orchestrator = Orchestrator(
         brain=brain or build_brain(config),
         log=resolved_log,
@@ -290,6 +333,7 @@ def create_app(
         guard=build_guard(resolved_retriever, config),  # type: ignore[arg-type]
         plan=DirectiveStore(Path(plan_path)) if plan_path else None,
         policy=config.surfaces,
+        deferrals=deferrals,
     )
     app.state.orchestrator = orchestrator
 
@@ -328,6 +372,12 @@ def create_app(
     def decide(world_view: WorldView) -> Orders:
         # Before the decision, so a world view that takes a long time to answer already shows as
         # raised rather than looking like one that never arrived.
+        # A turn moving is what expires a deferral, and this is the earliest place the
+        # orchestrator learns it moved. Not tidy-up: by the time the engine is asking about turn
+        # N+1 it has already played turn N's build, so an answer arriving now would land on the
+        # NEXT turn's minerals. That is a different decision, not a late answer to this one, and
+        # recording it as a resolution would be a lie about which board it was made on.
+        _expire_deferrals(deferrals, world_view.turn)
         turn_store.note_raised(world_view)
         result = orchestrator.decide(world_view)
         turn_store.note_answered(world_view)
@@ -727,7 +777,41 @@ def create_app(
 
         raw_timeout = body.get("timeout_s")
         timeout_s = float(raw_timeout) if isinstance(raw_timeout, int | float) else None
-        return order_channel.issue(command, timeout_s=timeout_s).as_dict()
+        outcome = order_channel.issue(command, timeout_s=timeout_s).as_dict()
+        # A build that lands closes whatever deferral it answers. Reported back in the response
+        # rather than only recorded, so an agent sweeping its pending set learns the parked
+        # decision is retired from the same call that retired it — one round trip, and no window
+        # where /agent/pending still offers work the agent has already done.
+        resolved = _resolve_deferrals_for(deferrals, command, outcome)
+        if resolved:
+            outcome = {**outcome, "resolved_deferrals": resolved}
+        return outcome
+
+    @app.get("/agent/pending")
+    def agent_pending(full: bool = False) -> dict[str, object]:
+        """Decisions the agent parked, and has not come back to yet (na-7bk).
+
+        Mounted whatever the brain is, unlike the `/agent/*` endpoints above. Those are gated on
+        an AgentBrain because they advertise a queue only an attached agent fills; a deferral is
+        filled by whichever brain returned `defer`, and an empty list here is an honest answer
+        rather than a misleading advertisement.
+
+        `full=true` includes each deferral's world view — the grounded one the agent read when it
+        deferred. That is the point of keeping it: coming back to a decision should not mean
+        re-deriving the situation, and a resolution made from a different set of facts than the
+        deferral was made on is a differently-uninformed answer, not a better one.
+
+        Resolve through door 2 — `POST /order {"verb": "build", "args": [base_id, item_id]}`. A
+        confirmed build closes the matching deferral and names it in that response.
+        """
+        items = deferrals.pending()
+        return {
+            "pending": [
+                ({**d.summary(), "world_view": d.world_view} if full else d.summary())
+                for d in items
+            ],
+            "count": len(items),
+        }
 
     @app.get("/order")
     def order_status() -> dict[str, object]:

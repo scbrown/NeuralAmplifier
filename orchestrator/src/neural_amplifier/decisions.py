@@ -19,7 +19,12 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-Tier = Literal["deterministic", "llm"]
+#: `deferred` is a third thing, not a flavour of either (na-7bk). `deterministic` says nobody was
+#: asked or nobody answered; `deferred` says the agent read the world view and chose to answer
+#: later, through door 2. Both hand the engine its own pick, and collapsing them would make a
+#: working mechanism indistinguishable from an absent brain in `degrade_rate` — the one number
+#: that exists to catch a run where nothing was thinking.
+Tier = Literal["deterministic", "llm", "deferred"]
 
 
 def world_view_hash(payload: dict[str, Any]) -> str:

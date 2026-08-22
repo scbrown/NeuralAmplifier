@@ -17,7 +17,7 @@ from dataclasses import asdict, dataclass
 from typing import TYPE_CHECKING
 
 from .brain import Brain, BrainError
-from .contract import Directive, Orders, WorldView
+from .contract import Choice, Directive, Orders, WorldView
 from .decisions import (
     DecisionLog,
     DecisionRecord,
@@ -25,6 +25,7 @@ from .decisions import (
     PlanBlock,
     world_view_hash,
 )
+from .deferrals import DEFER_ACTION_ID, Deferral, DeferralSet, is_defer
 from .directives import DirectiveStore, accept, entities_shown, evaluate, relevant, tradeoffs
 from .fairness import profile as fairness_profile
 from .fog import Redaction, redact
@@ -42,6 +43,12 @@ from .knowledge import (
 )
 from .policy import SurfacePolicy
 from .telemetry import Emitter, Sink
+
+# One implementation of "read a field the contract keeps in pydantic extras". Private to
+# `turns`, imported rather than copied: its docstring documents a real pydantic asymmetry
+# (an absent extra raises AttributeError instead of returning None) that a second copy would
+# eventually get wrong on exactly the hand-written fixtures where it already bites.
+from .turns import _extra
 from .validate import validate
 
 if TYPE_CHECKING:  # replay imports us; keep the cycle type-only
@@ -86,6 +93,88 @@ def _why_nothing_survived(checked: object, ruling: object) -> list[str]:
     ]
 
 
+def _defer_requested(orders: Orders) -> bool:
+    """Did the brain ask to come back to this?
+
+    ANY choice naming `defer` defers the whole decision, rather than only a mixed answer or only
+    a lone one. A brain that returns `[defer, unit:3]` has said two different things about one
+    decision and there is no reading of that where applying the concrete half is safe: door 1
+    consumes one item id, so "build a Former AND think about it" is not expressible. Deferring is
+    the conservative half — it applies the engine's own pick, which is what the adapter would
+    have done anyway.
+    """
+    return any(is_defer(choice.action_id) for choice in orders.choices)
+
+
+def _defer_reason(orders: Orders) -> str | None:
+    """Why the agent wants longer, taken from the deferring choice itself.
+
+    Carried through to the adapter's record so a deferral in the game's own log says something
+    more useful than that it happened.
+    """
+    for choice in orders.choices:
+        if is_defer(choice.action_id) and choice.reason:
+            return choice.reason
+    return None
+
+
+def _deferral_id(world_view: WorldView) -> str:
+    """Stable within a decision, distinct across decisions.
+
+    The traceparent when there is one: it is the id the adapter, the record and the agent already
+    share, so a deferral is greppable against the run's other artefacts without a join table.
+    Falls back to the surface and base, which is what identifies a decision to a human when the
+    adapter did not stamp a trace — and to a uuid when even that is absent, because two unrelated
+    deferrals colliding on the empty string would silently replace one another.
+    """
+    trace = world_view.traceparent()
+    if trace:
+        return trace
+    surface = world_view.surface_id or "?"
+    base_id = _extra(world_view, "base_id", int)
+    if base_id is not None:
+        return f"{surface}:{world_view.turn}:{base_id}"
+    return f"{surface}:{world_view.turn}:{uuid.uuid4().hex[:8]}"
+
+
+def _native_choice(world_view: WorldView) -> str | None:
+    """What the engine will apply while the agent thinks — when it told us.
+
+    `None` is the EXPECTED answer on `base.production` and is not a gap to fix. The adapter
+    withholds its own pick from the `/decide` body on that surface deliberately (na-glk), so that
+    the brain cannot anchor on it; the record gets it, the request does not. A deferral there is
+    therefore honest about not knowing what stood, which is better than guessing.
+
+    Guessing is specifically what `fallback_action_id()` would have done here, and it is a
+    different concept wearing a similar name: the orchestrator's own degradation target — end the
+    turn, else the first legal action. On this fixture that is `unit:0` where the engine's pick is
+    `unit:1`, so recording it would have put a confident wrong answer in the one field an expired
+    deferral uses to say what actually got built.
+
+    Stringified because the field is not typed on the contract and arrives as whatever the surface
+    uses: an int item id on base.production, `"se:none"` on faction.se.
+    """
+    raw = getattr(world_view, "native_choice", None)
+    if raw is None or isinstance(raw, bool):
+        return None
+    if isinstance(raw, int | float):
+        return str(int(raw))
+    return str(raw) or None
+
+
+def _action_name(world_view: WorldView, action_id: str | None) -> str | None:
+    """The human-readable name of an action id, from the action space that offered it.
+
+    So an expired deferral can say what actually got built rather than `facility:6`.
+    """
+    if action_id is None:
+        return None
+    for action in world_view.action_space or []:
+        if getattr(action, "id", None) == action_id:
+            return getattr(action, "action", None)
+    return None
+
+
 class Orchestrator:
     """Drives one brain, writes one decision log."""
 
@@ -101,6 +190,7 @@ class Orchestrator:
         plan: DirectiveStore | None = None,
         repair_attempts: int | None = None,
         policy: SurfacePolicy | None = None,
+        deferrals: DeferralSet | None = None,
     ) -> None:
         self.brain = brain
         # How many times a decision whose every choice was thrown out may be re-asked with the
@@ -131,6 +221,13 @@ class Orchestrator:
         # Which surfaces the LLM tier owns (``na.toml``). Absent means nobody has
         # expressed an opinion, which is how this behaved before the file existed.
         self.policy = policy or SurfacePolicy()
+        # Where an agent's "ask me later" is parked. Absent means deferral is not offered, and a
+        # brain that returns `defer` anyway is answered exactly as it was before this existed:
+        # `defer` is in no action space, so validation reports it as an id the engine did not
+        # offer and the decision degrades. That is the right behaviour for a configuration with
+        # nowhere to put the deferral — the alternative is accepting responsibility for coming
+        # back on behalf of a component that cannot.
+        self.deferrals = deferrals
 
     def decide(self, world_view: WorldView) -> Result:
         started = time.monotonic()
@@ -220,6 +317,16 @@ class Orchestrator:
         while True:
             try:
                 orders = self.brain.decide(asked)
+                # Before validate(), and that ordering IS the implementation. `defer` is in no
+                # action space — the engine never offers it — so a moment later validation would
+                # correctly call it an id the engine did not offer, strip it, find nothing left,
+                # and degrade the decision. The agent would be told its answer was not applied:
+                # true, and useless. It did not fail to answer, it declined to answer YET.
+                #
+                # Not repaired, not guarded, not validated. There is nothing to check — a
+                # deferral names no action, so no rule about actions can have an opinion on it.
+                if self.deferrals is not None and _defer_requested(orders):
+                    return self._deferred(world_view, fog, grounding, dropped, started, orders)
             except BrainError as exc:
                 degrade_reason = str(exc) or "brain error"
                 orders = Orders()
@@ -348,6 +455,83 @@ class Orchestrator:
         )
         self.telemetry.emit(record)
         return Result(orders=orders, record=record)
+
+    def _deferred(
+        self,
+        world_view: WorldView,
+        fog: Redaction,
+        grounding: Grounding,
+        dropped: list[str],
+        started: float,
+        orders: Orders,
+    ) -> Result:
+        """The agent asked for more time. Answer the engine now; keep the decision open.
+
+        The deferral is RELAYED on the wire rather than converted into empty orders here, and
+        that is deliberate in two directions:
+
+        - **Forwards**: the adapter records its own decision line, and `defer` is what lets it
+          write `tier="deferred"` there too. Sending empty orders instead would reach it as "no
+          action_id in reply" — indistinguishable from an orchestrator that failed to answer, in
+          the game's own primary telemetry. The distinction this whole mechanism exists to make
+          would survive on our side of the wire and be lost on theirs.
+        - **Backwards**: an adapter that has never heard of deferral treats `defer` as an
+          unparseable action id, which already lands on `native_choice` — the same answer, by the
+          older path. So the wire change degrades compatibly against a DLL built before it.
+
+        Either way the game is answered in the time it takes to return, which is the entire point:
+        door 1 cannot be made to wait.
+
+        `tier="deferred"` and NOT degraded: this decision was made, by an agent, and the decision
+        was to come back. `degraded` marks a run that could not think; a run full of deferrals was
+        thinking hard enough to want longer.
+        """
+        empty = Orders(
+            choices=[Choice(action_id=DEFER_ACTION_ID, reason=_defer_reason(orders))],
+            notes=orders.notes,
+        )
+        record = self._record(
+            world_view=world_view,
+            orders=empty,
+            degrade_reason=None,
+            latency_ms=int((time.monotonic() - started) * 1000),
+            unknown=0,
+            fog=fog,
+            knowledge=summarise(grounding, Ruling(), self.guard is not None),
+            plan=self._plan_block(
+                world_view,
+                empty,
+                issued=[],
+                rejected=[],
+                configured=self.plan is not None,
+                dropped=dropped,
+            ),
+            tier="deferred",
+        )
+        self.telemetry.emit(record)
+
+        # Parked only after the record exists. A deferral the agent can see but that never
+        # reached the log would be an open decision with no trace of having been raised.
+        assert self.deferrals is not None
+        standing = _native_choice(world_view)
+        self.deferrals.open(
+            Deferral(
+                id=_deferral_id(world_view),
+                surface_id=world_view.surface_id or "",
+                turn=world_view.turn,
+                faction_id=_extra(world_view, "faction_id", int),
+                faction=world_view.faction,
+                base_id=_extra(world_view, "base_id", int),
+                base=_extra(world_view, "base", str),
+                standing_action_id=standing,
+                standing_action=_action_name(world_view, standing),
+                # The view the agent actually read, grounding included: resolving from a
+                # different set of facts than the deferral was made on is how a considered
+                # answer becomes a differently-uninformed one.
+                world_view=world_view.model_dump(exclude_none=True),
+            )
+        )
+        return Result(orders=empty, record=record)
 
     def _with_directives(
         self, world_view: WorldView, entity_ids: Sequence[str] = ()
