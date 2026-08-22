@@ -40,9 +40,14 @@ import os
 from collections import Counter
 from dataclasses import dataclass, field, replace
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from .contract import WorldView
+
+if TYPE_CHECKING:
+    # Imported for typing only: `intents` imports the predicate grammar from `queued`, and
+    # keeping this out of runtime means the memory store stays importable on its own.
+    from .intents import UnitIntent
 from .datalinks.quipu import QuipuRetriever
 from .decisions import DecisionRecord
 from .knowledge import Grounding
@@ -326,6 +331,95 @@ class MemoryStore:
         with self._quipu._opener.open(request, timeout=self.timeout) as response:
             response.read()
 
+    # -- unit intent (na-7bk slice 3) ----------------------------------------
+    #
+    # The engine already persists a multi-turn goto: set_move_to keeps it, and door 2's `move`
+    # issues one. What the engine does NOT keep is WHY — so a later decision sees a unit walking
+    # east and has no way to tell a considered ferry run from a stale order nobody cancelled.
+    # The intent node is that missing half: the engine executes, the graph remembers the reason,
+    # and the agent re-decides only when something it named in advance changes.
+    #
+    # Faction-scoped like every other memory, and for a stronger reason than the rest: a unit
+    # intent is faction-private BY DEFINITION (na-7bk fog ruling). Where a durable tactic can be
+    # shared because any faction could read the manual, "I am massing rovers at the isthmus by
+    # turn 60" is precisely the thing an opponent must not be able to recall.
+
+    def write_intent(self, intent: UnitIntent, scope: str) -> None:
+        """Record why a unit was given a long-horizon order.
+
+        `scope` is required for the same reason `recall`'s is: an intent written without one has
+        no faction, and a memory with no owner is one any faction can recall.
+
+        Written at ORDER time rather than decision time, which is what makes the cost acceptable
+        — the agent is acting at its own pace through door 2, not holding the engine's thread.
+        """
+        if self._quipu is None or not scope or not scope.strip():
+            return
+        self._post(
+            {
+                "name": f"neural-amplifier intent {intent.unit_id}",
+                "group_id": scope,
+                "source": "neural-amplifier",
+                "nodes": [
+                    {
+                        "name": f"{MEM}intent/{scope}/{intent.unit_id}",
+                        "type": "Intent",
+                        "description": intent.line(),
+                        SCOPE_KEY: scope,
+                        "properties": {
+                            "unit_id": intent.unit_id,
+                            "goal": intent.goal,
+                            "rationale": intent.rationale or "",
+                            "until_turn": intent.until_turn if intent.until_turn else 0,
+                            "triggers": "; ".join(t.describe() for t in intent.triggers),
+                        },
+                    }
+                ],
+                "edges": [],
+            }
+        )
+
+    def recall_intents(self, scope: str, turn: int | None = None, limit: int = 10) -> list[str]:
+        """This faction's live unit intents, as prompt lines.
+
+        Scoped and fail-closed exactly as `recall` is — the same rule, because it is the same
+        boundary and a second, laxer copy of it would be the hole.
+
+        Horizon-filtered here rather than at write time: an intent is not wrong when it expires,
+        it is finished, and a graph that deleted it would lose the record of what was intended.
+        The prompt is what must not carry a plan whose horizon has passed, since that reads as
+        though it still applied.
+        """
+        if self._quipu is None or not scope or not scope.strip():
+            return []
+        query = f"""PREFIX aegis: <{MEM_IRI}>
+PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+SELECT ?desc ?until WHERE {{
+  VALUES ?scope {{ "{scope}" }}
+  ?i aegis:{SCOPE_KEY} ?scope ;
+     a aegis:Intent ;
+     rdfs:comment ?desc ;
+     aegis:until_turn ?until .
+}}"""
+        try:
+            rows = self._quipu.query(query)
+        except Exception:
+            return []
+        lines: list[str] = []
+        for row in rows:
+            desc = str(row.get("desc", "")).strip('"')
+            if not desc:
+                continue
+            if turn is not None:
+                try:
+                    until = int(float(str(row.get("until", "0")).strip('"')))
+                except ValueError:
+                    until = 0
+                if until and turn > until:
+                    continue
+            lines.append(desc)
+        return lines[:limit]
+
     def recall(self, scope: str, limit: int = 10) -> list[str]:
         """What this faction has learned, highest confidence first, as prompt lines.
 
@@ -490,13 +584,30 @@ class RememberingRetriever:
             )
         return self._recalled[scope]
 
+    def _intents(self, scope: str | None, turn: int | None) -> tuple[str, ...]:
+        """Live unit intents for this faction (na-7bk slice 3).
+
+        NOT cached, unlike tactics, and the difference is not an oversight. Durable tactics are
+        written between games, so a cache costs nothing and saves a round trip per decision. An
+        intent is written DURING the game, by this same agent, minutes ago — caching it would
+        mean a plan the agent formed on turn 40 is invisible to it on turn 41, which is precisely
+        the case the mechanism exists for.
+
+        Horizon-filtered by the store against this turn, so an expired plan does not sit in the
+        prompt reading as though it still applied.
+        """
+        if scope is None or not self.store.available:
+            return ()
+        return tuple(self.store.recall_intents(scope, turn=turn, limit=self.limit))
+
     def retrieve(self, world_view: WorldView) -> Grounding:
         base = (
             self.inner.retrieve(world_view)
             if self.inner is not None
             else Grounding(reason="no retriever configured")
         )
-        learned = self._tactics(self._scope_for(world_view))
+        scope = self._scope_for(world_view)
+        learned = (*self._intents(scope, world_view.turn), *self._tactics(scope))
         if not learned:
             return base
         # Appended, never prepended. The rulebook facts are about the options actually on the

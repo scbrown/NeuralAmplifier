@@ -27,6 +27,9 @@ from .coverage import report
 from .decisions import DecisionLog
 from .deferrals import DeferralSet
 from .directives import DirectiveStore, accept
+from .intents import IntentError, UnitIntent
+from .intents import validate as validate_intent
+from .memory import memory_scope
 from .orchestrator import Orchestrator
 from .orders import OrderChannel, build_command
 from .outcomes import EngineOutcome, OutcomeStore
@@ -65,6 +68,71 @@ def build_brain(config: Config | None = None) -> Brain:
     if cfg.effort:
         kwargs["effort"] = cfg.effort
     return ClaudeBrain(**kwargs)
+
+
+def _record_intent(
+    orchestrator: Orchestrator, body: dict[str, object], command: str, outcome: dict[str, object]
+) -> dict[str, object] | None:
+    """Write the WHY behind a long-horizon order into the ordering faction's graph.
+
+    Attached to the order rather than posted separately, deliberately: the reason and the order
+    are one act, and a second endpoint would make it possible to have either without the other —
+    an unexplained goto, or a remembered plan no unit is carrying out.
+
+    Faction comes from the CALLER, never inferred from the unit id. Units are numbered in one
+    engine-wide sequence, so inferring would be a coincidence away from writing one faction's
+    private plan into another's graph, which is the fog boundary this all turns on.
+    """
+    raw = body.get("intent")
+    if not isinstance(raw, dict):
+        return None
+    if str(outcome.get("status")) != "ok":
+        return {"recorded": False, "why": "the order was not confirmed, so no intent was written"}
+
+    faction_id = raw.get("faction_id")
+    if not isinstance(faction_id, int | float | str) or faction_id == "":
+        raise HTTPException(422, "intent.faction_id is required — it is the graph the plan goes in")
+
+    triggers = []
+    for item in raw.get("triggers") or []:
+        if not isinstance(item, dict):
+            raise HTTPException(422, "each intent trigger must be an object")
+        target = item.get("target")
+        if item.get("metric") in (None, "") or not isinstance(target, int | float | str):
+            raise HTTPException(422, "an intent trigger needs a metric and a numeric target")
+        triggers.append(
+            Predicate(
+                metric=str(item["metric"]),
+                comparator=cast(Comparator, str(item.get("comparator", "at_least"))),
+                target=float(target),
+            )
+        )
+
+    parts = command.split()
+    intent = UnitIntent(
+        unit_id=_as_int(raw.get("unit_id", parts[1] if len(parts) > 1 else ""), "intent.unit_id"),
+        goal=str(raw.get("goal") or command),
+        rationale=str(raw["rationale"]) if raw.get("rationale") else None,
+        until_turn=_as_opt_int(raw.get("until_turn"), "intent.until_turn"),
+        triggers=triggers,
+    )
+    try:
+        validate_intent(intent)
+    except IntentError as exc:
+        # 422 while the agent is still holding the decision. An intent nothing could bring back
+        # for review is worse than none: it reads in every later prompt as a plan under review.
+        raise HTTPException(422, str(exc)) from exc
+
+    store = getattr(getattr(orchestrator, "retriever", None), "store", None)
+    game_id = getattr(getattr(orchestrator, "retriever", None), "game_id", None)
+    if store is None or not game_id:
+        return {
+            "recorded": False,
+            "why": "no memory store is bound, so there is nowhere to remember it",
+            "intent": intent.summary(),
+        }
+    store.write_intent(intent, memory_scope(str(game_id), int(faction_id)))
+    return {"recorded": True, "intent": intent.summary()}
 
 
 def _as_int(value: object, field: str) -> int:
@@ -820,6 +888,14 @@ def create_app(
         raw_timeout = body.get("timeout_s")
         timeout_s = float(raw_timeout) if isinstance(raw_timeout, int | float) else None
         outcome = order_channel.issue(command, timeout_s=timeout_s).as_dict()
+
+        # An intent, if the caller attached one to this order (na-7bk slice 3). Recorded only on
+        # an order the game CONFIRMED, for the same reason a deferral is only resolved on one:
+        # the engine keeps the goto, and a remembered reason for an order that never landed would
+        # describe a plan no unit is executing.
+        intent_note = _record_intent(orchestrator, body, command, outcome)
+        if intent_note:
+            outcome = {**outcome, "intent": intent_note}
         # A build that lands closes whatever deferral it answers. Reported back in the response
         # rather than only recorded, so an agent sweeping its pending set learns the parked
         # decision is retired from the same call that retired it — one round trip, and no window
