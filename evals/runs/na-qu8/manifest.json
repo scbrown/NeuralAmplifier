@@ -2,17 +2,17 @@
   "note": "Does grounding base.hurry's subject move its stability, and toward what?",
   "arms": {
     "bare": {
-      "prompt_sha256": "e02c262ccd10",
+      "prompt_sha256": "faa35312e1f0",
       "facts_offered": 0,
       "options": 2
     },
     "subject": {
-      "prompt_sha256": "d3de458f28c5",
+      "prompt_sha256": "1aa6a9ee38a0",
       "facts_offered": 1,
       "options": 2
     }
   },
-  "answered_by": "NOT RUN \u2014 no answers are committed.",
+  "answered_by": "claude-haiku-4-5, one independent agent per arm-run, 2026-08-22 (prompts regenerated same day: pins faa35312e1f0 / 1aa6a9ee38a0 after turns_to_completion, units_in_foreign_territory and board_effects entered the world view)",
   "stripped_from_capture": {
     "fields": [
       "native_choice",
