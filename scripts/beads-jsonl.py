@@ -34,7 +34,8 @@ sibling repo, so a future import sees nothing unusual.
 
 ## Usage
 
-    scripts/beads-jsonl.py create "Title" [--description ...] [--priority 3] [--type task] [--label pitch]
+    scripts/beads-jsonl.py create "Title" [--description ...] [--priority 3]
+                                  [--type task] [--label pitch]
     scripts/beads-jsonl.py close <id> --reason "..."
     scripts/beads-jsonl.py note  <id> --text   "..."
     scripts/beads-jsonl.py list [--status open]
@@ -45,7 +46,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[1]
@@ -57,7 +58,7 @@ SEPARATORS = (",", ":")
 
 
 def now() -> str:
-    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    return datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 def load() -> list[dict]:
@@ -113,8 +114,9 @@ def main() -> int:
     p_create.add_argument("--description", default="")
     p_create.add_argument("--priority", type=int, default=3)
     p_create.add_argument("--type", dest="issue_type", default="task")
-    p_create.add_argument("--label", action="append", default=[],
-                          help="repeatable; e.g. --label pitch")
+    p_create.add_argument(
+        "--label", action="append", default=[], help="repeatable; e.g. --label pitch"
+    )
 
     args = ap.parse_args()
     records = load()
@@ -139,7 +141,7 @@ def main() -> int:
         existing = {r["id"] for r in records}
         digest = hashlib.sha256((args.title + stamp).encode()).hexdigest()
         for i in range(0, len(digest) - 3):
-            candidate = f"{prefix}-{digest[i:i + 3]}"
+            candidate = f"{prefix}-{digest[i : i + 3]}"
             if candidate not in existing:
                 break
         else:
