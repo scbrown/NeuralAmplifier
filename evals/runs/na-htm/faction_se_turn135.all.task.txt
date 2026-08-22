@@ -96,6 +96,7 @@ Metrics you may write a directive against:
   - pop_size [citizens, base-scope, higher is better] — Population of this base.
   - pop_total [citizens, faction-scope, higher is better] — Total population across all bases.
   - turns_to_completion [turns, base-scope, no direction] — Turns until this base finishes what it is building, at the current mineral surplus. Absent when the base produces no surplus and would never finish.
+  - units_in_foreign_territory [units, faction-scope, lower is better] — Own units standing on another faction's tiles, counting only factions we have met. Position, not intent — a unit already marching home still counts until it is out, which is what lets a withdrawal promise be seen to be kept.
 
 Use `at_least`/`at_most` with a `target` for an absolute bound, or
 `increase`/`decrease`/`hold` to be measured against the value at the time you
@@ -139,12 +140,14 @@ World view:
       "id": "se:none",
       "action": "No change",
       "effects": null,
+      "board_effects": null,
       "category": "se"
     },
     {
       "id": "se:0:0",
       "action": "Frontier",
       "effects": {},
+      "board_effects": null,
       "affordable": true,
       "category": "se",
       "cost": 24,
@@ -159,6 +162,7 @@ World view:
         "police": 2.0,
         "support": 2.0
       },
+      "board_effects": null,
       "affordable": true,
       "category": "se",
       "cost": 24,
@@ -169,6 +173,7 @@ World view:
       "id": "se:1:0",
       "action": "Simple",
       "effects": {},
+      "board_effects": null,
       "affordable": true,
       "category": "se",
       "cost": 24,
@@ -183,6 +188,7 @@ World view:
         "planet": -3.0,
         "police": -5.0
       },
+      "board_effects": null,
       "affordable": true,
       "category": "se",
       "cost": 24,
@@ -197,6 +203,7 @@ World view:
         "growth": 2.0,
         "industry": 1.0
       },
+      "board_effects": null,
       "affordable": true,
       "category": "se",
       "cost": 24,
@@ -207,6 +214,7 @@ World view:
       "id": "se:2:0",
       "action": "Survival",
       "effects": {},
+      "board_effects": null,
       "affordable": true,
       "category": "se",
       "cost": 24,
@@ -221,6 +229,7 @@ World view:
         "morale": 2.0,
         "support": 2.0
       },
+      "board_effects": null,
       "affordable": true,
       "category": "se",
       "cost": 24,
@@ -235,6 +244,7 @@ World view:
         "industry": 1.0,
         "morale": -2.0
       },
+      "board_effects": null,
       "affordable": true,
       "category": "se",
       "cost": 24,
