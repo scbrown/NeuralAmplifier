@@ -1,4 +1,4 @@
-# na-6db — the first brain-vs-native outcome measurement (M1)
+# na-6db — the first brain-vs-native outcome measurement (M1), and its first fix (M2)
 
 Two arms played forward from a byte-identical save, LLM pinned to the human slot per na-xb1.
 
@@ -59,3 +59,58 @@ poorer.
 
 One save, one seed. The tool prints no verdict for that reason; na-clk is the instrument that
 turns a trajectory into a claim.
+
+
+---
+
+# M2: the same brain with one standing directive
+
+`brain-directive.faction7.jsonl` is a third arm, identical to the brain arm except for
+`plan.hold-reserve-floor.json` loaded via `NA_PLAN`:
+
+```json
+{"id": "hold-reserve-floor", "metric": "energy_reserves",
+ "comparator": "at_least", "target": 600, "priority": 8}
+```
+
+```console
+$ python3 scripts/ab_outcomes.py --faction 7 \
+    evals/runs/na-6db/baseline.faction7.jsonl \
+    evals/runs/na-6db/brain-directive.faction7.jsonl
+
+metric                 baseline      brain      delta
+base_count                   18         18         +0
+pop_total                    81         80         -1
+mineral_surplus               3          0         -3
+energy_reserves            2579       1237      -1342
+energy_income                53         53         +0
+labs_output                  32         34         +2
+military_units               43         55        +12
+drone_total                  33         27         -6
+```
+
+All deltas against the deterministic baseline, M1 arm vs M2 arm:
+
+| metric | brain | brain + directive |
+|---|---|---|
+| base_count | −2 | **+0** |
+| energy_income | −5 | **+0** |
+| pop_total | −7 | **−1** |
+| labs_output | −2 | **+2** |
+| military_units | +5 | **+12** |
+| drone_total | −5 | **−6** |
+| energy_reserves | −2353 | **−1342** |
+
+`energy_income` returning to parity is the load-bearing one: M1's finding was that the brain had
+bought a permanently smaller economy, and that is gone.
+
+723 decisions, 1 degraded, $2.95. The directive was `in_force` on all 723, `not_shown` on none,
+declared **followed on 661 (91%)**, **overridden on 0**, and **`unsatisfied` on 0** — the floor
+was never breached in 40 turns.
+
+It did not hurry less (51 rush-buys against the undirected arm's 54). It bought cheap completions
+that clear the floor instead of expensive rushes that breach it, and said so in its reasoning.
+
+**This is not a win.** Parity-or-ahead on five of eight trajectory metrics on one save is not a
+victory condition; na-clk is the instrument for that. Override rate 0 also means this says
+nothing about a directive that costs something.

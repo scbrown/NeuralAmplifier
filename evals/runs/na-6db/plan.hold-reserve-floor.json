@@ -1,0 +1,13 @@
+{
+  "directives": [
+    {
+      "id": "hold-reserve-floor",
+      "intent": "Keep at least 600 energy credits banked. Reserves compound and buy options later; a treasury spent to nothing cannot act on an opportunity at all.",
+      "metric": "energy_reserves",
+      "comparator": "at_least",
+      "target": 600,
+      "priority": 8,
+      "rationale": "Measured on this exact save (na-6db, 40 turns): the brain spent the treasury from 632 down to ~130 by turn 111 with 54 rush-buys and never recovered, ending 2353 credits and 2 bases behind the deterministic baseline. Its energy INCOME finished 5/turn lower, so the spending bought a permanently smaller economy rather than a temporary dip."
+    }
+  ]
+}
