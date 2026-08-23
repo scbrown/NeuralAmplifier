@@ -62,6 +62,9 @@ def test_dashboard_page_recreates_the_datalinks_look_without_assets() -> None:
     assert "PLANETARY DATALINKS" in response.text
     assert "<article class=faction" in response.text
     assert "<div id=factions class=factions>" in response.text
+    assert "OFFERED ACTION SPACE" in response.text
+    assert "PLAN DIRECTIVES" in response.text
+    assert "DISAGREEMENT" in response.text
     assert "setInterval(refresh,5000)" in response.text
     assert "<img" not in response.text
 
