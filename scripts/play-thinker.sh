@@ -393,10 +393,28 @@ before=0
 # write a lower year than one already on disk, and mtime is what "where I left off"
 # actually means. NA_RESUME=0 opts out and boots to the menu.
 resume_args=()
+if [ -n "${NA_SAVE:-}" ] && [ -n "${NA_SEED:-}" ]; then
+    die "NA_SAVE and NA_SEED are mutually exclusive: a run cannot both load a save state and generate a fresh map"
+fi
 # NA_SEED starts a NEW seeded game instead of resuming (na-px5) — what the win ladder needs.
 # Mutually exclusive with resuming by construction: a run cannot both continue a save and start
 # a fresh map, and quietly preferring one would make a "seeded" ladder replay somebody's save.
-if [ -n "${NA_SEED:-}" ]; then
+if [ -n "${NA_SAVE:-}" ]; then
+    # A NAMED SAVE STATE, not "whatever is newest" (Stiwi, 2026-08-23: "you should be able to load
+    # up specific save states to test specific things. evals can work in this same way").
+    #
+    # NA_RESUME picks the newest autosave by mtime, which is right for continuing a run and wrong
+    # for an experiment: it makes the thing under test depend on what else has written to the
+    # directory. A fixture is addressed by name, and the same save can be loaded a hundred times
+    # to give a hundred runs one identical starting state — which is what turns a 15-minute
+    # guess-and-wait loop into a controlled comparison.
+    [ -f "$NA_SAVE" ] || die "NA_SAVE=$NA_SAVE does not exist"
+    na_save_abs="$(cd "$(dirname "$NA_SAVE")" && pwd)/$(basename "$NA_SAVE")"
+    mkdir -p "$PLAY_DIR/saves/fixture"
+    cp -f "$na_save_abs" "$PLAY_DIR/saves/fixture/loaded.sav"
+    resume_args=(-na-autoload "saves/fixture/loaded.sav")
+    log "loading save state $NA_SAVE (md5 $(md5sum "$na_save_abs" | cut -c1-12))"
+elif [ -n "${NA_SEED:-}" ]; then
     case "$NA_SEED" in
         ''|*[!0-9]*) die "NA_SEED must be a positive integer, got '$NA_SEED'" ;;
     esac

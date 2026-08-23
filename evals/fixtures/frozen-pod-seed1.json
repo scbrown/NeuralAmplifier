@@ -1,0 +1,13 @@
+{
+  "bytes": 721572,
+  "captured": "2026-08-23T18:45:11",
+  "md5": "bb3a01d76d9a3b4b16f4115ea51fb968",
+  "name": "frozen-pod-seed1",
+  "note": "na-1lj: colony pod at 136,84 with waypoint 125,83, frozen since turn 8 \u2014 not in a base, not in ZOC, no fungus on the step, full speed available. The state every na-1lj hypothesis has had to be re-grown for, now addressable by name.",
+  "readings": {
+    "build-stats": "player=7 enemy_move=0 upkeep_ok=33 colony_move=0 colony_gaveup=0 colony_built=1 colony_pass=7 enroute=4 retarget=2 tobase=0 pod=136,84 wp=125,83 order=24 spent=3 speed=3 reg=16 wpreg=16 triad=0 mode=1 left_alone=28 at_base=0 defend=0 iter=0 unit_turn=0 zoc=0 state=0x60000 fung=0 fung_dir=0 fung_adj=2 fung_wp=0",
+    "game-state": "state=0x0 done=0 halted=0 turn=32 player=7 map_seed=2 victory=none bases=1:3,2:6,3:5,4:4,5:4,6:4,7:1",
+    "move-stats": "player=7 enemy_move=0 upkeep_ok=32 colony_move=0 colony_gaveup=0 colony_built=1 colony_pass=5 enroute=3 retarget=1 tobase=0 pod=136,84 wp=125,83 order=24 spent=0 speed=3 reg=16 wpreg=16 triad=0 mode=1 left_alone=28 at_base=0 defend=0 iter=0 unit_turn=0 zoc=0 state=0x60000 fung=0 fung_dir=0 fung_adj=2 fung_wp=0"
+  },
+  "source": "Autosave_2132.sav"
+}
