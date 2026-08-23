@@ -1,7 +1,8 @@
 """In-game dialog observations, pinned against the adapter — invariant 7, na-4lr.
 
-`popp` is the engine's dialog function, and the fork calls it through a pointer, so writing a
-wrapper into that pointer intercepts every dialog Thinker raises at once. What comes out is
+`Popup_start` is the engine's dialog choke point: direct engine callers and `popp` both reach it.
+The fork installs an opt-in entry trampoline there and retains the pointer hook as a degraded
+fallback. What comes out is
 *not* a world view: the hook cannot build an action space, because a dialog's buttons live in a
 game text file keyed by label and that is data this project deliberately does not ship
 (invariant 8). It emits the compact form the `na_verify_*` divergence records already use.

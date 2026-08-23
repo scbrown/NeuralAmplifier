@@ -542,17 +542,17 @@ Most of the gaps above are *dialog-only*: the decision exists, but it is raised 
 dialog a human answers, so nothing in the AI path ever asks it. Invariant 7 says intercept those,
 never blanket-suppress them — they are decision points.
 
-`na_dialog_observe` (default off, `scbrown/thinker`) is the first half of that. It is a single
-hook and needs no per-site patching: `popp` is a function **pointer** the engine binds and the
-fork calls through, so a wrapper written into that pointer sees every dialog Thinker raises. The
+`na_dialog_observe` (default off, `scbrown/thinker`) is the first half of that. The fallback is a
+`popp` function-pointer wrapper, but the complete opt-in hook patches `Popup_start` at its entry.
+Both `popp` and the engine's direct dialog callers reach that lower choke point. The
 engine's answer passes through unchanged on every path — nothing is suppressed, which is the
 invariant, and the recorded `native_choice` is the button the engine or the human actually took.
 
 Two limits, both real and neither hidden:
 
-- **It does not see dialogs the engine raises from its own code.** Those call the real function
-  directly. Reaching them needs each call site's address, which needs the game binary — which
-  this project deliberately does not have (invariant 8).
+- **Reach is measured, not inferred.** `dialog-stats` reports `reach=popup_start`,
+  `popp_entry_fallback`, or `pointer`; a prologue mismatch narrows observation rather than
+  silently disabling it.
 - **A dialog record is not a world view and does not count as coverage.** The hook cannot build
   an action space: a dialog's buttons live in a game text file keyed by label, and that is data
   we do not ship. So it emits the compact form the divergence records use — a `surface_id` and
