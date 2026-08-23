@@ -84,6 +84,9 @@ def main():
     log.write("driver start %s\n" % time.strftime("%H:%M:%S"))
     last_turn = None
     stuck = 0
+    started_playing = False
+    last_dialog = None
+    tries = 0
     while time.time() < DEADLINE:
         r = cmd("shot")
         if r is None:
@@ -120,7 +123,19 @@ def main():
             # Rather than model every layout, rotate through the rows once clicking has visibly
             # stopped working. Any dialog with a dismissing action is then reached within
             # len(rows) cycles, and the rule needs no knowledge of which dialog it is looking at.
-            row = rows[-1] if stuck < 3 else rows[(stuck // 3) % len(rows)]
+            # Rotation is keyed on THIS DIALOG, not on the turn. `stuck` counts cycles since the
+            # turn last moved, so after one long stall the driver stayed in rotate mode forever
+            # and wandered into option lists on dialogs where bottom-right would have dismissed
+            # them first time — measured on a diplomacy dialog whose seven options it clicked
+            # through while an OK sat on the bottom row.
+            #
+            # That matters beyond speed: the options on a diplomacy dialog are ACTIONS. A driver
+            # that clicks them is playing the game, not unblocking it.
+            signature = (len(found), rows[-1][0])
+            if signature != last_dialog:
+                last_dialog, tries = signature, 0
+            row = rows[-1] if tries < 3 else rows[(tries // 3) % len(rows)]
+            tries += 1
             y, a, b = max(row, key=lambda t: (t[1] + t[2]))
             click((a + b) // 2, y)
             note = "clicked (%d,%d) — %d bar(s), %d row(s)%s, %dx%d" % (
@@ -141,9 +156,14 @@ def main():
             "%s turn=%s halted=%s stuck=%d %s\n"
             % (time.strftime("%H:%M:%S"), turn, halted, stuck, note)
         )
-        if halted:
-            log.write("halted — stopping\n")
+        # `halted` is only terminal once the game has actually been PLAYING. It reads 1 at
+        # startup while the save is still loading, and quitting on that ends the driver at
+        # turn 0 before a single dialog is cleared — measured, on a run that then sat untouched.
+        if halted and started_playing:
+            log.write("halted after play — stopping\n")
             break
+        if turn and turn > 0:
+            started_playing = True
         time.sleep(3)
     log.write("driver end %s\n" % time.strftime("%H:%M:%S"))
 
