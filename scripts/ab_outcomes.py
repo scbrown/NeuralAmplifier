@@ -54,11 +54,43 @@ TRENDED = (
 )
 
 
-def load_arm(path: Path) -> tuple[dict[int, dict[str, int]], dict, set[str]]:
+def factions_in(path: Path) -> dict[int, str]:
+    """Every faction id that appears in a log, with its name."""
+    seen: dict[int, str] = {}
+    for line in path.read_text().splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            record = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(record, dict) and isinstance(record.get("faction_id"), int):
+            # Prefer a record that also carries the NAME. Not every record has one, and
+            # setdefault on the first sighting alone printed "1 (?), 2 (?), …" — a refusal
+            # message that names nothing is a refusal the reader has to go and decode.
+            name = record.get("faction")
+            if name and seen.get(record["faction_id"], "?") == "?":
+                seen[record["faction_id"]] = str(name)
+            else:
+                seen.setdefault(record["faction_id"], "?")
+    return seen
+
+
+def load_arm(
+    path: Path, faction_id: int | None = None
+) -> tuple[dict[int, dict[str, int]], dict, set[str]]:
     """(metrics by turn, fairness profile, tiers seen) for one run's observation log.
 
     Takes the LAST record for a turn rather than the first: a turn emits many records as bases
     are decided, and the end-of-turn state is the one that reflects what the turn actually did.
+
+    ``faction_id`` is not optional in practice, and the caller refuses without it. **One
+    observation log holds every faction's records** — measured on a real run: seven factions,
+    3,543 metric-bearing records, six of them AI slots and one human. Without a filter, "the
+    last record for a turn" is whichever faction happened to emit last, so the trajectory being
+    compared is a splice of seven different factions and the fairness block is whoever wrote
+    first. Both arms would produce clean, plausible, meaningless numbers (na-6db).
     """
     by_turn: dict[int, dict[str, int]] = {}
     fairness: dict = {}
@@ -73,6 +105,8 @@ def load_arm(path: Path) -> tuple[dict[int, dict[str, int]], dict, set[str]]:
         except json.JSONDecodeError:
             continue
         if not isinstance(record, dict):
+            continue
+        if faction_id is not None and record.get("faction_id") != faction_id:
             continue
         turn = record.get("turn")
         metrics = record.get("metrics")
@@ -113,14 +147,40 @@ def main() -> int:
         help="refuse a comparison shorter than this (na-6db's acceptance says 30)",
     )
     ap.add_argument(
+        "--faction",
+        type=int,
+        default=None,
+        help="faction id to compare (required when a log holds more than one)",
+    )
+    ap.add_argument(
         "--allow-profile-mismatch",
         action="store_true",
         help="compare anyway. The result measures the handicap, not the brain.",
     )
     args = ap.parse_args()
 
-    base_turns, base_fair, base_tiers = load_arm(Path(args.baseline))
-    brain_turns, brain_fair, brain_tiers = load_arm(Path(args.brain))
+    # THE REFUSAL THAT HAD TO COME FIRST. One log holds every faction; comparing without saying
+    # which one splices seven trajectories into a single confident number.
+    present = {**factions_in(Path(args.baseline)), **factions_in(Path(args.brain))}
+    if args.faction is None and len(present) > 1:
+        listed = ", ".join(f"{fid} ({name})" for fid, name in sorted(present.items()))
+        print(
+            "refusing: these logs hold more than one faction and no --faction was given.\n"
+            f"  present: {listed}\n"
+            "  Without it the comparison splices every faction's trajectory together.",
+            file=sys.stderr,
+        )
+        return 1
+    if args.faction is not None and args.faction not in present and present:
+        print(
+            f"refusing: faction {args.faction} does not appear in either log "
+            f"(present: {sorted(present)})",
+            file=sys.stderr,
+        )
+        return 1
+
+    base_turns, base_fair, base_tiers = load_arm(Path(args.baseline), args.faction)
+    brain_turns, brain_fair, brain_tiers = load_arm(Path(args.brain), args.faction)
 
     for name, turns in (("baseline", base_turns), ("brain", brain_turns)):
         if not turns:
@@ -175,6 +235,8 @@ def main() -> int:
         return 1
 
     first, last = shared[0], shared[-1]
+    who = present.get(args.faction, "?") if args.faction is not None else "all factions"
+    print(f"faction {args.faction} ({who})")
     print(f"turns {first}–{last} ({len(shared)} shared)")
     print(
         f"fairness: slot={base_fair.get('slot')} difficulty={base_fair.get('difficulty')} "
