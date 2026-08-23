@@ -42,6 +42,10 @@ THINKER_FACTION = {
     # Swept over Vehs the way drone_total is swept over Bases, through whose_territory so an
     # unmet faction's land does not count (na-nmg).
     "units_in_foreign_territory",
+    # Swept over Factions, commlink-gated for the same fog reason (na-tit). Measured on a live
+    # game after the adapter change: present on 172 of 172 world views across base.hurry,
+    # base.production and faction.se, and on 0 of the 862 captured before it.
+    "factions_at_war",
 }
 #: ``turns_to_completion`` is emitted *conditionally* — the adapter omits the key when the base
 #: produces no mineral surplus, because a zero there would read as "completes this turn" when

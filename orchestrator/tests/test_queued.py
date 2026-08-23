@@ -308,3 +308,66 @@ def test_the_queue_endpoints_work_when_the_brain_is_an_attached_agent() -> None:
 
     # And the decision queue is still itself: the agent-facing endpoints must be unaffected.
     assert client.post("/agent/next", json={"wait": 0}).json()["decision_id"] is None
+
+
+# --- the war-state predicate the design asked for first (na-tit) ----------------
+
+
+def test_the_design_headline_predicate_can_now_be_written_at_all() -> None:
+    """ "holds unless at_war flips" — na-7bk's first example, and the first thing refused.
+
+    The vocabulary only admits names an adapter emits, so until the Thinker adapter reported a
+    war-state number this could not be installed. That refusal was correct and it was expensive:
+    the mechanism's own headline case was the one it could not express, so a standing build
+    order went on standing through a declaration of war. This asserts the refusal is gone.
+    """
+    client = TestClient(create_app(brain=CountingBrain()))
+    installed = install(
+        client,
+        predicates=[{"metric": "factions_at_war", "comparator": "at_most", "target": 0}],
+    )
+    assert installed.status_code == 200, installed.json()
+
+
+def test_a_new_war_stops_a_standing_answer_and_says_so() -> None:
+    """A COUNT rather than a flag, and this is why it had to be.
+
+    The design says "re-raise when the war state changes". A boolean can say `at_war` and
+    nothing more, so an answer conditioned on it stops on the FIRST war and then stands through
+    every escalation afterwards — a second front is exactly the change a standing plan should
+    not survive, and exactly the one a flag cannot see.
+    """
+    brain = CountingBrain()
+    client = TestClient(create_app(brain=brain))
+    at_peace = {**BASE_VIEW, "metrics": {**BASE_VIEW["metrics"], "factions_at_war": 0}}
+    install(
+        client,
+        predicates=[{"metric": "factions_at_war", "comparator": "at_most", "target": 0}],
+    )
+
+    client.post("/decide", json=at_peace)
+    assert brain.asked == 0, "peace holds the answer — the control for the assertion below"
+
+    client.post(
+        "/decide", json={**at_peace, "metrics": {**at_peace["metrics"], "factions_at_war": 1}}
+    )
+    assert brain.asked == 1, "a declaration of war must re-raise the decision"
+    advisory = " ".join(brain.advisories[-1])
+    assert "factions_at_war is 1" in advisory, "the agent must be told what changed"
+
+
+def test_the_war_metric_missing_from_a_world_view_also_stops_the_answer() -> None:
+    """Fail-closed, and the reason it matters more for this name than for the others.
+
+    A standing answer resting on an unread instrument is resting on nothing. For an economic
+    metric that is a judgement call; for war it is the difference between a build plan that
+    survives an invasion because nobody checked and one that stops because nobody could.
+    """
+    brain = CountingBrain()
+    client = TestClient(create_app(brain=brain))
+    install(
+        client,
+        predicates=[{"metric": "factions_at_war", "comparator": "at_most", "target": 0}],
+    )
+    client.post("/decide", json=BASE_VIEW)  # BASE_VIEW carries no factions_at_war
+    assert brain.asked == 1, "an absent metric must not read as a satisfied one"

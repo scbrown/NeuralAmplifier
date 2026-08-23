@@ -173,6 +173,24 @@ VOCABULARY: Final[dict[str, Metric]] = {
         # the Peacekeepers to withdraw; "at once" is accepted, the troops stay, and the treaty
         # breaks without anyone having decided to break it. A directive needs a name to be
         # written against, and this is that name.
+        # The war-state name na-7bk's design comment asks for first and na-tit's adapter work
+        # made emittable. Both mechanisms that need it — conditional queued answers and
+        # unit-intent review triggers — refuse a predicate they cannot measure, so until the
+        # adapter reported this the design's own headline example ("holds unless at_war flips")
+        # could not be written at all.
+        _m(
+            "factions_at_war",
+            "faction",
+            "factions",
+            # None, and deliberately not "lower". Fewer fronts is safer and more of them is
+            # sometimes the plan; the trigger this exists for fires on the number MOVING, not
+            # on which way is good. `military_units` is None for the same reason.
+            None,
+            "Factions we are at war with, counted only among those we have met. A count "
+            "rather than a flag: the comparators are numeric, so a boolean could say 'at war' "
+            "but not 'a second front opened', and the latter is the change a standing answer "
+            "needs to stop on. Zero is peace with no special case.",
+        ),
         _m(
             "units_in_foreign_territory",
             "faction",

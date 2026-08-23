@@ -65,6 +65,7 @@ BASE_PRODUCTION = {
         "military_units": 3,
         "drone_total": 1,
         "units_in_foreign_territory": 0,
+        "factions_at_war": 0,
         "mineral_surplus": 2,
         "minerals_remaining": 36,
         "pop_size": 3,
@@ -148,6 +149,7 @@ BASE_HURRY = {
         "military_units": 3,
         "drone_total": 1,
         "units_in_foreign_territory": 0,
+        "factions_at_war": 0,
         "mineral_surplus": 2,
         "minerals_remaining": 26,
         "pop_size": 3,
@@ -189,6 +191,7 @@ FACTION_TECH = {
         "military_units": 3,
         "drone_total": 1,
         "units_in_foreign_territory": 0,
+        "factions_at_war": 0,
     },
     "tech_accumulated": 0,
     "tech_rate": 40,
@@ -265,6 +268,7 @@ BASE_RETOOL = {
         "military_units": 3,
         "drone_total": 1,
         "units_in_foreign_territory": 0,
+        "factions_at_war": 0,
         "mineral_surplus": 2,
         "minerals_remaining": 26,
         "pop_size": 3,
@@ -334,6 +338,7 @@ BASE_STAPLE = {
         "military_units": 3,
         "drone_total": 1,
         "units_in_foreign_territory": 0,
+        "factions_at_war": 0,
         "mineral_surplus": 2,
         "minerals_remaining": 26,
         "pop_size": 3,
@@ -401,6 +406,7 @@ ECON_CORNER_MARKET = {
         "military_units": 3,
         "drone_total": 1,
         "units_in_foreign_territory": 0,
+        "factions_at_war": 0,
     },
     "action_space": [
         {
@@ -450,6 +456,7 @@ COUNCIL_CALL = {
         "military_units": 3,
         "drone_total": 1,
         "units_in_foreign_territory": 0,
+        "factions_at_war": 0,
     },
     "action_space": [
         {
@@ -499,6 +506,7 @@ BASE_SATELLITE = {
         "military_units": 3,
         "drone_total": 1,
         "units_in_foreign_territory": 0,
+        "factions_at_war": 0,
         "mineral_surplus": 2,
         "minerals_remaining": 26,
         "pop_size": 3,
@@ -590,6 +598,7 @@ BASE_PROJECT = {
         "military_units": 3,
         "drone_total": 1,
         "units_in_foreign_territory": 0,
+        "factions_at_war": 0,
         "mineral_surplus": 2,
         "minerals_remaining": 26,
         "pop_size": 3,
@@ -669,6 +678,7 @@ FACTION_TECH_STEAL = {
         "military_units": 3,
         "drone_total": 1,
         "units_in_foreign_territory": 0,
+        "factions_at_war": 0,
     },
     "action_space": [
         {
@@ -723,6 +733,7 @@ BASE_DEFEND_GOAL = {
         "military_units": 3,
         "drone_total": 1,
         "units_in_foreign_territory": 0,
+        "factions_at_war": 0,
         "mineral_surplus": 2,
         "minerals_remaining": 26,
         "pop_size": 3,
