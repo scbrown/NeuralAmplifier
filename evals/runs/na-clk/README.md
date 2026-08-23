@@ -1,7 +1,18 @@
-# na-clk seed 1 — the ladder's first seeded full game
+# na-clk seed 1
 
-**Result: refused as unplayable at turn 123. The seed measured a faction that could not
-expand, not the quality of its decisions.**
+Two rows, on sattler's ruling: the refusal below was of the RUN, not of the SEED. Seed 1 itself
+clears viability once thinker `be1b51b` is in, so rerunning it is the sequential discipline rather
+than a substitution — and the first attempt stays in the record with its cause.
+
+| arm | outcome |
+|---|---|
+| `brain-pre-bg4fix` | refused as unplayable at turn 123 — the run below |
+| `brain` | ladder row 1 proper, run under `be1b51b` |
+
+## The refused attempt
+
+**Refused as unplayable at turn 123. It measured a faction that could not expand, not the quality
+of its decisions.**
 
     arm brain, seed 1, faction 7 (Peacekeepers), human slot, talent difficulty
     bases at turn 123:  1:32  2:51  3:36  4:43  5:22  6:49  7:0
@@ -55,7 +66,7 @@ followed by a vtable call (`8B 10 / FF 52 08`), in the unnamed drawing function 
 game**, and here it played the game into an engine crash. The rule was already written on the
 bead; the detector bug is what forced the driver to break it.
 
-**2. The viability bar was never applied during a run** (`drive-unattended.py`, this commit).
+**2. The viability bar was never applied during a run** (`drive-unattended.py`).
 `win_ladder.viability` — two bases by turn 20, the same bar for all seven factions — was written
 for this exact case and only ever ran when scoring a results file *afterwards*. Seed 1 was below
 that bar at turn 20 and played on for another 103 turns. The driver now applies it once, at the
@@ -67,4 +78,21 @@ Spent: USD 0.54 and about four hours of wall clock, against ~USD 31 approved. Th
 deliberately at turn 123 rather than played to 250 — the outcome was decided and the remaining
 ~4.5 hours would have measured nothing.
 
-The 3-seed request should stay deferred. Drawing more seeds now buys three more refusals.
+## The cause, and the fix
+
+`build-stats` (thinker `be1b51b`) censused the four conditions guarding the ColonyUnit branch,
+with an AI-side positive control so a row of zeros could not mean "the instrument never fired":
+
+    player=7 reset_enter=0 reset_managed=0 build_run=0 reached=0 queued=0
+             ai_reset_enter=33 ai_build_run=12
+
+`mod_base_reset` is never called for a human faction's bases at all — `mod_bases_reset` opens
+`if (is_human(faction_id)) return;` — so Thinker never chooses production for us and no colony pod
+is ever queued. None of the four conditions was the cause; the governor flag the source reading
+pointed at is SET (`may_pod=1`).
+
+`na_manage_player_bases()` fixes it on the same seam as the na-ywn settle pass. Same seed, same
+build: **7:1 at turn 21 before, 7:3 after**, and the viability checkpoint went REFUSED -> ok on a
+live run.
+
+The 3-seed request stays deferred until row 1 has a result.
