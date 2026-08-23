@@ -144,6 +144,9 @@ journalctl --user -u neural-amplifier-dashboard-deploy.service
 tail ~/.local/state/neural-amplifier/dashboard-deploy.log
 ```
 
+Each deployment records the previous and deployed full commit IDs before a separate `PASS` line;
+failures record the attempted target and Git or verification output without changing run paths.
+
 The run paths remain in `~/.config/neural-amplifier/dashboard.env`, outside the checkout, so an
 automatic code update does not repoint the viewer.
 
