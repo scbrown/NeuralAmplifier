@@ -9,4 +9,6 @@ Environment=PATH=%h/.local/bin:/usr/local/bin:/usr/bin:/bin
 Environment=NA_DASHBOARD_REPO=%h/workspace/NeuralAmplifier
 ExecStart=%h/.local/lib/neural-amplifier/deploy-dashboard.sh
 NoNewPrivileges=true
-PrivateTmp=true
+# PrivateTmp is deliberately absent: on this host OpenSSH rejects the systemd-provided global
+# proxy config when its symlink is presented through the private mount namespace. Measured with
+# systemd-run: NoNewPrivileges alone succeeds; PrivateTmp alone exits 255 before network access.
