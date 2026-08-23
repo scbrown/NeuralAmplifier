@@ -45,9 +45,16 @@ if [ "${1:-}" = "--check" ]; then
     curl -sS -o /dev/null -w '%{http_code}\n' --max-time 20 https://huggingface.co/ || echo unreachable
     printf '%-26s ' "us.aws.cdn.hf.co (weights)"
     curl -sS -o /dev/null -w '%{http_code}\n' --max-time 20 https://us.aws.cdn.hf.co/ || echo "refused"
+    printf '%-26s ' "files.pythonhosted.org"
+    curl -sS -o /dev/null -w '%{http_code}\n' --max-time 20 https://files.pythonhosted.org/ \
+        || echo unreachable
     echo
     echo "Weights live on the second host. If it is not reachable, this script fetches the"
     echo "tokenizer and stops — allowing huggingface.co alone does not help."
+    echo
+    echo "The third is where the ONNX RUNTIME comes from, and it is a separate blocker from the"
+    echo "weights: with the model present and no libonnxruntime.so, quipu-server panics at"
+    echo "startup rather than reporting a missing provider."
     exit 0
 fi
 
@@ -83,6 +90,48 @@ fetch "tokenizer.json" "$dest/tokenizer.json" || ok=1
 fetch "config.json" "$dest/config.json" || ok=1
 fetch "onnx/model.onnx" "$dest/onnx/model.onnx" || ok=1
 
+# The ONNX RUNTIME, which is a second blocker and not the same one.
+#
+# The model is data; `libonnxruntime.so` is the engine that reads it, and Quipu's `ort` crate
+# dlopens it at startup. With the weights present and the library missing, quipu-server does not
+# report a missing provider — it PANICS ("Failed to load ONNX Runtime dylib"), which reads as a
+# broken build rather than as a missing dependency. That cost a diagnosis here.
+#
+# From PyPI rather than the ONNX Runtime GitHub release, because PyPI is the host that was
+# already measured reachable from the restricted environment this whole script exists for. The
+# wheel carries the .so; nothing here needs Python.
+runtime="$(dirname "$dest")/onnxruntime"
+printf '%-18s ' "libonnxruntime"
+if [ -e "$runtime/libonnxruntime.so" ]; then
+    printf 'ok (already present)\n'
+elif command -v pip >/dev/null 2>&1 && tmp="$(mktemp -d)" \
+    && pip download onnxruntime --no-deps -q -d "$tmp" >/dev/null 2>&1; then
+    mkdir -p "$runtime"
+    # Named `libonnxruntime.so.<version>` in the wheel; ort dlopens the unversioned name.
+    python3 - "$tmp" "$runtime" <<'PY'
+import glob, pathlib, sys, zipfile
+tmp, out = sys.argv[1], pathlib.Path(sys.argv[2])
+wheel = glob.glob(f"{tmp}/*.whl")[0]
+with zipfile.ZipFile(wheel) as z:
+    for name in z.namelist():
+        if "libonnxruntime" in name:
+            (out / pathlib.Path(name).name).write_bytes(z.read(name))
+versioned = sorted(out.glob("libonnxruntime.so.*"))
+if versioned:
+    link = out / "libonnxruntime.so"
+    link.unlink(missing_ok=True)
+    link.symlink_to(versioned[-1].name)
+PY
+    rm -rf "$tmp"
+    if [ -e "$runtime/libonnxruntime.so" ]; then
+        printf 'ok (%s bytes)\n' "$(wc -c <"$(readlink -f "$runtime/libonnxruntime.so")")"
+    else
+        printf 'FAILED (wheel had no libonnxruntime)\n'; ok=1
+    fi
+else
+    printf 'FAILED (pip download onnxruntime)\n'; ok=1
+fi
+
 if [ "$ok" -ne 0 ]; then
     cat >&2 <<EOF
 
@@ -96,10 +145,15 @@ Diagnose in seconds with:  scripts/fetch-embedding-model.sh --check
 
 To wire it up once the files are present, add to the Quipu config:
 
-    [embedding]
+    [quipu.embedding]
     auto_embed = true
     model_path = "$dest/onnx/model.onnx"
     tokenizer_path = "$dest/tokenizer.json"
+    dimension = 384
+
+and put the runtime on the loader path — \`just quipu-serve\` does this for you:
+
+    LD_LIBRARY_PATH=$runtime quipu-server --db .quipu/na.db --embed-backfill
 EOF
     exit 1
 fi
@@ -108,8 +162,13 @@ cat <<EOF
 
 Fetched. Add to the Quipu config:
 
-    [embedding]
+    [quipu.embedding]
     auto_embed = true
     model_path = "$dest/onnx/model.onnx"
     tokenizer_path = "$dest/tokenizer.json"
+    dimension = 384
+
+and put the runtime on the loader path — \`just quipu-serve\` does this for you:
+
+    LD_LIBRARY_PATH=$runtime quipu-server --db .quipu/na.db --embed-backfill
 EOF

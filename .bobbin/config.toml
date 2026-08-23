@@ -78,3 +78,9 @@ paths = [
     "orchestrator/src/neural_amplifier/yupana.py",
     "orchestrator/src/neural_amplifier/memory.py",
 ]
+
+[quipu.embedding]
+auto_embed = true
+model_path = "models/all-MiniLM-L6-v2/onnx/model.onnx"
+tokenizer_path = "models/all-MiniLM-L6-v2/tokenizer.json"
+dimension = 384

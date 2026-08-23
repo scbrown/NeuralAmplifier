@@ -136,11 +136,39 @@ tokenizer_path = "models/all-MiniLM-L6-v2/tokenizer.json"
 dimension = 384
 ```
 
-**And the model files have to get there.** `huggingface.co` is not on the Claude Code cloud
-[Trusted allowlist](https://code.claude.com/docs/en/cloud-environments#default-allowed-domains),
-so a fetch from a cloud session times out. Either add it to a **Custom** allowlist or vendor the
-model. Filed upstream as [quipu#53](https://github.com/scbrown/quipu/issues/53). Until then `/context` returns zero entities against a knotted graph — it does not error,
-which is exactly the kind of quiet emptiness worth knowing about in advance.
+**Both halves are fetched by `scripts/fetch-embedding-model.sh`, and there are two of them.**
+
+```console
+$ scripts/fetch-embedding-model.sh          # weights, tokenizer, config AND libonnxruntime.so
+$ just quipu-serve .quipu/na.db 127.0.0.1:3030 true      # `true` = embed on startup
+ONNX embedding provider loaded (dim=384, auto_embed=true)
+Backfill complete: 345 entities embedded
+```
+
+The second half is the one that is easy to miss. The model is data; **`libonnxruntime.so` is the
+engine that reads it**, and Quipu's `ort` crate dlopens it at startup. With the weights present
+and the library absent, `quipu-server` does not fall back to exact-match — it **panics**
+(`Failed to load ONNX Runtime dylib`), which reads as a broken build rather than a missing
+dependency. `just quipu-serve` puts `models/onnxruntime` on `LD_LIBRARY_PATH` so this is not
+something to remember.
+
+The config section is **`[quipu.embedding]`**, not `[embedding]`. The wrong one is not rejected;
+it is simply never read, and the server reports `No embedding provider configured` — which is
+the same message you get with no config at all.
+
+**Reachability, measured 2026-08-22 on the homelab host:** `huggingface.co` 200,
+`us.aws.cdn.hf.co` 200, `files.pythonhosted.org` 200 — all three fetch. The bead's original
+diagnosis was about a *Claude Code cloud* session, where the xet CDN carrying the LFS weights is
+refused on CONNECT; that is an allowlist property of that environment, not of the artefacts.
+`scripts/fetch-embedding-model.sh --check` answers it in seconds for whatever host you are on.
+Filed upstream as [quipu#53](https://github.com/scbrown/quipu/issues/53).
+
+One behaviour worth knowing before you read too much into an empty result: `/context` matches
+entity text fairly tightly. `"Recycling Tanks"` returns the facility; `"how does a Recycling
+Tanks facility affect a base"` returns nothing at all, with vectors present and working.
+`/search` handles the looser query — `"a facility that reduces waste"` scores Recycling Tanks
+top at 0.587, with no lexical overlap. So an empty `/context` is not evidence the embeddings are
+missing; ask `/search` before concluding anything.
 
 What is *not* blocked: exact-match action-space grounding (`datalinks/quipu.py`), which uses
 plain SPARQL and needs no vectors at all. That is what grounds decisions today.

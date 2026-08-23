@@ -358,9 +358,19 @@ quipu-ask sparql db=".quipu/na.db":
     @quipu read '{{sparql}}' --db "{{db}}"
 
 # Point the orchestrator at it with NA_QUIPU_URL=http://127.0.0.1:3030.
-# Serve the local Quipu store over REST for grounded retrieval
-quipu-serve db=".quipu/na.db" bind="127.0.0.1:3030":
-    quipu-server --db "{{db}}" --bind "{{bind}}"
+# LD_LIBRARY_PATH because Quipu's `ort` crate dlopens libonnxruntime.so at startup and finds it
+# nowhere else. Without it, a store configured for embeddings does not degrade to exact-match —
+# quipu-server PANICS, which reads as a broken build rather than a missing dependency (na-6td).
+# `scripts/fetch-embedding-model.sh` puts the library there; if it is absent this is an empty
+# prefix and the server starts exactly as before.
+#
+# backfill=true embeds every entity on startup. Needed once after `quipu-load`, because `quipu
+# knot` does not embed — only /episode does.
+# Serve the local Quipu store over REST for grounded retrieval (NA_QUIPU_URL)
+quipu-serve db=".quipu/na.db" bind="127.0.0.1:3030" backfill="false":
+    @LD_LIBRARY_PATH="{{justfile_directory()}}/models/onnxruntime:${LD_LIBRARY_PATH:-}" \
+        quipu-server --db "{{db}}" --bind "{{bind}}" \
+        {{ if backfill == "true" { "--embed-backfill" } else { "" } }}
 
 # === Documentation ===
 
