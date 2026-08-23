@@ -166,6 +166,33 @@ class ClaudeBrain:
                     raise
         raise AssertionError("unreachable")  # pragma: no cover
 
+    @staticmethod
+    def _usage_of(response: Any) -> dict[str, int] | None:
+        """What this call was billed for, as the provider reported it.
+
+        `DecisionRecord.tokens` has existed since the schema was written and was **always
+        zeroes**, because nothing ever filled it: the brain discarded `response.usage` and the
+        orchestrator never asked. A cost field that is structurally zero is worse than an absent
+        one — it reads as a measured "this cost nothing" on every record, and na-xb1's spend rule
+        requires reporting ACTUALS, which nothing in the log could support.
+
+        Defensive because usage is telemetry: a provider that renames a field must not fail a
+        decision that already succeeded.
+        """
+        usage = getattr(response, "usage", None)
+        if usage is None:
+            return None
+        out: dict[str, int] = {}
+        for key, attr in (
+            ("input", "input_tokens"),
+            ("output", "output_tokens"),
+            ("cached", "cache_read_input_tokens"),
+        ):
+            value = getattr(usage, attr, None)
+            if isinstance(value, int):
+                out[key] = value
+        return out or None
+
     def decide(self, world_view: WorldView) -> Orders:
         try:
             import anthropic
@@ -190,7 +217,9 @@ class ClaudeBrain:
         parsed = response.parsed_output
         if parsed is None:  # pragma: no cover - network path
             raise BrainError("model returned no parseable orders")
-        return to_orders(parsed)
+        orders = to_orders(parsed)
+        orders.usage = self._usage_of(response)
+        return orders
 
 
 _SYSTEM_TEMPLATE = """You are playing a faction in Sid Meier's Alpha Centauri.

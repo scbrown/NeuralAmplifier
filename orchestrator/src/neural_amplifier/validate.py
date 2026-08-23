@@ -35,8 +35,22 @@ class Validation:
         """True when every returned action_id was legal. Should always hold."""
         return not self.unknown
 
-    def orders(self, notes: str | None = None, degraded: bool = False) -> Orders:
-        return Orders(choices=self.kept, notes=notes, degraded=degraded, cited=self.cited)
+    def orders(
+        self,
+        notes: str | None = None,
+        degraded: bool = False,
+        usage: dict[str, int] | None = None,
+    ) -> Orders:
+        """The validated orders, REBUILT — which is why `usage` has to be handed back in.
+
+        This constructs a fresh `Orders` from the kept choices, so anything the brain attached to
+        the original and did not put in a choice is dropped here. That silently zeroed the token
+        accounting on every decision: the brain filled `usage`, validation rebuilt the object
+        without it, and the record recorded 0/0 having made a real paid call.
+        """
+        return Orders(
+            choices=self.kept, notes=notes, degraded=degraded, cited=self.cited, usage=usage
+        )
 
 
 def validate(orders: Orders, world_view: WorldView) -> Validation:

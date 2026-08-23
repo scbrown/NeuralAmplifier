@@ -507,3 +507,15 @@ class Orders(_Model):
             " matters, and if you override, say why in the choice's `reason`."
         ),
     )
+    #: What the model was billed for, as the provider reported it — carried here so the
+    #: orchestrator can put it on the record without asking the brain a second question.
+    #:
+    #: NOT part of the adapter contract and never sent to the engine: `Orders` is also the
+    #: structured-output shape the model fills in, so this is excluded from that schema
+    #: (`exclude_from_orders`) and set by the brain afterwards. A model asked to report its own
+    #: token usage would invent it.
+    #:
+    #: On `Orders` rather than on the brain object because two decisions can be in flight on
+    #: different request threads, and a `last_usage` attribute on a shared brain would attribute
+    #: one decision's cost to the other — rarely, and undetectably.
+    usage: dict[str, int] | None = Field(default=None, exclude=True)

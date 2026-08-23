@@ -23,6 +23,7 @@ from .decisions import (
     DecisionRecord,
     KnowledgeBlock,
     PlanBlock,
+    Tokens,
     world_view_hash,
 )
 from .deferrals import DEFER_ACTION_ID, Deferral, DeferralSet, is_defer
@@ -420,7 +421,7 @@ class Orchestrator:
 
             # Precedence is order: engine legality first, so the guard never sees an
             # action the engine did not offer and cannot re-add one.
-            legal = checked.orders(notes=orders.notes)
+            legal = checked.orders(notes=orders.notes, usage=orders.usage)
             ruling = rule(self.guard, legal, asked)
             allowed = apply(legal, ruling)
 
@@ -874,6 +875,10 @@ class Orchestrator:
             degrade_reason=degrade_reason,
             fairness_profile=[h.id for h in fairness.handicaps] if fairness else [],
             model=getattr(self.brain, "model", None) or self.brain.name,
+            # What the call was actually billed for. Absent on a scripted or degraded decision,
+            # where zeroes are the truth rather than a gap (na-6db: the field existed and was
+            # structurally zero on every record, which reads as a measured "free").
+            tokens=Tokens(**orders.usage) if orders.usage else Tokens(),
             latency_ms=latency_ms,
             adherence_violations=unknown,
             repeated_actions=repeated,
