@@ -9,6 +9,7 @@ deploy_timer=neural-amplifier-dashboard-deploy.timer
 source_unit="$repo/deploy/systemd/$unit_name"
 user_unit_dir="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user"
 config_dir="${XDG_CONFIG_HOME:-$HOME/.config}/neural-amplifier"
+local_lib_dir="${XDG_DATA_HOME:-$HOME/.local}/lib/neural-amplifier"
 installed_unit="$user_unit_dir/$unit_name"
 environment_file="$config_dir/dashboard.env"
 
@@ -43,6 +44,10 @@ check() {
             return 1
         }
     done
+    cmp -s "$repo/scripts/deploy-dashboard.sh" "$local_lib_dir/deploy-dashboard.sh" || {
+        echo "FAIL: installed deploy script differs from repository" >&2
+        return 1
+    }
     systemctl --user is-enabled --quiet "$unit_name" || {
         echo "FAIL: $unit_name is not enabled" >&2
         return 1
@@ -84,10 +89,11 @@ check() {
 
 case ${1:-} in
     install)
-        mkdir -p "$user_unit_dir" "$config_dir"
+        mkdir -p "$user_unit_dir" "$config_dir" "$local_lib_dir"
         install -m 0644 "$source_unit" "$installed_unit"
         install -m 0644 "$repo/deploy/systemd/$deploy_service" "$user_unit_dir/$deploy_service"
         install -m 0644 "$repo/deploy/systemd/$deploy_timer" "$user_unit_dir/$deploy_timer"
+        install -m 0755 "$repo/scripts/deploy-dashboard.sh" "$local_lib_dir/deploy-dashboard.sh"
         if [[ ! -f "$environment_file" ]]; then
             write_environment
         fi

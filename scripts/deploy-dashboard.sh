@@ -2,7 +2,7 @@
 # Fast-forward the shared checkout and restart the dashboard exactly once when main advances.
 set -euo pipefail
 
-repo=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
+repo=${NA_DASHBOARD_REPO:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}
 state_dir="${XDG_STATE_HOME:-$HOME/.local/state}/neural-amplifier"
 log_file="$state_dir/dashboard-deploy.log"
 unit_name=neural-amplifier-dashboard.service

@@ -6,6 +6,7 @@ After=network.target
 Type=oneshot
 WorkingDirectory=%h/workspace/NeuralAmplifier
 Environment=PATH=%h/.local/bin:/usr/local/bin:/usr/bin:/bin
-ExecStart=%h/workspace/NeuralAmplifier/scripts/deploy-dashboard.sh
+Environment=NA_DASHBOARD_REPO=%h/workspace/NeuralAmplifier
+ExecStart=%h/.local/lib/neural-amplifier/deploy-dashboard.sh
 NoNewPrivileges=true
 PrivateTmp=true
