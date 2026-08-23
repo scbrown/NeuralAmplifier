@@ -465,6 +465,13 @@ def create_app(
     dashboard = DashboardReader(
         resolved_log,
         WorldViewStore(store_path) if store_path else None,
+        Path(game_state_path)
+        if (game_state_path := os.environ.get("NA_DASHBOARD_GAME_STATE"))
+        else (
+            resolved_log.path.parent.parent / "game" / "na-command-result"
+            if resolved_log is not None and resolved_log.path.parent.name == "orch"
+            else None
+        ),
     )
     app.state.dashboard = dashboard
 

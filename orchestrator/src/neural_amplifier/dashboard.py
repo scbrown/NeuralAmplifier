@@ -22,6 +22,15 @@ from .replay import WorldViewStore
 
 REPO = Path(__file__).resolve().parents[3]
 FACTION_COLOURS = ("#62d6ff", "#ff4545", "#f4e04d", "#55e06f", "#c880ff", "#ff9f43", "#eeeeee")
+SMAC_FACTIONS = {
+    1: ("Gaians", "#55e06f"),
+    2: ("Hive", "#f4e04d"),
+    3: ("University", "#eeeeee"),
+    4: ("Morganites", "#ff9f43"),
+    5: ("Spartans", "#222222"),
+    6: ("Believers", "#ff4545"),
+    7: ("Peacekeepers", "#62d6ff"),
+}
 
 
 def _choice_id(choice: dict[str, Any]) -> str:
@@ -38,10 +47,30 @@ def _record_cost(record: DecisionRecord) -> float | None:
 class DashboardReader:
     """Small, bounded projections over an append-only run."""
 
-    def __init__(self, log: DecisionLog | None, store: WorldViewStore | None) -> None:
+    def __init__(
+        self, log: DecisionLog | None, store: WorldViewStore | None, game_state: Path | None = None
+    ) -> None:
         self.log = log
         self.store = store
+        self.game_state = game_state
         self._eval_cache: tuple[int, dict[str, Any]] | None = None
+
+    def faction_census(self) -> dict[int, int]:
+        """All-player base counts from Thinker's observer result, if it has answered."""
+        if self.game_state is None or not self.game_state.is_file():
+            return {}
+        try:
+            payload = json.loads(self.game_state.read_text(encoding="utf-8"))
+            token = next(
+                part for part in str(payload.get("detail", "")).split() if part.startswith("bases=")
+            )
+            return {
+                int(faction): int(count)
+                for item in token.removeprefix("bases=").split(",")
+                for faction, count in [item.split(":", 1)]
+            }
+        except (OSError, ValueError, TypeError, json.JSONDecodeError, StopIteration):
+            return {}
 
     def records(self) -> list[DecisionRecord]:
         return list(self.log.read()) if self.log is not None else []
@@ -64,28 +93,57 @@ class DashboardReader:
             latest[faction] = (record, facts)
             total_cost += _record_cost(record) or 0
 
-        factions = []
+        factions_by_id: dict[int, dict[str, Any]] = {}
+        for faction_id, bases in self.faction_census().items():
+            name, colour = SMAC_FACTIONS.get(
+                faction_id,
+                (f"Faction {faction_id}", FACTION_COLOURS[(faction_id - 1) % len(FACTION_COLOURS)]),
+            )
+            factions_by_id[faction_id] = {
+                "name": name,
+                "id": faction_id,
+                "colour": colour,
+                "turn": None,
+                "bases": bases,
+                "population": None,
+                "minerals": None,
+                "energy": None,
+                "income": None,
+                "labs": None,
+                "military": None,
+                "techs": None,
+            }
+        unnumbered: list[dict[str, Any]] = []
         for index, (name, (record, view)) in enumerate(sorted(latest.items())):
             raw_metrics = view.get("metrics")
             metrics: dict[str, Any] = raw_metrics if isinstance(raw_metrics, dict) else {}
-            factions.append(
-                {
-                    "name": name,
-                    "id": view.get("faction_id"),
-                    "colour": view.get("faction_colour")
-                    or view.get("faction_color")
-                    or FACTION_COLOURS[index % len(FACTION_COLOURS)],
-                    "turn": record.turn,
-                    "bases": metrics.get("base_count"),
-                    "population": metrics.get("pop_total"),
-                    "minerals": metrics.get("mineral_output", metrics.get("mineral_surplus")),
-                    "energy": metrics.get("energy_reserves", view.get("energy_reserves")),
-                    "income": metrics.get("energy_income"),
-                    "labs": metrics.get("labs_output"),
-                    "military": metrics.get("military_units"),
-                    "techs": metrics.get("tech_count"),
-                }
-            )
+            item = {
+                "name": name,
+                "id": view.get("faction_id"),
+                "colour": view.get("faction_colour")
+                or view.get("faction_color")
+                or FACTION_COLOURS[index % len(FACTION_COLOURS)],
+                "turn": record.turn,
+                "bases": metrics.get("base_count"),
+                "population": metrics.get("pop_total"),
+                "minerals": metrics.get("mineral_output", metrics.get("mineral_surplus")),
+                "energy": metrics.get("energy_reserves", view.get("energy_reserves")),
+                "income": metrics.get("energy_income"),
+                "labs": metrics.get("labs_output"),
+                "military": metrics.get("military_units"),
+                "techs": metrics.get("tech_count"),
+            }
+            observed_id = view.get("faction_id")
+            if isinstance(observed_id, int):
+                census = factions_by_id.get(observed_id, {})
+                merged = {**census, **item}
+                if census.get("bases") is not None:
+                    merged["bases"] = census["bases"]
+                factions_by_id[observed_id] = merged
+            else:
+                unnumbered.append(item)
+
+        factions = [factions_by_id[key] for key in sorted(factions_by_id)] + unnumbered
 
         newest = max(records, key=lambda r: r.turn, default=None)
         newest_view = self.world_view(newest) if newest is not None else None
@@ -176,16 +234,16 @@ DASHBOARD_HTML = """<!doctype html>
 <html lang=en><head><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1">
 <title>Neural Amplifier // Planetary Datalinks</title><style>
 :root{color-scheme:dark;--bg:#02070d;--panel:#071b28;--edge:#39c9d2;--text:#b8f5ef;--muted:#689aa0;--gold:#f1d56a;--bad:#ff6262}
-*{box-sizing:border-box}body{margin:0;background:radial-gradient(circle at 50% 0,#0b3142,#02070d 55%);color:var(--text);font:14px/1.45 "Lucida Console",Monaco,monospace}header{padding:18px 24px;border-bottom:2px ridge var(--edge);letter-spacing:.15em;background:#031019}h1{margin:0;color:#7ffff5;font-size:20px}.status{color:var(--gold)}main{padding:18px;display:grid;gap:16px}.panel{background:linear-gradient(145deg,#0a2634,#04121b);border:3px ridge #287f8b;box-shadow:0 0 16px #001 inset;padding:14px}h2{font-size:15px;color:#5fe8f0;border-bottom:1px solid #287f8b;padding-bottom:7px;margin:0 0 12px}.summary{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px}.datum{border:1px solid #1b6873;padding:8px}.datum b{display:block;color:#fff;font-size:18px}table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:7px;border-bottom:1px solid #164650}th{color:#64dfe6}.decision{cursor:pointer}.decision:hover{background:#123b48}.bad{color:var(--bad)}.tabs button{background:#092734;color:var(--text);border:2px ridge #287f8b;padding:8px 14px;cursor:pointer}.hidden{display:none}pre{white-space:pre-wrap;word-break:break-word;color:#c8f7f3;max-height:70vh;overflow:auto}.detail{position:fixed;inset:5%;z-index:2;overflow:auto}.close{float:right}@media(max-width:700px){main{padding:8px}.panel{overflow:auto}}
+*{box-sizing:border-box}body{margin:0;background:radial-gradient(circle at 50% 0,#0b3142,#02070d 55%);color:var(--text);font:14px/1.45 "Lucida Console",Monaco,monospace}header{padding:18px 24px;border-bottom:2px ridge var(--edge);letter-spacing:.15em;background:#031019}h1{margin:0;color:#7ffff5;font-size:20px}.status{color:var(--gold)}main{padding:18px;display:grid;gap:16px}.panel{background:linear-gradient(145deg,#0a2634,#04121b);border:3px ridge #287f8b;box-shadow:0 0 16px #001 inset;padding:14px}h2{font-size:15px;color:#5fe8f0;border-bottom:1px solid #287f8b;padding-bottom:7px;margin:0 0 12px}.summary,.factions{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px}.datum,.faction{border:1px solid #1b6873;padding:8px}.datum b{display:block;color:#fff;font-size:18px}.faction{border-left:7px solid var(--faction)}.faction h3{margin:0 0 8px;color:#fff}.stats{display:grid;grid-template-columns:repeat(2,1fr);gap:4px}.stats span{color:var(--muted)}.stats b{color:var(--text);float:right}table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:7px;border-bottom:1px solid #164650}th{color:#64dfe6}.decision{cursor:pointer}.decision:hover{background:#123b48}.bad{color:var(--bad)}.tabs button{background:#092734;color:var(--text);border:2px ridge #287f8b;padding:8px 14px;cursor:pointer}.hidden{display:none}pre{white-space:pre-wrap;word-break:break-word;color:#c8f7f3;max-height:70vh;overflow:auto}.detail{position:fixed;inset:5%;z-index:2;overflow:auto}.close{float:right}@media(max-width:700px){main{padding:8px}.panel{overflow:auto}}
 </style></head><body><header><h1>NEURAL AMPLIFIER // PLANETARY DATALINKS</h1><span id=status class=status>LINKING…</span></header><main>
 <section class=panel><h2>MISSION CONTROL</h2><div id=summary class=summary></div></section>
-<section class=panel><h2>FACTION STATUS</h2><table><thead><tr><th>Faction<th>Bases<th>Population<th>Minerals<th>Energy<th>Income<th>Labs<th>Military<th>Techs</tr></thead><tbody id=factions></tbody></table></section>
+<section class=panel><h2>FACTION STATUS</h2><div id=factions class=factions></div></section>
 <section class=panel><h2>DECISION ARCHIVE</h2><table><thead><tr><th>Turn<th>Faction<th>Surface<th>Tier<th>Choice<th>Native<th>Latency<th>Cost</tr></thead><tbody id=decisions></tbody></table></section>
 <section class=panel><h2>EVALUATION DATALINKS</h2><button onclick=loadEvals()>RE-DERIVE COMMITTED TABLES</button><pre id=evals>Scorers run only on request and are cached.</pre></section></main>
 <section id=detail class="panel detail hidden"><button class=close onclick="detail.classList.add('hidden')">CLOSE</button><h2>DECISION DATALINK</h2><pre id=detailText></pre></section>
 <script>
 const esc=x=>String(x??'—').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-async function refresh(){try{const [l,d]=await Promise.all([fetch('/dashboard/api/live').then(r=>r.json()),fetch('/dashboard/api/decisions?limit=100').then(r=>r.json())]);status.textContent=l.configured?`LIVE // TURN ${l.turn??'—'} // ${l.decisions} DECISIONS`:'NO RUN ARTIFACTS CONFIGURED';summary.innerHTML=[['TURN',l.turn],['DECISIONS',l.decisions],['SPEND',l.spend],['RUN',l.run_id],['ARM',l.arm],['SEED',l.seed],['VICTORY',l.victory],['FAIRNESS',JSON.stringify(l.fairness)]].map(x=>`<div class=datum>${esc(x[0])}<b>${esc(x[1])}</b></div>`).join('');factions.innerHTML=l.factions.map(f=>`<tr style="border-left:5px solid ${esc(f.colour)}"><td>${esc(f.name)}<td>${esc(f.bases)}<td>${esc(f.population)}<td>${esc(f.minerals)}<td>${esc(f.energy)}<td>${esc(f.income)}<td>${esc(f.labs)}<td>${esc(f.military)}<td>${esc(f.techs)}</tr>`).join('');decisions.innerHTML=d.map(x=>`<tr class="decision ${x.disagreed?'bad':''}" onclick="showDecision(${x.id})"><td>${esc(x.turn)}<td>${esc(x.faction)}<td>${esc(x.surface)}<td>${esc(x.degraded?'DEGRADED':x.tier)}<td>${esc(x.chosen.join(', '))}<td>${esc(x.native)}<td>${esc(x.latency_ms)} ms<td>${esc(x.cost)}</tr>`).join('')}catch(e){status.textContent='LINK DEGRADED // '+e}}
+async function refresh(){try{const [l,d]=await Promise.all([fetch('/dashboard/api/live').then(r=>r.json()),fetch('/dashboard/api/decisions?limit=100').then(r=>r.json())]);status.textContent=l.configured?`LIVE // TURN ${l.turn??'—'} // ${l.decisions} DECISIONS`:'NO RUN ARTIFACTS CONFIGURED';summary.innerHTML=[['TURN',l.turn],['DECISIONS',l.decisions],['SPEND',l.spend],['RUN',l.run_id],['ARM',l.arm],['SEED',l.seed],['VICTORY',l.victory],['FAIRNESS',JSON.stringify(l.fairness)]].map(x=>`<div class=datum>${esc(x[0])}<b>${esc(x[1])}</b></div>`).join('');factions.innerHTML=l.factions.map(f=>`<article class=faction style="--faction:${esc(f.colour)}"><h3>${esc(f.name)}</h3><div class=stats>${[['BASES',f.bases],['POP',f.population],['MINERALS',f.minerals],['ENERGY',f.energy],['INCOME',f.income],['LABS',f.labs],['MILITARY',f.military],['TECHS',f.techs]].map(x=>`<span>${esc(x[0])}<b>${esc(x[1])}</b></span>`).join('')}</div></article>`).join('');decisions.innerHTML=d.map(x=>`<tr class="decision ${x.disagreed?'bad':''}" onclick="showDecision(${x.id})"><td>${esc(x.turn)}<td>${esc(x.faction)}<td>${esc(x.surface)}<td>${esc(x.degraded?'DEGRADED':x.tier)}<td>${esc(x.chosen.join(', '))}<td>${esc(x.native)}<td>${esc(x.latency_ms)} ms<td>${esc(x.cost)}</tr>`).join('')}catch(e){status.textContent='LINK DEGRADED // '+e}}
 async function showDecision(id){const x=await fetch('/dashboard/api/decisions/'+id).then(r=>r.json());detailText.textContent=JSON.stringify(x,null,2);detail.classList.remove('hidden')}
 async function loadEvals(){evals.textContent='Re-deriving…';const x=await fetch('/dashboard/api/evals').then(r=>r.json());evals.textContent=x.tables+(x.error?'\n'+x.error:'')}
 refresh();setInterval(refresh,5000);
