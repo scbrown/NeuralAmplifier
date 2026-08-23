@@ -10,18 +10,33 @@ expand, not the quality of its decisions.**
 
 ## What happened
 
-Faction 7 held **exactly one base for 122 consecutive turns** — every worldview from turn 1 to
-turn 122 decides about `base_id 0` and no other. That base grew to population 6, then starved
-down 6 -> 5 -> 4 -> 3 over turns 119-122 and was gone by turn 123, which eliminates the faction.
-Meanwhile the six CPU factions reached 22-51 bases each.
+Faction 7 founded **one base and never a second**. Censused by replaying this run's own autosaves,
+so this is measured at three points and not inferred from one reading:
 
-**This is not a map fault.** The start was normal and the base grew in place; seed 4242's open-ocean
-start (na-ywn) is what a map fault looks like and this is not it. Nothing in the human slot builds
-a colony pod, so there was never a pod for the settle fix (`b36bc52`, na-ywn) to move. That fix
-addressed settling pods that do not exist.
+| turn | 1 | 2 | 3 | 4 | 5 | 6 | **7 (ours)** |
+|---|---|---|---|---|---|---|---|
+| 13 | 2 | 2 | 2 | 2 | 2 | 2 | **1** |
+| 21 | 2 | 3 | 3 | 3 | 2 | 3 | **1** |
+| 123 | 32 | 51 | 36 | 43 | 22 | 49 | **0** |
+
+Every worldview from turn 1 to 122 decides about `base_id 0` and no other. That base grew to
+population 6, starved down 6 -> 5 -> 4 -> 3 over turns 119-122, and was gone by turn 123.
+
+**This is not a map fault.** The start was normal and the base grew in place; seed 4242's
+open-ocean start (na-ywn) is what a map fault looks like and this is not it.
+
+**Nor is it a settle failure of the kind na-ywn closed on.** That fix (`b36bc52`) is working —
+without it this seed had zero bases, and it produced the first one. What it did not produce is
+the second: by turn 13 every AI faction has two and ours still has one, and it is still one 100
+turns later. So the open question is the *next* pod, not the first, and na-ywn's close reason
+("7:2 at turn 6 and turn 13 after") does not reproduce on this seed.
 
 A faction on one base cannot beat six CPU factions on 200+, however well it decides. **So na-xb1's
 goal cannot be measured until the LLM faction can expand**, and no number of seeds changes that.
+
+The turn-21 row is the one that matters for the harness: our faction is below the bar of two bases
+and every AI is above it, which is exactly the asymmetry the viability check was built to catch —
+and it would have been caught at turn 20 rather than turn 123 had anything been running it.
 
 ## Two harness defects this run found, both now fixed
 
