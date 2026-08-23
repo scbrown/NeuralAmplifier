@@ -67,6 +67,16 @@ def key(vk):
 VK_RETURN = 13
 VK_SPACE = 32
 
+#: Consecutive unanswered polls after which the game is treated as gone.
+#:
+#: MEASURED, not assumed: a silent cycle costs the 15-second command timeout plus a 5-second
+#: retry, so this is ~2 minutes and not the ~2 minutes a naive reading of "5-second retry" would
+#: give. I wrote 24 here first on exactly that arithmetic — it would have been 8 minutes.
+#:
+#: Long enough to ride out a modal that briefly deafens the channel; short enough that a
+#: finished run does not leave a driver polling for hours, which is the failure this exists for.
+SILENT_LIMIT = 6
+
 
 def click(x, y):
     res = os.path.join(G, "na-input-result")
@@ -87,12 +97,29 @@ def main():
     started_playing = False
     last_dialog = None
     tries = 0
+    silent = 0
     while time.time() < DEADLINE:
         r = cmd("shot")
         if r is None:
-            log.write("%s no-result (a modal can deafen the channel)\n" % time.strftime("%H:%M:%S"))
+            # TWO causes, and the message used to name only one. A modal CAN deafen the channel;
+            # far more often the game has simply exited, and a driver that keeps polling a dead
+            # game logs "a modal can deafen the channel" every 20 seconds for hours. Read from
+            # outside that is indistinguishable from a live run parked on a dialog — it cost a
+            # real misdiagnosis, of a run that had finished cleanly at turn 140.
+            silent += 1
+            log.write(
+                "%s no-result (%d consecutive) — the game is gone, or a modal has deafened "
+                "the channel\n" % (time.strftime("%H:%M:%S"), silent)
+            )
+            if silent >= SILENT_LIMIT:
+                log.write(
+                    "no answer for %d cycles — treating the game as gone and stopping. A "
+                    "driver that outlives its game is noise, not patience.\n" % silent
+                )
+                break
             time.sleep(5)
             continue
+        silent = 0
         turn = r.get("turn")
         halted = r.get("halted")
         try:
