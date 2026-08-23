@@ -134,6 +134,14 @@ dashboard port="8088" log="decisions.jsonl" store="worldviews":
     @NA_DECISION_LOG="{{log}}" NA_WORLD_VIEW_STORE="{{store}}" \
       uv run --directory orchestrator neural-amplifier serve --host 0.0.0.0 --port "{{port}}"
 
+# Install/check/repoint the reboot-persistent user service that runs the recipe above.
+dashboard-service cmd="check" log="" store="" port="8088":
+    @case "{{cmd}}" in \
+      install|check) scripts/install-dashboard-service.sh "{{cmd}}" ;; \
+      set-run) scripts/install-dashboard-service.sh set-run "{{log}}" "{{store}}" "{{port}}" ;; \
+      *) echo "just dashboard-service [install|check|set-run] [log] [store] [port]" >&2; exit 2 ;; \
+    esac
+
 # === Integration ===
 
 # === Evals (behavioural, model in the loop) ===

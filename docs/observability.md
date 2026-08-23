@@ -106,6 +106,27 @@ Start a temporary port-bound viewer on the game host with:
 just dashboard 8088 /path/to/decisions.jsonl /path/to/worldviews
 ```
 
+The durable instance listens on port `8088` and is managed by the user unit
+`neural-amplifier-dashboard.service`:
+
+```bash
+just dashboard-service install
+just dashboard-service check
+```
+
+Installation enables the unit for future user-manager starts and writes the default live paths
+to `~/.config/neural-amplifier/dashboard.env`: `orchestrator/decisions.jsonl` and
+`orchestrator/worldviews` in the shared checkout. Point it at a preserved row without editing the
+unit:
+
+```bash
+just dashboard-service set-run /path/to/row/decisions.jsonl /path/to/row/worldviews 8088
+```
+
+The installer restarts the unit and requires `/dashboard` to return HTTP 200. The desired future
+reverse-proxy hostname is recorded in `na-4kz`; its route is intentionally not created here and
+remains gated on the infrastructure change process.
+
 The world-view store is required for faction metrics and action-space drill-down. Without it the
 page still reports decision-record fields and explicitly leaves unavailable facts blank. The
 viewer performs no POST and has no reference to the decision, order, or agent queues.
