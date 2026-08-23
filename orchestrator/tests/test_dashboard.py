@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 
 from fastapi.testclient import TestClient
@@ -24,6 +25,8 @@ def test_dashboard_is_read_only_projection_of_run_artifacts(tmp_path: Path, monk
     decisions = client.get("/dashboard/api/decisions").json()
 
     assert live["decisions"] == 1
+    assert live["active"] is True
+    assert live["updated_at"]
     assert live["turn"] == world["turn"]
     assert live["factions"][0]["name"] == world["faction"]
     assert decisions[0]["surface"] == "base.production"
@@ -65,7 +68,9 @@ def test_dashboard_page_recreates_the_datalinks_look_without_assets() -> None:
     assert "OFFERED ACTION SPACE" in response.text
     assert "PLAN DIRECTIVES" in response.text
     assert "DISAGREEMENT" in response.text
-    assert "setInterval(refresh,5000)" in response.text
+    assert "setTimeout(refresh,delay)" in response.text
+    assert "IDLE SINCE" in response.text
+    assert "SPEND USD" in response.text
     assert "<img" not in response.text
 
 
@@ -92,3 +97,15 @@ def test_missing_world_view_store_keeps_the_known_faction_visible(tmp_path: Path
             "techs": None,
         }
     ]
+
+
+def test_quiet_log_is_reported_as_idle(tmp_path: Path) -> None:
+    log_path = tmp_path / "decisions.jsonl"
+    client = TestClient(create_app(brain=ScriptedBrain(), log=DecisionLog(log_path)))
+    source = json.loads((FIXTURES / "thinker_base_production.json").read_text())
+    assert client.post("/decide", json=source).status_code == 200
+    os.utime(log_path, (1, 1))
+
+    live = client.get("/dashboard/api/live").json()
+    assert live["active"] is False
+    assert live["idle_seconds"] > 15

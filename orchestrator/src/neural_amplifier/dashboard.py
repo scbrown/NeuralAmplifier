@@ -16,6 +16,7 @@ import subprocess
 import sys
 import threading
 import time
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -99,6 +100,14 @@ class DashboardReader:
 
     def live(self) -> dict[str, Any]:
         records = self.records()
+        updated_at = (
+            datetime.fromtimestamp(self.log.path.stat().st_mtime, UTC)
+            if self.log is not None and self.log.path.is_file()
+            else None
+        )
+        idle_seconds = (
+            max(0.0, (datetime.now(UTC) - updated_at).total_seconds()) if updated_at else None
+        )
         latest: dict[str, tuple[DecisionRecord, dict[str, Any]]] = {}
         total_cost = 0.0
         for record in records:
@@ -170,6 +179,9 @@ class DashboardReader:
         )
         return {
             "configured": self.log is not None,
+            "active": idle_seconds is not None and idle_seconds < 15,
+            "updated_at": updated_at.isoformat() if updated_at else None,
+            "idle_seconds": round(idle_seconds, 1) if idle_seconds is not None else None,
             "game_id": newest.game_id if newest is not None else None,
             "turn": newest.turn if newest is not None else None,
             "decisions": len(records),
@@ -261,9 +273,9 @@ DASHBOARD_HTML = """<!doctype html>
 <section id=detail class="panel detail hidden"><button class=close onclick="detail.classList.add('hidden')">CLOSE</button><h2>DECISION DATALINK</h2><div id=detailText class=why></div></section>
 <script>
 const esc=x=>String(x??'—').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-async function refresh(){try{const [l,d]=await Promise.all([fetch('/dashboard/api/live').then(r=>r.json()),fetch('/dashboard/api/decisions?limit=100').then(r=>r.json())]);status.textContent=l.configured?`LIVE // TURN ${l.turn??'—'} // ${l.decisions} DECISIONS`:'NO RUN ARTIFACTS CONFIGURED';summary.innerHTML=[['TURN',l.turn],['DECISIONS',l.decisions],['SPEND',l.spend],['RUN',l.run_id],['ARM',l.arm],['SEED',l.seed],['VICTORY',l.victory],['FAIRNESS',JSON.stringify(l.fairness)]].map(x=>`<div class=datum>${esc(x[0])}<b>${esc(x[1])}</b></div>`).join('');factions.innerHTML=l.factions.map(f=>`<article class=faction style="--faction:${esc(f.colour)}"><h3>${esc(f.name)}</h3><div class=stats>${[['BASES',f.bases],['POP',f.population],['MINERALS',f.minerals],['ENERGY',f.energy],['INCOME',f.income],['LABS',f.labs],['MILITARY',f.military],['TECHS',f.techs]].map(x=>`<span>${esc(x[0])}<b>${esc(x[1])}</b></span>`).join('')}</div></article>`).join('');decisions.innerHTML=d.map(x=>`<tr class="decision ${x.disagreed?'bad':''}" onclick="showDecision(${x.id})"><td>${esc(x.turn)}<td>${esc(x.faction)}<td>${esc(x.surface)}<td>${esc(x.degraded?'DEGRADED':x.tier)}<td>${esc(x.chosen.join(', '))}<td>${esc(x.native)}<td>${esc(x.latency_ms)} ms<td>${esc(x.cost)}</tr>`).join('')}catch(e){status.textContent='LINK DEGRADED // '+e}}
+async function refresh(){let delay=30000;try{const [l,d]=await Promise.all([fetch('/dashboard/api/live').then(r=>r.json()),fetch('/dashboard/api/decisions?limit=100').then(r=>r.json())]);delay=l.active?5000:30000;status.textContent=!l.configured?'NO RUN ARTIFACTS CONFIGURED':l.active?`LIVE // TURN ${l.turn??'—'} // ${l.decisions} DECISIONS`:`IDLE SINCE ${l.updated_at?new Date(l.updated_at).toLocaleString():'UNKNOWN'}`;summary.innerHTML=[['GAME',l.game_id],['TURN',l.turn],['DECISIONS',l.decisions],['SPEND USD',l.spend],['RUN',l.run_id],['ARM',l.arm],['SEED',l.seed],['DIFFICULTY',l.fairness?.difficulty],['SLOT',l.fairness?.slot],['VICTORY',l.victory]].map(x=>`<div class=datum>${esc(x[0])}<b>${esc(x[1])}</b></div>`).join('');factions.innerHTML=l.factions.map(f=>`<article class=faction style="--faction:${esc(f.colour)}"><h3>${esc(f.name)}</h3><div class=stats>${[['BASES',f.bases],['POP',f.population],['MINERALS',f.minerals],['ENERGY',f.energy],['INCOME',f.income],['LABS',f.labs],['MILITARY',f.military],['TECHS',f.techs]].map(x=>`<span>${esc(x[0])}<b>${esc(x[1])}</b></span>`).join('')}</div></article>`).join('');decisions.innerHTML=d.map(x=>`<tr class="decision ${x.disagreed?'bad':''}" onclick="showDecision(${x.id})"><td>${esc(x.turn)}<td>${esc(x.faction)}<td>${esc(x.surface)}<td>${esc(x.degraded?'DEGRADED':x.tier)}<td>${esc(x.chosen.join(', '))}<td>${esc(x.native)}<td>${esc(x.latency_ms)} ms<td>${esc(x.cost)}</tr>`).join('')}catch(e){status.textContent='LINK DEGRADED // '+e}finally{setTimeout(refresh,delay)}}
 const list=x=>(x??[]).map(v=>`<li>${esc(typeof v==='object'?JSON.stringify(v):v)}</li>`).join('')||'<li>—</li>';
 async function showDecision(id){const x=await fetch('/dashboard/api/decisions/'+id).then(r=>r.json()),r=x.record,p=r.plan??{},chosen=(r.chosen??[]).map(c=>c.action_id??c.id),native=x.native_choice,disagreed=native!=null&&!chosen.map(String).includes(String(native));detailText.innerHTML=`<section><h3>CONTEXT</h3><b>TURN ${esc(r.turn)} // ${esc(r.faction)}</b><p>${esc(r.surface_id)}</p><p>Tier: ${esc(r.tier)} // Applied: ${esc(chosen.join(', '))}</p><p>Degraded: ${esc(r.degraded)} ${esc(r.degrade_reason??r.fallback_reason??'')}</p></section><section class="${disagreed?'disagreement':''}"><h3>CHOICE ${disagreed?'// DISAGREEMENT':''}</h3><p>Chosen: ${esc(chosen.join(', '))}</p><p>Native: ${esc(native)}</p></section><section class=wide><h3>WHY</h3><p>${esc(r.reason)}</p></section><section class=wide><h3>OFFERED ACTION SPACE</h3><table><thead><tr><th>Action<th>Cost<th>Turns<th>Effects</tr></thead><tbody>${(x.action_space??[]).map(a=>`<tr><td>${esc(a.action??a.name??a.id)}<td>${esc(a.cost)} ${esc(a.cost_unit??'')}<td>${esc(a.turns??a.turns_to_completion)}<td>${esc(a.effects??a.board_effects)}</tr>`).join('')}</tbody></table></section><section><h3>PLAN DIRECTIVES</h3><b>IN FORCE</b><ul>${list(p.in_force)}</ul><b>FOLLOWED</b><ul>${list(p.followed)}</ul><b>OVERRODE</b><ul>${list(p.overrode)}</ul></section><section><h3>TELEMETRY</h3><p>Latency: ${esc(r.latency_ms)} ms</p><p>Cost: $${esc(r.cost_usd??r.usd)}</p><p>Model: ${esc(r.model)}</p></section>`;detail.classList.remove('hidden')}
 async function loadEvals(){evals.textContent='Re-deriving…';const x=await fetch('/dashboard/api/evals').then(r=>r.json());evals.textContent=x.tables+(x.error?'\n'+x.error:'')}
-refresh();setInterval(refresh,5000);
+refresh();
 </script></body></html>"""
