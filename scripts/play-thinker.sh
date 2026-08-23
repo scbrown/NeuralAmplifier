@@ -392,6 +392,22 @@ before=0
 # Newest by mtime, not by the year in the filename: a restarted or reloaded game can
 # write a lower year than one already on disk, and mtime is what "where I left off"
 # actually means. NA_RESUME=0 opts out and boots to the menu.
+# ── Silence ─────────────────────────────────────────────────────────────────
+#
+# An unattended run has nobody to listen to it, and on a shared desktop it is somebody else's
+# problem: Stiwi asked for the sound off while a headless run was audible on his machine.
+#
+# Done at the WINE PREFIX rather than in the game's own settings, because the prefix is ours and
+# the game's settings file is part of the install we restore. An empty Audio driver means wine
+# loads none at all, which is also one less subsystem for a headless run to fail in.
+#
+# NA_SOUND=1 opts back in.
+if [ "${NA_SOUND:-0}" = "0" ] && [ -d "$WINEPREFIX" ]; then
+    WINEDEBUG=-all wine reg add 'HKCU\Software\Wine\Drivers' /v Audio /d "" /f >/dev/null 2>&1 \
+        && log "sound disabled for this prefix (NA_SOUND=1 to re-enable)" \
+        || warn "could not disable sound — harmless, but the run will make noise"
+fi
+
 resume_args=()
 if [ -n "${NA_SAVE:-}" ] && [ -n "${NA_SEED:-}" ]; then
     die "NA_SAVE and NA_SEED are mutually exclusive: a run cannot both load a save state and generate a fresh map"
