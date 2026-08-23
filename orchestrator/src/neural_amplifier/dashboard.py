@@ -14,6 +14,8 @@ from __future__ import annotations
 import json
 import subprocess
 import sys
+import threading
+import time
 from pathlib import Path
 from typing import Any
 
@@ -48,16 +50,32 @@ class DashboardReader:
     """Small, bounded projections over an append-only run."""
 
     def __init__(
-        self, log: DecisionLog | None, store: WorldViewStore | None, game_state: Path | None = None
+        self,
+        log: DecisionLog | None,
+        store: WorldViewStore | None,
+        game_state: Path | None = None,
+        query_game_state: bool = False,
     ) -> None:
         self.log = log
         self.store = store
         self.game_state = game_state
+        self.query_game_state = query_game_state
+        self._game_state_lock = threading.Lock()
         self._eval_cache: tuple[int, dict[str, Any]] | None = None
 
     def faction_census(self) -> dict[int, int]:
         """All-player base counts from Thinker's observer result, if it has answered."""
-        if self.game_state is None or not self.game_state.is_file():
+        if self.game_state is None:
+            return {}
+        command = self.game_state.with_name("na-command")
+        if self.query_game_state:
+            with self._game_state_lock:
+                self.game_state.unlink(missing_ok=True)
+                command.write_text("game-state", encoding="utf-8")
+                deadline = time.monotonic() + 2.0
+                while not self.game_state.is_file() and time.monotonic() < deadline:
+                    time.sleep(0.05)
+        if not self.game_state.is_file():
             return {}
         try:
             payload = json.loads(self.game_state.read_text(encoding="utf-8"))

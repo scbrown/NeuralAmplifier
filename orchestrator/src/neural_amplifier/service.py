@@ -472,6 +472,7 @@ def create_app(
             if resolved_log is not None and resolved_log.path.parent.name == "orch"
             else None
         ),
+        query_game_state=not bool(game_state_path),
     )
     app.state.dashboard = dashboard
 
