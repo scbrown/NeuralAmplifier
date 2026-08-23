@@ -230,17 +230,34 @@ is the point.
 Waking per decision costs 30–60 seconds each, and the engine blocks on every one. When a turn
 is yours to plan, set it once:
 
-1. `POST /agent/turn` — the forecast of every decision this turn is expected to raise.
+1. `turn_forecast(faction_id, turn)` — every decision this turn is expected to raise, yours only.
 2. Decide them all at your own pace.
 3. `submit_turn_plan(faction_id, turn, entries)` — one entry per decision:
    `{"surface_id": "base.production", "base_id": 7, "action_id": "facility:4", "reason": "..."}`
    (omit `base_id` for faction-scope surfaces like `faction.se`).
+4. `turn_plan_status(faction_id)` — what answered, and what missed.
 
 Covered decisions are answered from the table in milliseconds, recorded at tier `plan`. You
 are woken only for what the table does not cover — and for a planned action the engine
 stopped offering, with the miss named, so answer that one live and move on. The table is
 valid for exactly the turn you state and replaces your previous one whole: install a fresh
-table each turn. `GET /agent/plan` shows what answered and what missed.
+table each turn.
+
+Measured, so you know what to expect: 45 covered decisions from a real turn answered at a
+median of **0.9 ms**, the whole faction turn in 0.04 s. Decided one at a time the same round
+is 25–49 minutes. Planning the turn is not an optimisation here, it is the difference between
+a playable AI round and an unplayable one.
+
+`faction_id` is required on all three. The turn store holds every faction's decisions
+together and each slot carries its base's name, so an unscoped read would show you the other
+factions' bases — the same thing the world view refuses to send you. Read `unattributed` in
+the forecast if it is non-zero: those are slots nobody could attribute, withheld from you,
+and each one is a hole in your plan rather than someone else's base.
+
+Sweep what you parked, once per turn: `deferred_decisions(faction_id, full=True)`. Deferring
+answered the engine immediately with its own pick, so nothing is waiting on you and nothing
+will complain — which is exactly why an unswept deferral quietly becomes the deterministic
+tier's answer for good. Resolve one with `issue_order(verb="build", args=[base_id, item_id])`.
 
 It reports what **actually ran**, which is not always what you asked for. Validation and the
 policy guard sit between your order and the game.

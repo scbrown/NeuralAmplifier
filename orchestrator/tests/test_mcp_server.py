@@ -32,6 +32,9 @@ class FakeClient(OrchestratorClient):
         self.extras: list[dict[str, Any]] = []
         self.directives: list[dict[str, Any]] = []
         self.orders: list[dict[str, Any]] = []
+        self.turn_reads: list[tuple[int, int | None]] = []
+        self.plan_reads: list[int] = []
+        self.pending_reads: list[tuple[int, bool]] = []
         self.raises: Exception | None = None
 
     def order(self, payload: dict[str, Any]) -> dict[str, Any]:
@@ -77,6 +80,18 @@ class FakeClient(OrchestratorClient):
 
     def waiting(self) -> dict[str, Any]:
         return {"waiting": []}
+
+    def turn(self, faction_id: int, turn: int | None = None) -> dict[str, Any]:
+        self.turn_reads.append((faction_id, turn))
+        return {"turn": turn or 103, "faction_id": faction_id, "decisions": [], "unraised": []}
+
+    def plan_status(self, faction_id: int) -> dict[str, Any]:
+        self.plan_reads.append(faction_id)
+        return {"plans": [], "count": 0, "missed": []}
+
+    def pending(self, faction_id: int, full: bool = False) -> dict[str, Any]:
+        self.pending_reads.append((faction_id, full))
+        return {"pending": [], "count": 0}
 
 
 DECISION = {
@@ -154,6 +169,19 @@ def test_the_surface_is_answering_plus_acting_and_nothing_that_reads_the_board()
         # Answers, in bulk and in advance — the same axis as submit_orders, once per turn
         # instead of once per wake-up (na-7bk). It writes the plan table and reads nothing.
         "submit_turn_plan",
+        # The three reads bulk-turn mode needs, and the reason they do not breach the invariant
+        # below: each reports the ORCHESTRATOR'S record of its own decisions — forecast,
+        # answered-from-a-table, parked — and none of them reports the board. Nothing reachable
+        # through them was not already sent by the adapter for these very decisions.
+        #
+        # They were not optional politeness. `submit_turn_plan` shipped telling the model to
+        # "read the turn forecast first (POST /agent/turn)", which an MCP client cannot do: it
+        # holds tools, not HTTP verbs. So bulk-turn mode's first step was unreachable from the
+        # only surface the attached agent has, and the instruction to perform it was printed in
+        # the tool that needed it.
+        "turn_forecast",
+        "turn_plan_status",
+        "deferred_decisions",
     }
 
 
@@ -167,6 +195,32 @@ def test_no_tool_offers_to_read_game_state() -> None:
     forbidden = ("read_map", "get_board", "list_units", "inspect_base", "map_tiles", "scan")
     named = tools(build_server(FakeClient()))
     assert not (set(named) & set(forbidden))
+
+
+def test_the_turn_reads_are_faction_scoped_at_the_tool_signature() -> None:
+    """Fog is a REQUIRED argument on every bulk-turn read, not a filter the model may omit.
+
+    The store behind these holds all six factions' decisions in one keyspace — base ids are a
+    single engine-wide sequence — and each slot carries its base's NAME. So an unscoped read is
+    the adapter's own "information cheat" arriving by a second door. Measured on a live
+    orchestrator before this was closed: a read made for one faction returned 49 of another
+    faction's base names.
+
+    Asserted on the tool SCHEMA rather than on behaviour, because behaviour cannot catch the
+    failure that matters. An optional `faction_id` would work perfectly in every test that
+    passes one; the leak is the call that omits it, and a model omits an optional argument for
+    the same reason anyone does — nothing said it was load-bearing.
+    """
+    named = tools(build_server(FakeClient()))
+    for tool in ("turn_forecast", "turn_plan_status", "deferred_decisions"):
+        # The SDK spells this `input_schema` now and `inputSchema` before 2.0; the same version
+        # drift `call()` above absorbs. Reading whichever exists keeps the assertion about the
+        # schema rather than about the SDK release.
+        entry = named[tool]
+        schema = getattr(entry, "input_schema", None) or getattr(entry, "inputSchema", None)
+        assert schema, f"{tool}: no input schema to check"
+        assert "faction_id" in schema.get("properties", {}), tool
+        assert "faction_id" in schema.get("required", []), f"{tool}: faction_id must be required"
 
 
 def test_tool_descriptions_state_the_legality_rule() -> None:
@@ -319,3 +373,52 @@ def test_submit_says_what_cited_is_for() -> None:
     described = (tools(build_server(FakeClient()))["submit_orders"].description or "").lower()
     assert "grounding" in described
     assert "cited" in described
+
+
+def test_the_bulk_turn_reads_carry_the_faction_through_to_the_orchestrator() -> None:
+    """The scope has to reach the HTTP call, not merely appear in the signature.
+
+    A tool that accepts `faction_id` and then asks unscoped is the worst of both: the schema
+    says the boundary is enforced and nothing enforces it. That is strictly worse than no
+    argument at all, because it stops anyone looking.
+    """
+    client = FakeClient()
+    server = build_server(client)
+    call(server, "turn_forecast", faction_id=3, turn=103)
+    call(server, "turn_plan_status", faction_id=3)
+    call(server, "deferred_decisions", faction_id=3, full=True)
+    assert client.turn_reads == [(3, 103)]
+    assert client.plan_reads == [3]
+    assert client.pending_reads == [(3, True)]
+
+
+def test_the_forecast_tool_names_the_next_step() -> None:
+    """A read tool that does not say what to do with what it read is a dead end.
+
+    `next_decision` is already held to this (`test_tool_descriptions_state_the_legality_rule`),
+    and the forecast needs it more: reading a whole turn and then answering it one decision at
+    a time is the latency this mechanism exists to remove, reached by an agent doing nothing
+    wrong.
+    """
+    described = tools(build_server(FakeClient()))
+    forecast = (described["turn_forecast"].description or "").lower()
+    assert "submit_turn_plan" in forecast
+    # And the reverse direction: the planning tool must name a tool, never a raw HTTP route an
+    # MCP client has no way to call. This is the defect that motivated the whole change.
+    plan = described["submit_turn_plan"].description or ""
+    assert "turn_forecast" in plan
+    assert "POST /agent/turn" not in plan
+
+
+def test_a_deferral_sweep_is_reachable_and_says_how_to_resolve_one() -> None:
+    """Parking a decision is only half a mechanism if nothing brings it back.
+
+    `defer` answers the engine with its own pick immediately, so nothing blocks and nothing
+    complains — which means an agent that never sweeps has a game quietly played by the
+    deterministic tier while every surface reports health. The tool has to exist AND say which
+    verb retires one.
+    """
+    described = tools(build_server(FakeClient()))
+    text = described["deferred_decisions"].description or ""
+    assert "issue_order" in text, "must name the verb that resolves a deferral"
+    assert "expires" in text.lower(), "must say what happens if the sweep never comes"

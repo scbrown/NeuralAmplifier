@@ -316,3 +316,62 @@ def test_an_unattributed_write_is_not_filed_under_a_guessed_faction() -> None:
     Capturing("http://memory.invalid").write(Extraction(game_id=GAME, nodes=[{"name": "n1"}]))
     assert posted[0]["group_id"] == game_group(GAME)
     assert ":faction:" not in posted[0]["group_id"]
+
+
+# --- fog on the AGENT-FACING READS (na-7bk) ----------------------------------
+#
+# The probes above cover the knowledge path — what recall puts in a prompt. The reads an agent
+# makes for itself are a second surface with the same rule and, until this landed, none of the
+# gate: `/agent/turn` and `/agent/pending` both served one store holding every faction.
+#
+# The turn view is the sharper of the two because it carries base NAMES, which is the adapter's
+# own "information cheat" arriving by a door the world-view builder never sees. Measured on a
+# live orchestrator with real recorded board states before it was closed: a read made for the
+# Gaians returned 49 University base names.
+
+
+def deferral(faction_id: int, base_id: int, base: str) -> Any:
+    from neural_amplifier.deferrals import Deferral
+
+    return Deferral(
+        id=f"d-{base_id}",
+        surface_id="base.production",
+        turn=43,
+        faction_id=faction_id,
+        faction=f"faction-{faction_id}",
+        base_id=base_id,
+        base=base,
+        world_view={"base": base},
+    )
+
+
+def test_a_scoped_pending_read_withholds_another_factions_parked_decisions() -> None:
+    from neural_amplifier.deferrals import DeferralSet
+
+    parked = DeferralSet()
+    parked.open(deferral(2, 7, "Probe Base"))
+    parked.open(deferral(4, 8, "Morgan Industries"))
+
+    # NEGATIVE: faction 4's sweep does not see faction 2's parked decision...
+    mine = parked.pending(faction_id=4)
+    assert [d.base for d in mine] == ["Morgan Industries"]
+    # ...POSITIVE CONTROL: and faction 2's sweep does, so the filter filters rather than empties.
+    assert [d.base for d in parked.pending(faction_id=2)] == ["Probe Base"]
+    # And the observer's read is still whole — the lane that records the run, never decides in it.
+    assert len(parked.pending()) == 2
+
+
+def test_a_parked_decision_nobody_can_attribute_reaches_no_faction() -> None:
+    """Fail-closed, and consistent with the WRITE side.
+
+    `resolve_for_base` already refuses to match an unattributed deferral against a stated
+    faction. A read laxer than the write would hand out exactly the rows the write will not let
+    you act on — which reads as a broken resolver rather than as a scoping decision.
+    """
+    from neural_amplifier.deferrals import DeferralSet
+
+    parked = DeferralSet()
+    parked.open(deferral(None, 9, "Nobody's Base"))
+    assert parked.pending(faction_id=2) == []
+    assert parked.pending(faction_id=4) == []
+    assert len(parked.pending()) == 1

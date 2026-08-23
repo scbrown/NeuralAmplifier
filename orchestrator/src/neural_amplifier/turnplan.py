@@ -6,10 +6,11 @@ six-faction AI round decision-by-decision makes the round painfully slow. The li
 filed this bead worked around it with an out-of-repo executor answering from a hot-reloaded JSON
 file; this module is that mechanism moved where it belongs, with the record kept honest.
 
-The shape: the agent reads the turn forecast (``GET /agent/turn``), decides the whole turn at
-its own pace, and installs a table of answers keyed by faction, surface and base — valid for
-exactly ONE stated turn. The orchestrator answers covered decisions from the table without
-waking anyone and queues only uncovered ones to the agent, which is the entire point.
+The shape: the agent reads the turn forecast (``POST /agent/turn``, ``turn_forecast`` on MCP),
+decides the whole turn at its own pace, and installs a table of answers keyed by faction,
+surface and base — valid for exactly ONE stated turn. The orchestrator answers covered
+decisions from the table without waking anyone and queues only uncovered ones to the agent,
+which is the entire point.
 
 **A plan entry needs no predicates, and that is not a lowering of the bar.** A queued answer
 (`queued.py`) stands across turns, so it must name what would make it wrong — the board has

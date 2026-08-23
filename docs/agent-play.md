@@ -157,17 +157,42 @@ Answering — the three moments of a decision, plus a plan that outlives the tur
 | `submit_orders(decision_id, action_id, reason, cited, followed, overrode)` | Answer it, choosing from the action space |
 | `decisions_waiting()` | What is outstanding — for re-orienting after a reconnect or compaction |
 | `issue_directive(...)` | Set a standing plan later decisions will be shown. Call before submitting |
+| `turn_forecast(faction_id, turn?)` | Every decision the turn is expected to raise, scoped to your faction — step one of bulk-turn mode (raw HTTP: `POST /agent/turn`) |
 | `submit_turn_plan(faction_id, turn, entries)` | Bulk-turn mode: install a table of answers for exactly one turn. Covered decisions are answered in milliseconds at tier `plan`; you are woken only for what the table does not cover |
+| `turn_plan_status(faction_id)` | What your table answered and what it missed (raw HTTP: `GET /agent/plan`) |
+| `deferred_decisions(faction_id, full?)` | The decisions you parked with `defer` and have not swept yet (raw HTTP: `GET /agent/pending`) |
 
 **Bulk-turn mode** (na-7bk) is the answer to per-decision latency: ~30–60 seconds of wake,
 reason and submit per decision makes a six-faction AI round painfully slow, and door 1 blocks
 synchronously so decision N+1 does not exist until N is answered. Read the turn forecast
-(`POST /agent/turn`), decide the whole turn at your own pace, and install the table
-(`POST /agent/plan`, keyed by faction, surface and base). The table is valid for exactly the
+(`turn_forecast`), decide the whole turn at your own pace, and install the table
+(`submit_turn_plan`, keyed by faction, surface and base). The table is valid for exactly the
 turn it names and replaces your previous one whole; a planned action the engine has stopped
-offering wakes you with the miss named, and `GET /agent/plan` reports what answered and what
+offering wakes you with the miss named, and `turn_plan_status` reports what answered and what
 missed. Records land at `tier="plan"` — distinct from `llm` and `queued` — so replay can tell
 strategy-driven answers from agent-driven ones.
+
+Measured end-to-end on a live orchestrator, driven with the 49 real `base.production` world
+views recorded for turn 103 faction 3 in the 2026-08-21 session: **45 covered decisions answered
+at a median of 0.9 ms**, the whole faction turn in 0.04 s, `45 tier=plan / 4 tier=llm` in the
+decision log and no degradations among the covered ones. The four deliberately left uncovered
+each blocked to the engine's deadline and degraded honestly, which is the control that keeps the
+other 45 meaningful. At 30–60 s per decision the same round is 25–49 minutes.
+
+**These three reads were HTTP-only until this landed, and that made the loop unreachable from
+MCP.** `submit_turn_plan`'s own description told the model to "read the turn forecast first
+(`POST /agent/turn`)" — an instruction an MCP client cannot follow, because it holds tools and
+not HTTP verbs. Note the raw routes in the table above are still the truth for anything speaking
+HTTP directly; an attached agent should call the tools.
+
+**Each of the three requires `faction_id`, and that is the fog gate.** The turn store holds
+every faction's decision slots in one keyspace — base ids are a single engine-wide sequence —
+and each slot carries its base's NAME, so an unscoped read is the adapter's own "information
+cheat" arriving by a second door. Measured before the gate landed: a read made for the Gaians
+returned 49 University base names. `POST /agent/turn` now refuses a request with no faction
+(422) rather than defaulting, because a default is the hole — every caller that forgot the
+argument would read every faction and look exactly like one that meant to. `GET /turn` stays
+unscoped as the observer's lane: the record of what happened, never an input to a decision.
 
 Acting — command a unit or base without waiting to be asked ([turn-scoped-play.md](turn-scoped-play.md)):
 
@@ -197,7 +222,7 @@ rule forbids, and a test now asserts that directly rather than pinning the count
 **All four of those gaps are now closed** — see the whole turn, decide across it, learn whether
 an order was applied, and command a unit directly instead of deferring. Built and exercised
 against a live game; [turn-scoped-play.md](turn-scoped-play.md) has the design and the limits,
-`na-8ja` and `na-1g7` the evidence. The turn view is `POST /agent/turn`; the rest are the acting
+`na-8ja` and `na-1g7` the evidence. The turn view is `turn_forecast`; the rest are the acting
 tools above.
 
 **`cited`, `followed` and `overrode` are not optional decoration.** They are the measurement

@@ -134,6 +134,19 @@ class TurnView(BaseModel):
     #: which, and the which is what an agent waiting on one of them needs.
     unraised: list[str] = Field(default_factory=list)
 
+    #: Set only on a faction-scoped read. How many slots this turn carry no attributable
+    #: faction and were therefore withheld — a decision that cannot be proven to be yours is
+    #: not shown to you.
+    #:
+    #: Reported rather than dropped in silence, because the two ways this number can be
+    #: non-zero want opposite responses. Slots belonging to OTHER factions are not counted
+    #: here at all: withholding those is the filter doing its job. This counts only slots
+    #: nobody could attribute, and each one is a hole in YOUR forecast — a base you would
+    #: plan for and did not, which from inside the plan is indistinguishable from a base that
+    #: is not there. An adapter that stops emitting `faction_id` would otherwise shrink every
+    #: agent's forecast to nothing while every count in sight stayed self-consistent.
+    unattributed: int = 0
+
 
 class TurnStore:
     """Turn announcements and the live status of every decision within them."""
@@ -162,7 +175,14 @@ class TurnStore:
             for item in announcement.expected:
                 slot = DecisionSlot(
                     surface_id=item.surface_id,
-                    faction_id=item.faction_id,
+                    # The announcement's own faction stands in for an entry that does not
+                    # repeat it. An adapter announcing one faction's turn has already said
+                    # whose it is, and an unattributed slot is withheld from that faction's
+                    # own forecast by the fog filter below — so inferring nothing here would
+                    # quietly shrink the forecast the agent plans from.
+                    faction_id=(
+                        item.faction_id if item.faction_id is not None else announcement.faction_id
+                    ),
                     base_id=item.base_id,
                     base=item.base,
                 )
@@ -241,15 +261,38 @@ class TurnStore:
 
     # -- reads ----------------------------------------------------------------
 
-    def view(self, turn: int | None = None) -> TurnView:
+    def view(self, turn: int | None = None, faction_id: int | None = None) -> TurnView:
+        """The turn as it stands, optionally scoped to one faction.
+
+        **`faction_id` is the fog boundary, and it is a filter rather than a label.** A turn in
+        a six-faction AI round holds every faction's slots in one store — base ids are a single
+        engine-wide sequence, so they share a keyspace — and each slot carries the base's NAME.
+        Handing that whole view to an agent deciding for one faction is the same information
+        cheat the adapter refuses when it sends own-bases-only world views, arriving by a second
+        door: measured on this store as 49 University base names reachable from a Gaian read.
+
+        Unscoped (`faction_id=None`) is the OBSERVER's read — the harness, replay, the turn
+        report. It is deliberately still available and deliberately still cross-faction: that
+        lane is the record of what happened, never an input to a decision. The gate that keeps
+        the two apart is at the API layer, where `/agent/turn` refuses to run without a faction
+        and `/turn` does not pretend to be an agent surface.
+
+        A slot with no attributable faction is withheld and counted, never shown. Fail-closed is
+        the only safe direction for a boundary whose failure is silent in the other one.
+        """
         with self._lock:
             target = turn if turn is not None else self._current
             if target is None or target not in self._turns:
                 return TurnView(turn=target or 0, announced=False)
             slots = self._turns[target]
             meta = self._meta.get(target)
+            visible = list(slots.values())
+            unattributed = 0
+            if faction_id is not None:
+                unattributed = sum(1 for s in visible if s.faction_id is None)
+                visible = [s for s in visible if s.faction_id == faction_id]
             decisions = sorted(
-                slots.values(),
+                visible,
                 key=lambda s: (s.surface_id, s.base_id if s.base_id is not None else -1),
             )
             counts: dict[str, int] = {}
@@ -263,11 +306,16 @@ class TurnStore:
             return TurnView(
                 turn=target,
                 run_id=meta.run_id if meta else None,
-                faction_id=meta.faction_id if meta else None,
+                # On a scoped read the caller's faction is the honest answer: it is whose view
+                # this is. The announcement's is only meaningful when nobody asked for a scope.
+                faction_id=(
+                    faction_id if faction_id is not None else (meta.faction_id if meta else None)
+                ),
                 announced=bool(meta and meta.expected),
                 decisions=[s.model_copy() for s in decisions],
                 counts=counts,
                 unraised=unraised,
+                unattributed=unattributed,
             )
 
     def turns(self) -> list[int]:

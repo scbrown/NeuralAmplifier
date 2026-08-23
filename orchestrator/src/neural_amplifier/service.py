@@ -723,13 +723,38 @@ def create_app(
         def agent_turn(body: dict[str, object] | None = None) -> dict[str, object]:
             """The whole turn, for an agent deciding where to spend a limited pool.
 
+            `{"faction_id": 3}`, optionally with `{"turn": 103}` for a turn other than the
+            current one.
+
             `next_decision` gives you one decision at a time in the engine's order. This is the
             same turn seen whole — including decisions that have not been raised yet, so a build
-            choice can be made knowing what else is competing for the same minerals.
+            choice can be made knowing what else is competing for the same minerals. It is the
+            forecast `submit_turn_plan` is written from: read it, decide the turn, install the
+            table.
+
+            **`faction_id` is required, and that is the fog gate rather than a formality.** The
+            turn store holds every faction's slots together, each carrying its base's name, so
+            an unscoped read here would hand an agent the other five factions' bases — the same
+            information cheat the adapter refuses when it builds a world view, arriving through
+            a door nobody was watching. Measured on this store before it was closed: 49
+            University base names reachable from a read made for the Gaians.
+
+            A default would be the hole. Every caller that forgot the argument would read every
+            faction and look exactly like one that meant to, which is precisely the failure the
+            slice-1 ruling made `recall()` fail-closed to prevent. `GET /turn` remains the
+            unscoped OBSERVER read; it is a different route because it is a different job.
             """
+            raw_faction = (body or {}).get("faction_id")
+            if raw_faction in (None, ""):
+                raise HTTPException(
+                    422,
+                    "faction_id is required — the turn view is faction-scoped, and an "
+                    "unscoped read would show you the other factions' bases",
+                )
+            faction_id = _as_int(raw_faction, "faction_id")
             raw = (body or {}).get("turn")
             turn = int(raw) if isinstance(raw, int) else None
-            return turn_view_payload(turn)
+            return turn_view_payload(turn, faction_id=faction_id)
 
         @app.post("/agent/waiting")
         def agent_waiting() -> dict[str, object]:
@@ -836,6 +861,12 @@ def create_app(
     def turn_view(turn: int | None = None) -> dict[str, object]:
         """The turn as it stands: every decision, its status, and what has not arrived.
 
+        **The observer's read, and cross-faction on purpose.** The harness, the turn report and
+        replay all need the whole round; that lane is the record of what happened, never an
+        input to a decision. An AGENT wants `POST /agent/turn`, which requires a faction and
+        shows only that faction's slots — see the fog note there for what an unscoped read
+        would leak and why the gate lives at the API layer rather than in the store.
+
         `expected` and `raised` are deliberately different words. The announcement is a FORECAST
         made from the previous turn's board — a base can be captured or finish a project, and the
         decision it was expected to raise never comes. So a turn where 51 were forecast and 47
@@ -844,8 +875,8 @@ def create_app(
         """
         return turn_view_payload(turn)
 
-    def turn_view_payload(turn: int | None) -> dict[str, object]:
-        return turn_store.view(turn).model_dump(exclude_none=True)
+    def turn_view_payload(turn: int | None, faction_id: int | None = None) -> dict[str, object]:
+        return turn_store.view(turn, faction_id=faction_id).model_dump(exclude_none=True)
 
     # ---------------------------------------------------------------- orders (door 2)
     #
@@ -1079,7 +1110,7 @@ def create_app(
            {"surface_id": "base.production", "base_id": 7, "action_id": "facility:4",
             "reason": "finish the Tanks"}, ...]}`
 
-        The natural companion to `GET /agent/turn`: read the forecast, decide the whole turn at
+        The natural companion to `POST /agent/turn`: read the forecast, decide the whole turn at
         your own pace, install the table, and the orchestrator answers covered decisions in
         milliseconds at `tier="plan"` — waking you only for the ones the table does not cover.
 
@@ -1140,7 +1171,7 @@ def create_app(
         }
 
     @app.get("/agent/pending")
-    def agent_pending(full: bool = False) -> dict[str, object]:
+    def agent_pending(full: bool = False, faction_id: int | None = None) -> dict[str, object]:
         """Decisions the agent parked, and has not come back to yet (na-7bk).
 
         Mounted whatever the brain is, unlike the `/agent/*` endpoints above. Those are gated on
@@ -1155,8 +1186,14 @@ def create_app(
 
         Resolve through door 2 — `POST /order {"verb": "build", "args": [base_id, item_id]}`. A
         confirmed build closes the matching deferral and names it in that response.
+
+        `faction_id` scopes the list, and an agent should always pass it: a deferral names a
+        base and carries the grounded world view its faction read. Unscoped is the operator's
+        read of the whole run, which is the same split `/turn` and `/agent/turn` make — the
+        difference here is that this route is mounted whatever the brain is, so the scope is a
+        parameter rather than a separate route.
         """
-        items = deferrals.pending()
+        items = deferrals.pending(faction_id)
         return {
             "pending": [
                 ({**d.summary(), "world_view": d.world_view} if full else d.summary())

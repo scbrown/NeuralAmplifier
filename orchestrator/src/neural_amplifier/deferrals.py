@@ -199,9 +199,26 @@ class DeferralSet:
 
     # -- reads ----------------------------------------------------------------
 
-    def pending(self) -> list[Deferral]:
+    def pending(self, faction_id: int | None = None) -> list[Deferral]:
+        """The open deferrals, scoped to one faction when asked.
+
+        A parked decision is faction-private state — it names a base, and it carries the
+        grounded world view the agent read when it parked it. So the same boundary that scopes
+        recall and the turn view scopes this, by the same rule and for the same reason.
+
+        A deferral with no attributable faction is withheld, not shown: `resolve_for_base`
+        already refuses to match one against a stated faction, and a read that were laxer than
+        the write would hand out exactly the rows the write will not let you act on.
+
+        Unscoped stays the observer's read — `/agent/pending` mounts whatever the brain is, and
+        an operator asking what is parked across a six-faction round is asking a legitimate
+        question about the run rather than making a decision inside it.
+        """
         with self._lock:
-            return [i for i in self._items.values() if i.status == "open"]
+            open_items = [i for i in self._items.values() if i.status == "open"]
+        if faction_id is None:
+            return open_items
+        return [i for i in open_items if i.faction_id == faction_id]
 
     def get(self, deferral_id: str) -> Deferral | None:
         with self._lock:

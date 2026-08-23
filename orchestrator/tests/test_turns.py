@@ -13,7 +13,9 @@ import logging
 import pytest
 from fastapi.testclient import TestClient
 
+from neural_amplifier.agent_brain import AgentBrain
 from neural_amplifier.contract import WorldView
+from neural_amplifier.doorbell import Doorbell
 from neural_amplifier.outcomes import EngineOutcome
 from neural_amplifier.service import create_app
 from neural_amplifier.turns import ExpectedDecision, TurnAnnouncement, TurnStore
@@ -234,3 +236,128 @@ def test_a_wrong_typed_extra_is_LOGGED_so_a_bad_adapter_is_diagnosable(
         TurnStore().note_raised(wrong_typed_view("twelve"))
     messages = [r.getMessage() for r in caplog.records]
     assert any("base_id" in m and "str" in m for m in messages), messages
+
+
+# --- fog: the turn view is one store holding every faction (na-7bk) -----------
+#
+# The probes below come in PAIRS on purpose, per the slice-1 ruling. An absence on its own
+# proves nothing: a filter that returns nothing at all — wrong turn, empty store, a scope typo —
+# passes every negative probe perfectly while enforcing no boundary whatever. Each negative
+# therefore carries the positive control that separates "the boundary held" from "nothing was
+# there".
+
+
+def agent_brain() -> AgentBrain:
+    """An attached-agent brain with no doorbell — `/agent/*` is mounted only for one."""
+    return AgentBrain(doorbell=Doorbell(target="", enabled=False), timeout=1)
+
+
+def two_faction_turn(turn: int = 43) -> TurnAnnouncement:
+    """One turn as the engine really holds it: two factions, one keyspace.
+
+    Base ids are a single engine-wide sequence, which is exactly why this is a fog problem and
+    not a naming one — nothing about base 7 says whose it is.
+    """
+    return TurnAnnouncement(
+        turn=turn,
+        run_id="run-1",
+        expected=[
+            ExpectedDecision(surface_id="base.production", faction_id=1, base_id=1, base="Gaia"),
+            ExpectedDecision(
+                surface_id="base.production", faction_id=3, base_id=2, base="University Base"
+            ),
+            ExpectedDecision(
+                surface_id="base.production", faction_id=3, base_id=3, base="Saturn Center"
+            ),
+        ],
+    )
+
+
+def test_a_scoped_turn_view_withholds_the_other_factions_bases() -> None:
+    store = TurnStore()
+    store.announce(two_faction_turn())
+
+    mine = store.view(43, faction_id=1)
+    names = {s.base for s in mine.decisions}
+    # NEGATIVE: the other faction's bases are not reachable...
+    assert "University Base" not in names
+    assert "Saturn Center" not in names
+    # ...POSITIVE CONTROL: and my own is, so the filter is filtering rather than emptying.
+    assert names == {"Gaia"}
+
+    theirs = store.view(43, faction_id=3)
+    assert {s.base for s in theirs.decisions} == {"University Base", "Saturn Center"}
+
+
+def test_an_unscoped_view_is_still_whole_because_the_observer_needs_it() -> None:
+    """The unscoped read is not a leftover; replay and the turn report depend on it.
+
+    Keeping it is only safe because the gate is at the API layer: `/turn` does not claim to be
+    an agent surface and `/agent/turn` refuses to run without a faction.
+    """
+    store = TurnStore()
+    store.announce(two_faction_turn())
+    assert len(store.view(43).decisions) == 3
+    assert store.view(43).unattributed == 0
+
+
+def test_a_slot_nobody_can_attribute_is_withheld_and_counted() -> None:
+    """Fail-closed, and then SAY SO.
+
+    Withholding is the safe direction; withholding in silence is not. An adapter that stopped
+    emitting `faction_id` would shrink every agent's forecast to nothing, and from inside the
+    plan a base that was filtered out is indistinguishable from a base that is not there. The
+    count is the only thing that can tell those apart.
+    """
+    store = TurnStore()
+    store.announce(
+        TurnAnnouncement(
+            turn=43,
+            expected=[
+                ExpectedDecision(surface_id="base.production", faction_id=1, base_id=1),
+                ExpectedDecision(surface_id="base.production", base_id=9),
+            ],
+        )
+    )
+    mine = store.view(43, faction_id=1)
+    assert [s.base_id for s in mine.decisions] == [1]
+    assert mine.unattributed == 1
+
+
+def test_the_announcements_own_faction_attributes_its_entries() -> None:
+    """An adapter that says whose turn it is once should not have to repeat it per base.
+
+    Without this the fail-closed filter above would withhold the whole forecast from the very
+    faction that announced it — correct by the rule and useless in practice.
+    """
+    store = TurnStore()
+    store.announce(
+        TurnAnnouncement(
+            turn=43,
+            faction_id=4,
+            expected=[ExpectedDecision(surface_id="base.production", base_id=5, base="Morgan")],
+        )
+    )
+    assert [s.base for s in store.view(43, faction_id=4).decisions] == ["Morgan"]
+    assert store.view(43, faction_id=4).unattributed == 0
+
+
+def test_the_agent_turn_route_refuses_an_unscoped_read() -> None:
+    """The gate is a 422, not a default — see the endpoint's own note on why.
+
+    Measured before this landed: an unscoped read returned 49 of another faction's base names.
+    """
+    client = TestClient(create_app(brain=agent_brain()))
+    refused = client.post("/agent/turn", json={"turn": 43})
+    assert refused.status_code == 422
+    assert "faction" in refused.json()["detail"]
+
+
+def test_the_agent_turn_route_answers_a_scoped_read() -> None:
+    """The positive half. A 422 on everything would pass the test above just as well."""
+    client = TestClient(create_app(brain=agent_brain()))
+    client.post("/turn", json=two_faction_turn().model_dump())
+    view = client.post("/agent/turn", json={"turn": 43, "faction_id": 3}).json()
+    assert view["faction_id"] == 3
+    assert {d["base"] for d in view["decisions"]} == {"University Base", "Saturn Center"}
+    assert not any(d["base"] == "Gaia" for d in view["decisions"])

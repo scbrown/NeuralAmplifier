@@ -1,9 +1,23 @@
 """The MCP surface: how an agent plays the game.
 
-Three tools, because a decision has three moments — find out one is waiting, read it, answer it.
-Everything else an agent might want (what the rules say, what the board looks like) is already
-in the world view it collects, and adding a tool for it would be inviting the model to go
-looking instead of reading what it was given.
+It began as three tools, because a decision has three moments — find out one is waiting, read
+it, answer it. The rule that kept it small is not the count but its reason: **no tool may offer
+a second source of BOARD state.** What the rules say and what the board looks like are already
+in the world view the agent collects, fog-gated and recorded, and every measurement here assumes
+the world view is what the brain saw. A tool handing back tiles or another faction's bases would
+let a model reason from something nothing gated and nothing recorded.
+
+The bulk-turn reads (`turn_forecast`, `turn_plan_status`, `deferred_decisions`) are on the
+right side of that line, and the distinction is worth stating because it is easy to get wrong.
+They report the ORCHESTRATOR'S OWN RECORD of its decisions — what it was told to expect, what it
+answered from a table, what it parked — not the game's board. Nothing in them exists that the
+adapter did not already send. And each is scoped to the deciding faction, because the store
+behind them holds all six factions together: `POST /agent/turn` refuses to run without a
+faction, precisely so that a forgotten argument cannot read like a deliberate one.
+
+Without them the loop this surface exists to serve was unreachable from it. `submit_turn_plan`
+told the model to "read the turn forecast first (`POST /agent/turn`)" — an instruction an MCP
+client cannot follow, because it holds tools and not HTTP verbs.
 
 This is the *contract in executable form*. ``docs/contract.md`` describes a world view and a set
 of orders; these tools hand over one and accept the other. A harness that speaks MCP is
@@ -26,7 +40,7 @@ import contextlib
 import json
 import os
 from typing import Any
-from urllib import error, request
+from urllib import error, parse, request
 
 #: How long to wait on the orchestrator's own endpoints. Generous because ``next_decision`` may
 #: legitimately block server-side while a decision is on its way — the *game* is what this is
@@ -53,6 +67,25 @@ class OrchestratorClient:
             headers={"Content-Type": "application/json"},
             method="POST",
         )
+        return self._send(req)
+
+    def _get(self, path: str, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        """A read, spelled the way the orchestrator already spells it.
+
+        The alternative was a POST alias beside each of these routes so that one verb covered
+        everything. That is a second spelling of one thing, and this codebase has paid for those
+        before — `fallback_action_id` next to `standing_action_id` cost a wrong answer in the
+        one field an expired deferral uses. Nine lines of urllib is the cheaper side of that
+        trade.
+        """
+        query = ""
+        if params:
+            live = {k: v for k, v in params.items() if v is not None}
+            if live:
+                query = "?" + parse.urlencode(live)
+        return self._send(request.Request(f"{self.url}{path}{query}", method="GET"))
+
+    def _send(self, req: request.Request) -> dict[str, Any]:
         try:
             with request.urlopen(req, timeout=HTTP_TIMEOUT) as response:
                 # json.loads is Any-typed, and every caller here treats the result as a
@@ -103,6 +136,17 @@ class OrchestratorClient:
 
     def plan(self, payload: dict[str, Any]) -> dict[str, Any]:
         return self._call("/agent/plan", payload)
+
+    def turn(self, faction_id: int, turn: int | None = None) -> dict[str, Any]:
+        return self._call("/agent/turn", {"faction_id": faction_id, "turn": turn})
+
+    def plan_status(self, faction_id: int) -> dict[str, Any]:
+        return self._get("/agent/plan", {"faction_id": faction_id})
+
+    def pending(self, faction_id: int, full: bool = False) -> dict[str, Any]:
+        return self._get(
+            "/agent/pending", {"faction_id": faction_id, "full": "true" if full else None}
+        )
 
 
 class AgentError(RuntimeError):
@@ -336,11 +380,69 @@ def build_server(client: OrchestratorClient) -> Any:
         return json.dumps(client.order({"orders": orders}), indent=2)
 
     @server.tool()
+    def turn_forecast(faction_id: int, turn: int | None = None) -> str:
+        """Every decision your faction's turn is expected to raise — read this before planning.
+
+        `next_decision` hands you one decision at a time, in the engine's order, and that is
+        genuinely all it can do: when your first base is asked, the rest have not been POSTed
+        and do not exist to the queue yet. You cannot spend a limited mineral pool where it
+        matters most across fifty bases while seeing one of them. This is the same turn whole,
+        forecast by the adapter at the between-turns seam, and it is step one of bulk-turn
+        mode — decide it all, then `submit_turn_plan`.
+
+        Read `status` per entry, not just the list. `expected` means forecast and not yet
+        raised; `raised` means the engine is asking now; `answered`, `applied` and `diverged`
+        are already behind you. And read `unraised`: a forecast is made from the board as it
+        stood when the last turn ENDED, so a base that was captured or finished a project never
+        raises the decision it was expected to. Planning an entry for one is harmless — it
+        simply never fires — but waiting for one is a wait that never ends.
+
+        `faction_id` is required and it is not paperwork: the turn is scoped to you, and an
+        unscoped read would show you the other factions' bases by name.
+        """
+        return json.dumps(client.turn(faction_id, turn), indent=2)
+
+    @server.tool()
+    def turn_plan_status(faction_id: int) -> str:
+        """Did your turn plan actually answer anything — and what did it miss?
+
+        `applied` per entry counts the decisions that entry answered. It is legitimately more
+        than one: the engine re-asks a base within a turn.
+
+        `missed` is the number worth reading. Each entry there named an action that had left the
+        action space by the time its decision arrived — the item was already built, or a
+        prerequisite went. A table that misses often is strategy set too early in the turn, not
+        a broken plan, and the fix is to plan nearer the decisions rather than to plan less.
+
+        An entry with `applied: 0` and no miss simply never came up. Compare it against
+        `unraised` in `turn_forecast` before treating it as a fault.
+        """
+        return json.dumps(client.plan_status(faction_id), indent=2)
+
+    @server.tool()
+    def deferred_decisions(faction_id: int, full: bool = False) -> str:
+        """The decisions you parked with `defer`, and have not come back to yet.
+
+        Deferring answered the engine immediately with its own pick, so the game never blocked
+        and nothing is waiting on you — but the engine's pick is standing, and it stands for
+        good if you never return. These are the ones to sweep once per turn.
+
+        `full=true` also returns the grounded world view you read when you deferred. Use it.
+        Resolving from a different set of facts than you deferred on is a differently-uninformed
+        answer, not a better one.
+
+        Resolve through `issue_order(verb="build", args=[base_id, item_id])`: a confirmed build
+        closes the matching deferral and names it in that order's response. Unresolved by the
+        next turn the deferral expires, honestly recorded, with the engine's choice standing.
+        """
+        return json.dumps(client.pending(faction_id, full), indent=2)
+
+    @server.tool()
     def submit_turn_plan(faction_id: int, turn: int, entries: list[dict[str, Any]]) -> str:
         """Set your whole turn's answers at once — bulk-turn mode.
 
-        Read the turn forecast first (`POST /agent/turn` — it lists every decision the turn is
-        expected to raise), decide them all at your own pace, then install the table:
+        Read the turn forecast first (`turn_forecast(faction_id, turn)` — it lists every decision
+        the turn is expected to raise), decide them all at your own pace, then install the table:
 
             submit_turn_plan(faction_id=2, turn=43, entries=[
                 {"surface_id": "base.production", "base_id": 7,
@@ -352,6 +454,8 @@ def build_server(client: OrchestratorClient) -> Any:
         engine stopped offering (the wake-up names it). The table is valid for exactly the turn
         you state and replaces your previous one whole — install a new table each turn, and an
         empty `entries` list means "wake me for everything".
+
+        `turn_plan_status(faction_id)` afterwards says what answered and what missed.
         """
         return json.dumps(
             client.plan({"faction_id": faction_id, "turn": turn, "entries": entries}), indent=2
