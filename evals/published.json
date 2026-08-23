@@ -1,0 +1,75 @@
+{
+  "comment": [
+    "Every published measurement and the exact command that re-derives it from committed data",
+    "(na-8qo). scripts/score_published.py runs this file on a host with no game install; a run",
+    "directory that is not listed here is a FAILURE, not an omission, so a new row cannot be",
+    "published without saying how it is re-derived.",
+    "",
+    "`derives` entries must be runnable with SMAC_PLAY_DIR unset, no model key, no Wine and no",
+    "sibling checkout. `retained` records what was kept and what was thrown away, because the",
+    "raw material for some of these is game files we deliberately do not commit."
+  ],
+  "runs": [
+    {
+      "id": "na-6db",
+      "tables": ["M1 baseline vs brain trajectory", "M2 baseline vs brain-directive"],
+      "derives": [
+        ["scripts/ab_outcomes.py", "--faction", "7",
+         "evals/runs/na-6db/baseline.faction7.jsonl", "evals/runs/na-6db/brain.faction7.jsonl"],
+        ["scripts/ab_outcomes.py", "--faction", "7",
+         "evals/runs/na-6db/baseline.faction7.jsonl", "evals/runs/na-6db/brain-directive.faction7.jsonl"]
+      ],
+      "retained": "the per-turn observation logs for all three arms. NOT the 2.8GB game copy or its autosaves — the numbers in the table come only from the logs."
+    },
+    {
+      "id": "na-clk",
+      "tables": ["win ladder rows", "seed 1 base census at turns 13 / 21 / 123"],
+      "derives": [
+        ["scripts/win_ladder.py", "report", "evals/runs/na-clk/results.jsonl"]
+      ],
+      "retained": "the census NUMBERS in results.jsonl.census, not the .sav files they were read from. The autosaves live outside the repo at ~/workspace/na-runs/ and the table does not depend on them."
+    },
+    {
+      "id": "na-373",
+      "tables": ["ranking grounding by information value — WITHDRAWN"],
+      "derives": [],
+      "retained": "offered/answers fixtures kept so the withdrawal is checkable. No table is published from this run any more: NOTES.md withdraws the finding and says the experiment could not decide the question. Nothing to re-derive, and that is the honest entry rather than a scoring command that would imply a live result."
+    },
+    {
+      "id": "na-vbe",
+      "tables": ["action_space cost fixture — the correction behind na-373's withdrawal"],
+      "derives": [],
+      "retained": "fixtures only; the finding is prose in NOTES.md."
+    },
+    {
+      "id": "na-61c2",
+      "tables": ["history/nohistory/changed prompt arms"],
+      "derives": [],
+      "retained": "offered/answers/task fixtures for every arm, plus manifest.json. Scored by reading the committed answers; no numeric table is published."
+    },
+    {
+      "id": "na-htm",
+      "tables": ["base_production grounding arms at turns 42 and 135"],
+      "derives": [],
+      "retained": "offered/answers/task fixtures per arm. Findings are prose in NOTES.md."
+    },
+    {
+      "id": "na-j2w",
+      "tables": ["faction_tech ablation"],
+      "derives": [],
+      "retained": "observations plus the ablated log. Findings are prose in NOTES.md."
+    },
+    {
+      "id": "na-qu8",
+      "tables": [],
+      "derives": [],
+      "retained": "fixtures; no published numeric table."
+    },
+    {
+      "id": "na-s4e",
+      "tables": [],
+      "derives": [],
+      "retained": "fixtures; no published numeric table."
+    }
+  ]
+}
