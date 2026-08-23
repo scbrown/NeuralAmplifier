@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import cast
 
 from fastapi import FastAPI, HTTPException
+from fastapi.responses import HTMLResponse
 from pydantic import ValidationError
 
 from .agent_brain import AgentBrain
@@ -455,6 +456,40 @@ def create_app(
         turn_plan=turn_plan,
     )
     app.state.orchestrator = orchestrator
+
+    # The observer lane consumes the same immutable run evidence as replay.  It is mounted on
+    # the orchestrator process for a zero-configuration first demo, but has no reference to the
+    # decision methods and therefore cannot perturb a running game.
+    from .dashboard import DASHBOARD_HTML, DashboardReader
+
+    dashboard = DashboardReader(
+        resolved_log,
+        WorldViewStore(store_path) if store_path else None,
+    )
+    app.state.dashboard = dashboard
+
+    @app.get("/dashboard", response_class=HTMLResponse)
+    def dashboard_page() -> str:
+        return DASHBOARD_HTML
+
+    @app.get("/dashboard/api/live")
+    def dashboard_live() -> dict[str, object]:
+        return dashboard.live()
+
+    @app.get("/dashboard/api/decisions")
+    def dashboard_decisions(limit: int = 100) -> list[dict[str, object]]:
+        return dashboard.decisions(limit)
+
+    @app.get("/dashboard/api/decisions/{position}")
+    def dashboard_decision(position: int) -> dict[str, object]:
+        item = dashboard.decision(position)
+        if item is None:
+            raise HTTPException(404, f"no decision at position {position}")
+        return item
+
+    @app.get("/dashboard/api/evals")
+    def dashboard_evals() -> dict[str, object]:
+        return dashboard.evals()
 
     # The memory retriever needs the game id to build a faction scope, and the Orchestrator is
     # what mints it — so binding happens here, after construction, rather than at build time.

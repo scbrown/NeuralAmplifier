@@ -128,6 +128,12 @@ play cmd="serve" port="8000":
         echo "just play [serve|check] [port]" >&2; exit 2 ;;
     esac
 
+# Read-only observer for a run. It polls only GET endpoints and tails the existing evidence.
+# Bind on all interfaces for a temporary host port; the gated IaC path owns later routing.
+dashboard port="8088" log="decisions.jsonl" store="worldviews":
+    @NA_DECISION_LOG="{{log}}" NA_WORLD_VIEW_STORE="{{store}}" \
+      uv run --directory orchestrator neural-amplifier serve --host 0.0.0.0 --port "{{port}}"
+
 # === Integration ===
 
 # === Evals (behavioural, model in the loop) ===

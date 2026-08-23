@@ -91,6 +91,25 @@ Both layers are fed from **one emit call**, never assembled twice. If they can d
 will. The JSONL field names are deliberately OTel-shaped so the exporter is a projection rather
 than a translation.
 
+### Live game dashboard
+
+`GET /dashboard` is the read-only human view of those same artifacts. It polls at five-second
+intervals and shows the current run context, the latest metric vocabulary per faction, and a
+decision archive. Selecting a decision opens its record beside the exact stored world view and
+offered action space; when the adapter recorded `native_choice`, disagreement is highlighted.
+The eval pane runs the commands in `evals/published.json` through `score_published.py` and caches
+the output—it does not reproduce scorer math in the web layer.
+
+Start a temporary port-bound viewer on the game host with:
+
+```bash
+just dashboard 8088 /path/to/decisions.jsonl /path/to/worldviews
+```
+
+The world-view store is required for faction metrics and action-space drill-down. Without it the
+page still reports decision-record fields and explicitly leaves unavailable facts blank. The
+viewer performs no POST and has no reference to the decision, order, or agent queues.
+
 **Landed.** `telemetry.Emitter` takes an already-built record and hands *the same instance* to
 every sink, so "assembled once" is structural rather than a convention — the test asserts object
 identity, not field equality. `DecisionLog` is just the first sink, and it is written **first**,
