@@ -167,17 +167,25 @@ beads-check:
     @scripts/beads-export.py --check
 
 # Fails if the brain was largely absent or an illegal action slipped through.
+#
+# PATHS ARE REPO-ROOT-RELATIVE and POSITIONAL: `just coverage orchestrator/decisions.jsonl`.
+# `just coverage log=<path>` looks like a named argument and is NOT one — `log` is a recipe
+# parameter, not a justfile variable, so just binds the whole string `log=<path>` as the
+# positional value and you get a path called `log=...`. The CLI now names the path it could
+# not open, which is what makes that legible (na-x5i).
 # Summarise a decision log: surfaces fired, fallback rate, adherence
-coverage log="decisions.jsonl" max_degrade_rate="0.05":
-    @cd orchestrator && uv run neural-amplifier coverage "../{{log}}" \
+coverage log="orchestrator/decisions.jsonl" max_degrade_rate="0.05":
+    @cd orchestrator && uv run neural-amplifier coverage "{{justfile_directory()}}/{{log}}" \
         --max-degrade-rate {{max_degrade_rate}}
 
 # Needs a world-view store from the run (set NA_WORLD_VIEW_STORE when recording).
 # exact=true additionally requires identical decisions; scripted runs only.
+# Paths are repo-root-relative and positional — see the note on `coverage` above.
 # Replay a recorded log through the current orchestrator — no game, no tokens
-replay log="decisions.jsonl" store="worldviews" exact="false":
-    @cd orchestrator && uv run neural-amplifier replay "../{{log}}" \
-        --store "../{{store}}" {{ if exact == "true" { "--exact" } else { "" } }}
+replay log="orchestrator/decisions.jsonl" store="orchestrator/worldviews" exact="false":
+    @cd orchestrator && uv run neural-amplifier replay "{{justfile_directory()}}/{{log}}" \
+        --store "{{justfile_directory()}}/{{store}}" \
+        {{ if exact == "true" { "--exact" } else { "" } }}
 
 # === Track A: play the real game ===
 

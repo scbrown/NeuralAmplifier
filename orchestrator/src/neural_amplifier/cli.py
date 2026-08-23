@@ -11,6 +11,35 @@ from .coverage import report
 from .decisions import DecisionLog
 
 
+def missing_input(path: Path, what: str, *, directory: bool = False) -> str | None:
+    """Why this path cannot be read, or ``None`` if it can.
+
+    Every command below reads a recording made by an earlier run, and until this existed a path
+    that was simply not there produced **a clean empty result** rather than an error.
+
+    That is the worst available failure and it was live on the default invocation. `just
+    coverage` — described in the justfile as failing "if the brain was largely absent or an
+    illegal action slipped through" — printed `decisions: 0`, `fair_play: true`,
+    `fog_enforced: true` and **exited 0** against a log that did not exist. A gate that passes
+    green on a missing file is not a weaker gate, it is a false all-clear.
+
+    `replay`'s version was louder and misdiagnosed itself: it reported "nothing was replayed —
+    the store has none of the log's inputs", which names the store when the truth is that the
+    LOG was not found. That sentence sent an investigation at the recording, and it is what
+    na-x5i was filed about ("the wrapper's zero reads as 'no recorded inputs exist', which kills
+    the no-game/no-token eval lane on any host that only tries the documented recipe").
+
+    So the check names the path, and says which of the two things is wrong.
+    """
+    if not path.exists():
+        return f"{what} does not exist: {path}"
+    if directory and not path.is_dir():
+        return f"{what} is not a directory: {path}"
+    if not directory and not path.is_file():
+        return f"{what} is not a file: {path}"
+    return None
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="neural-amplifier")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -88,6 +117,9 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "learn":
         from .memory import MemoryStore, episodes
 
+        if problem := missing_input(args.log, "decision log"):
+            print(f"FAIL: {problem}", file=sys.stderr)
+            return 2
         extraction = episodes(args.log)
         if not extraction:
             print(f"nothing to learn from {args.log}")
@@ -242,6 +274,23 @@ def main(argv: list[str] | None = None) -> int:
         from .orchestrator import Orchestrator
         from .replay import WorldViewStore, replay
 
+        # BEFORE constructing the store, which would otherwise create it. `WorldViewStore`
+        # mkdirs its root — correct on the recording path, where the run owns the directory,
+        # and quietly destructive here: a typo'd `--store` makes replay manufacture the empty
+        # store it then blames for having none of the log's inputs.
+        problems = [
+            p
+            for p in (
+                missing_input(args.log, "decision log"),
+                missing_input(args.store, "world-view store", directory=True),
+            )
+            if p
+        ]
+        if problems:
+            for problem in problems:
+                print(f"FAIL: {problem}", file=sys.stderr)
+            return 2
+
         comparison = replay(
             DecisionLog(args.log).read(),
             WorldViewStore(args.store),
@@ -254,8 +303,13 @@ def main(argv: list[str] | None = None) -> int:
                 f"{divergence.before} -> {divergence.after} ({divergence.reason})",
                 file=sys.stderr,
             )
-        problems: list[str] = []
-        if comparison.replayed == 0:
+        problems = []
+        if comparison.total == 0:
+            # Distinguished from the line below because they want opposite next moves: an empty
+            # log means the RECORDING did not happen, and looking at the store for that is a
+            # wasted search.
+            problems.append(f"the decision log is empty: {args.log}")
+        elif comparison.replayed == 0:
             problems.append("nothing was replayed — the store has none of the log's inputs")
         if not comparison.consistent:
             problems.append("replay is inconsistent: new degradation or lost surfaces")
@@ -265,6 +319,9 @@ def main(argv: list[str] | None = None) -> int:
             print(f"FAIL: {problem}", file=sys.stderr)
         return 1 if problems else 0
 
+    if problem := missing_input(args.log, "decision log"):
+        print(f"FAIL: {problem}", file=sys.stderr)
+        return 2
     summary = report(DecisionLog(args.log).read())
     print(json.dumps(summary.summary(), indent=2))
 

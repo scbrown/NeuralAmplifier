@@ -402,7 +402,7 @@ just thinker wire        # Adapter's HTTP client under Wine vs. a real orchestra
 just play                # Serve decisions for an attached agent (NA_BRAIN=agent)
 just eval list           # Behavioural evals: what was measured, and what it found
 just coverage            # Run health: surfaces fired, fallback rate, adherence
-just replay --store …    # Re-run a recorded log against the current code — no game
+just replay              # Re-run a recorded log against the current code — no game
 just ingest              # Your alphax.txt → the smac: RDF graph + static briefing
 just quipu-load          # Load that graph into a local Quipu store
 just quipu-serve         # Serve it for grounded retrieval (NA_QUIPU_URL)
