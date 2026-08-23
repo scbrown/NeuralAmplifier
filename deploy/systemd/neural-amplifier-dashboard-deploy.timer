@@ -1,0 +1,11 @@
+[Unit]
+Description=Check NeuralAmplifier dashboard main revision every five minutes
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=5min
+Persistent=true
+Unit=neural-amplifier-dashboard-deploy.service
+
+[Install]
+WantedBy=timers.target

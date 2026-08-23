@@ -4,6 +4,8 @@ set -euo pipefail
 
 repo=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 unit_name=neural-amplifier-dashboard.service
+deploy_service=neural-amplifier-dashboard-deploy.service
+deploy_timer=neural-amplifier-dashboard-deploy.timer
 source_unit="$repo/deploy/systemd/$unit_name"
 user_unit_dir="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user"
 config_dir="${XDG_CONFIG_HOME:-$HOME/.config}/neural-amplifier"
@@ -35,8 +37,22 @@ check() {
         echo "FAIL: installed unit differs from $source_unit" >&2
         return 1
     }
+    for companion in "$deploy_service" "$deploy_timer"; do
+        cmp -s "$repo/deploy/systemd/$companion" "$user_unit_dir/$companion" || {
+            echo "FAIL: installed $companion differs from repository" >&2
+            return 1
+        }
+    done
     systemctl --user is-enabled --quiet "$unit_name" || {
         echo "FAIL: $unit_name is not enabled" >&2
+        return 1
+    }
+    systemctl --user is-enabled --quiet "$deploy_timer" || {
+        echo "FAIL: $deploy_timer is not enabled" >&2
+        return 1
+    }
+    systemctl --user is-active --quiet "$deploy_timer" || {
+        echo "FAIL: $deploy_timer is not active" >&2
         return 1
     }
     local port main_pid control_group listener_pid
@@ -70,11 +86,14 @@ case ${1:-} in
     install)
         mkdir -p "$user_unit_dir" "$config_dir"
         install -m 0644 "$source_unit" "$installed_unit"
+        install -m 0644 "$repo/deploy/systemd/$deploy_service" "$user_unit_dir/$deploy_service"
+        install -m 0644 "$repo/deploy/systemd/$deploy_timer" "$user_unit_dir/$deploy_timer"
         if [[ ! -f "$environment_file" ]]; then
             write_environment
         fi
         systemctl --user daemon-reload
         systemctl --user enable --now "$unit_name"
+        systemctl --user enable --now "$deploy_timer"
         check
         ;;
     check)

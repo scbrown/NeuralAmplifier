@@ -127,6 +127,26 @@ The installer restarts the unit and requires `/dashboard` to return HTTP 200. Th
 reverse-proxy hostname is recorded in `na-4kz`; its route is intentionally not created here and
 remains gated on the infrastructure change process.
 
+### Dashboard auto-deploy
+
+Installing the service also enables `neural-amplifier-dashboard-deploy.timer`. Every five minutes
+it fetches `origin/main` in the shared checkout. When—and only when—the checkout can move with a
+clean fast-forward, it restarts the dashboard once and verifies that the unit owns the listening
+process and `/dashboard` returns HTTP 200. A conflict, non-fast-forward, fetch failure, or failed
+verification is logged and stops that deployment; the updater never stashes, resets, forces, or
+loops restarts.
+
+This means a push to NeuralAmplifier `main` is a live dashboard deployment within approximately
+five minutes. Treat the push as the deployment decision. Audit results with:
+
+```bash
+journalctl --user -u neural-amplifier-dashboard-deploy.service
+tail ~/.local/state/neural-amplifier/dashboard-deploy.log
+```
+
+The run paths remain in `~/.config/neural-amplifier/dashboard.env`, outside the checkout, so an
+automatic code update does not repoint the viewer.
+
 The world-view store is required for faction metrics and action-space drill-down. Without it the
 page still reports decision-record fields and explicitly leaves unavailable facts blank. The
 viewer performs no POST and has no reference to the decision, order, or agent queues.
