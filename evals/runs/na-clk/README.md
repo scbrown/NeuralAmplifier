@@ -7,7 +7,32 @@ than a substitution — and the first attempt stays in the record with its cause
 | arm | outcome |
 |---|---|
 | `brain-pre-bg4fix` | refused as unplayable at turn 123 — the run below |
-| `brain` | ladder row 1 proper, run under `be1b51b` |
+| `brain` | **unresolved at turn 126 — the engine crashed** (na-2dg) |
+
+## Row 1 proper, under `be1b51b`
+
+Not a loss and not a result: `unresolved`. The engine crashed at turn 126 with `c0000005` at
+`004BF423` — **byte-identical registers to the crash that ended the first attempt at turn 122**,
+on a different build 2.5 hours earlier. Both fired on dismissing the dialog that reports our HQ
+base being lost. Filed as na-2dg; two identical register dumps on two builds is a deterministic
+path, not memory corruption that happened to land twice.
+
+What the run did measure, and it is the useful part:
+
+| turn | 1 | 2 | 3 | 4 | 5 | 6 | **7 (ours)** |
+|---|---|---|---|---|---|---|---|
+| 20 | — | — | — | — | — | — | **viability ok — the bar cleared for the first time** |
+| 82 | 21 | 22 | 25 | 17 | 11 | 31 | **2** |
+| 126 | — | — | — | — | — | — | **HQ captured by University** |
+
+Level with the AIs at turn 20 and on 2 bases against 11-31 by turn 82. **The collapse is after
+turn 21, not a bad start** — which is what makes the turn-20 checkpoint necessary and not
+sufficient, and what sent the investigation to the movement path rather than the map.
+
+Cause traced in na-1lj: colony pods spend their FULL movement allowance every turn and do not
+change tile (`spent=3 speed=3`, position unchanged across three turns, waypoint stable eleven
+tiles away). Zero displacement on a fully spent budget is a move attempted and failing, not a
+slow unit.
 
 ## The refused attempt
 
