@@ -71,6 +71,9 @@ def test_dashboard_page_recreates_the_datalinks_look_without_assets() -> None:
     assert "setTimeout(refresh,delay)" in response.text
     assert "IDLE SINCE" in response.text
     assert "SPEND USD" in response.text
+    assert "function renderEvals" in response.text
+    assert "Baseline<th>Arm<th>Delta" in response.text
+    assert "refresh();loadEvals();" in response.text
     assert "<img" not in response.text
 
 
