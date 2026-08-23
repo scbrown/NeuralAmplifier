@@ -58,8 +58,6 @@ BASE_PRODUCTION = {
     },
     "metrics": {
         "energy_reserves": 82,
-        "energy_income": 14,
-        "labs_output": 6,
         "base_count": 2,
         "pop_total": 5,
         "military_units": 3,
@@ -142,8 +140,6 @@ BASE_HURRY = {
     },
     "metrics": {
         "energy_reserves": 82,
-        "energy_income": 14,
-        "labs_output": 6,
         "base_count": 2,
         "pop_total": 5,
         "military_units": 3,
@@ -261,8 +257,6 @@ BASE_RETOOL = {
     "subjects": ["Scout Patrol"],
     "metrics": {
         "energy_reserves": 82,
-        "energy_income": 14,
-        "labs_output": 6,
         "base_count": 2,
         "pop_total": 5,
         "military_units": 3,
@@ -331,8 +325,6 @@ BASE_STAPLE = {
     "subjects": ["Gaia's Landing"],
     "metrics": {
         "energy_reserves": 82,
-        "energy_income": 14,
-        "labs_output": 6,
         "base_count": 2,
         "pop_total": 5,
         "military_units": 3,
@@ -499,8 +491,6 @@ BASE_SATELLITE = {
     ],
     "metrics": {
         "energy_reserves": 82,
-        "energy_income": 14,
-        "labs_output": 6,
         "base_count": 2,
         "pop_total": 5,
         "military_units": 3,
@@ -591,8 +581,6 @@ BASE_PROJECT = {
     "minerals_accumulated": 18,
     "metrics": {
         "energy_reserves": 82,
-        "energy_income": 14,
-        "labs_output": 6,
         "base_count": 2,
         "pop_total": 5,
         "military_units": 3,
@@ -726,8 +714,6 @@ BASE_DEFEND_GOAL = {
     "subjects": ["Gaia's Landing"],
     "metrics": {
         "energy_reserves": 82,
-        "energy_income": 14,
-        "labs_output": 6,
         "base_count": 2,
         "pop_total": 5,
         "military_units": 3,
@@ -1077,12 +1063,49 @@ def test_every_faction_metric_in_the_vocabulary_is_actually_reported() -> None:
     user-facing path to it.
     """
     faction_metrics = {name for name, m in VOCABULARY.items() if m.scope == "faction"}
+    # `accumulated` names are the declared exception, not a hole in the check. The engine
+    # re-sums them during the production phase and base-scope decisions fire inside that
+    # window, so the adapter omits the key rather than reporting a partial total (na-an6). The
+    # exemption reads from the metric's own field, so a name that stops being accumulated
+    # rejoins this assertion with no edit here (na-095).
+    always = {n for n in faction_metrics if not VOCABULARY[n].accumulated}
     for record in ALL_RECORDS:
         reported = set(record.get("metrics") or {})
-        missing = faction_metrics - reported
+        expected = faction_metrics if record.get("scope") != "base" else always
+        missing = expected - reported
         assert not missing, (
             f"{record['surface_id']} does not report {sorted(missing)} — either the adapter "
             f"must emit it or metrics.py must drop the name"
+        )
+
+
+def test_an_accumulated_metric_is_absent_from_base_scope_records_rather_than_zero() -> None:
+    """The exemption asserted from BOTH sides, because one side alone is worthless.
+
+    Exempting a name from a presence check is indistinguishable from deleting the check unless
+    something also pins where it IS present, and where it must not appear. So: present on every
+    faction-scope record, absent from every base-scope one, and never reported as 0 — which is
+    the value the omission exists to avoid, since a faction that genuinely earns nothing reports
+    exactly that (na-s4e).
+    """
+    accumulated = {n for n, m in VOCABULARY.items() if m.accumulated}
+    assert accumulated, "nothing declares itself accumulated — this test would pass vacuously"
+
+    faction_scope = [r for r in ALL_RECORDS if r.get("scope") != "base"]
+    base_scope = [r for r in ALL_RECORDS if r.get("scope") == "base"]
+    assert faction_scope and base_scope, "both halves are needed for this to mean anything"
+
+    for record in faction_scope:
+        reported = set(record.get("metrics") or {})
+        assert accumulated <= reported, (
+            f"{record['surface_id']} is faction-scope and must report {sorted(accumulated)}"
+        )
+    for record in base_scope:
+        reported = record.get("metrics") or {}
+        overlap = accumulated & set(reported)
+        assert not overlap, (
+            f"{record['surface_id']} is base-scope and reports {sorted(overlap)}, which the "
+            f"adapter cannot know there — a partial sum, or a pinned record that drifted"
         )
 
 

@@ -90,6 +90,28 @@ class Metric:
     #: legal moves. So this is opt-in, and adding one is a deliberate edit with
     #: ``test_metrics_vocabulary.py`` asking you to mean it.
     pool: bool = False
+    #: Whether this value is a RUNNING TOTAL the engine re-accumulates during the production
+    #: phase — and therefore **absent from any world view built inside that window**, which is
+    #: every base-scope world view.
+    #:
+    #: `scope` says which thing the number is about; this says when it can be read at all, and
+    #: the two are independent. `energy_income` is faction-scope AND unavailable on a base
+    #: decision: `mod_production_phase` zeroes the totals and re-sums them one base at a time,
+    #: `mod_base_build` fires inside that window, so the adapter would be reporting a partial
+    #: sum. It omits the key instead (na-an6, thinker `neural.cpp`), which is right — 0 is a
+    #: value this vocabulary genuinely admits, so a half-summed income would be indistinguishable
+    #: from a faction that really earns nothing.
+    #:
+    #: Declared here rather than special-cased in whichever test noticed, for the reason `pool`
+    #: is: a property a metric either has or has not belongs beside the metric. Measured on a
+    #: live game (na-095): `energy_income` and `labs_output` appear on 3 of 3 `faction.se`
+    #: records and **0 of 169** base-scope ones, while every non-accumulated faction name
+    #: appears on all 172.
+    #:
+    #: A directive written against one of these is not broken — it is simply unmeasurable on a
+    #: base decision, which is the honest state and what `directives.py` already reports. The
+    #: value of saying so here is that "unmeasurable" stops looking like a bug.
+    accumulated: bool = False
 
 
 def _m(
@@ -100,9 +122,16 @@ def _m(
     description: str,
     *,
     pool: bool = False,
+    accumulated: bool = False,
 ) -> Metric:
     return Metric(
-        name=name, scope=scope, unit=unit, better=better, description=description, pool=pool
+        name=name,
+        scope=scope,
+        unit=unit,
+        better=better,
+        description=description,
+        pool=pool,
+        accumulated=accumulated,
     )
 
 
@@ -133,14 +162,18 @@ VOCABULARY: Final[dict[str, Metric]] = {
             "credits/turn",
             "higher",
             "Net energy credits added per turn. Reserves without income is a stock with no "
-            "flow, and the two justify completely different spending.",
+            "flow, and the two justify completely different spending. Absent from base-scope "
+            "world views — see `accumulated`.",
+            accumulated=True,
         ),
         _m(
             "labs_output",
             "faction",
             "points/turn",
             "higher",
-            "Research points produced per turn.",
+            "Research points produced per turn. Absent from base-scope world views — see "
+            "`accumulated`.",
+            accumulated=True,
         ),
         _m(
             "base_count",

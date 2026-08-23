@@ -113,11 +113,40 @@ def _fixture() -> WorldView:
     return WorldView.model_validate(json.loads(path.read_text()))
 
 
+#: Faction-scope names the adapter CANNOT report on a base-scope surface, read from the
+#: vocabulary's own `accumulated` field rather than listed again here. The engine re-sums these
+#: during the production phase and base decisions fire inside that window, so the adapter omits
+#: the key instead of reporting a partial total (na-an6). Measured live: 3 of 3 faction.se
+#: records carry them, 0 of 169 base-scope ones (na-095).
+ACCUMULATED = {n for n, m in VOCABULARY.items() if m.accumulated}
+
+
 def test_a_thinker_world_view_reports_the_whole_vocabulary() -> None:
-    """The fixture is the contract seam (`docs/building-and-testing.md` §5). A base-scope
-    Thinker world view reports both halves, so any directive is checkable on it."""
+    """The fixture is the contract seam (`docs/building-and-testing.md` §5).
+
+    A base-scope Thinker world view reports both halves MINUS the accumulated names — and that
+    subtraction is the whole of na-095. The fixture used to carry `energy_income` and
+    `labs_output` on a base.production record, which the adapter cannot emit there, so this
+    assertion passed against a record no game could produce. A hand-written fixture is exactly
+    where that drift hides: nothing regenerates it, so it agrees with whatever it agreed with
+    when it was written.
+    """
     reported = set(_fixture().metrics or {})
-    assert reported == THINKER_FACTION | THINKER_BASE
+    assert reported == (THINKER_FACTION | THINKER_BASE) - ACCUMULATED
+    assert ACCUMULATED, "an empty exception set would make the subtraction vacuous"
+
+
+def test_the_accumulated_names_are_reportable_somewhere() -> None:
+    """The other half, without which the exemption above is just a deletion.
+
+    A name exempted everywhere is a name nothing checks, which is the aspirational-name failure
+    this file exists to prevent, wearing an exemption as a disguise. These must still be
+    emitted — on faction-scope surfaces, where the totals are finished.
+    """
+    assert ACCUMULATED <= THINKER_FACTION
+    assert {"energy_income", "labs_output"} == ACCUMULATED, (
+        "a new accumulated name needs its own live measurement before it is exempted here"
+    )
 
 
 def test_directives_on_a_real_world_view_are_measurable() -> None:
@@ -141,8 +170,12 @@ def test_directives_on_a_real_world_view_are_measurable() -> None:
     ]
     statuses = evaluate(plan, _fixture())
 
-    unmeasurable = [s.directive.metric for s in statuses if s.satisfied is None]
-    assert unmeasurable == []
+    unmeasurable = {s.directive.metric for s in statuses if s.satisfied is None}
+    # Exactly the accumulated names, and not one more. `satisfied is None` is the unmeasurable
+    # state, and on a base-scope view it is the CORRECT answer for these two — the number does
+    # not exist yet, and reporting a directive as satisfied against a total that is mid-sum
+    # would be the flattering failure this whole seam is built to refuse.
+    assert unmeasurable == ACCUMULATED
 
 
 # --- the withdrawal promise (na-nmg) ----------------------------------------
