@@ -1,0 +1,17 @@
+[Unit]
+Description=Neural Amplifier live game dashboard
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h/workspace/NeuralAmplifier
+Environment=PATH=%h/.local/bin:/usr/local/bin:/usr/bin:/bin
+EnvironmentFile=%h/.config/neural-amplifier/dashboard.env
+ExecStart=/usr/bin/env just dashboard ${NA_DASHBOARD_PORT} ${NA_DASHBOARD_LOG} ${NA_DASHBOARD_STORE}
+Restart=on-failure
+RestartSec=3
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=default.target
