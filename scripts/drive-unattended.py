@@ -41,6 +41,15 @@ DEADLINE = time.time() + float(sys.argv[3] if len(sys.argv) > 3 else 5400)
 #: cannot pick it up by accident and a reader of the log cannot mistake one for the other.
 NO_VIABILITY = "--no-viability" in sys.argv
 
+#: Stop sending SPACE (`--no-space`), for a DIAGNOSTIC run.
+#:
+#: SPACE is "skip this unit", and a skip consumes the unit's whole movement allowance. The driver
+#: sends it when the turn will not advance, on the assumption that whatever is waiting for orders
+#: is something we do not care about. A COLONY POD waiting for orders is something we care about
+#: very much: na-1lj measures pods that hold a stable waypoint five tiles away, on the same land
+#: region, with a full movement budget, and never change tile.
+NO_SPACE = "--no-space" in sys.argv
+
 
 def cmd(line, wait=15.0):
     res = os.path.join(G, "na-command-result")
@@ -223,8 +232,9 @@ def main():
             # needed depends on state we cannot see, and both are harmless when not needed.
             note = "no dialog (%dx%d)" % (w, h)
             if stuck >= 2:
-                key(VK_SPACE if stuck % 2 else VK_RETURN)
-                note += " — sent %s" % ("SPACE" if stuck % 2 else "RETURN")
+                send_space = bool(stuck % 2) and not NO_SPACE
+                key(VK_SPACE if send_space else VK_RETURN)
+                note += " — sent %s" % ("SPACE" if send_space else "RETURN")
         stuck = stuck + 1 if turn == last_turn else 0
         last_turn = turn
         log.write(
