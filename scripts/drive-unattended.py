@@ -26,6 +26,7 @@ import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from _dialog_bars import bars  # noqa: E402
+from win_ladder import VIABLE_BY_TURN, parse_state, viability  # noqa: E402
 
 G = sys.argv[1]
 OUT = sys.argv[2]
@@ -98,6 +99,7 @@ def main():
     last_dialog = None
     tries = 0
     silent = 0
+    checked_viability = False
     while time.time() < DEADLINE:
         r = cmd("shot")
         if r is None:
@@ -122,6 +124,39 @@ def main():
         silent = 0
         turn = r.get("turn")
         halted = r.get("halted")
+
+        # THE CHECKPOINT. `win_ladder.viability` existed before this line did, and nothing ever
+        # called it during a run — it was written to score a results file after the fact. So on
+        # seed 1 the bar was cleared to be applied and never applied: our faction sat on ONE base
+        # from turn 1, which the bar would have refused at turn 20, and the run played on to turn
+        # 123 and elimination. Four hours of wall clock and a paid seed measured a faction that
+        # could not expand, which is not the quantity the ladder exists to measure.
+        #
+        # Applied ONCE, at the checkpoint turn, to all seven factions by the same rule — a check
+        # that re-ran later would start refusing seeds for losing, which is a different thing.
+        if turn is not None and turn >= VIABLE_BY_TURN and not checked_viability:
+            checked_viability = True
+            st = cmd("game-state")
+            if st and st.get("detail"):
+                state = parse_state(st["detail"])
+                ok, why = viability(state.get("bases") or {}, state.get("player", 0))
+                log.write(
+                    "%s viability at turn %s: %s%s\n"
+                    % (time.strftime("%H:%M:%S"), turn, "ok" if ok else "REFUSED",
+                       "" if ok else " — " + why)
+                )
+                if not ok:
+                    log.write(
+                        "stopping: playing on measures a faction that cannot expand, not the "
+                        "quality of its decisions. Record the seed as unplayable and look at "
+                        "the map AND the build queue before drawing the next one.\n"
+                    )
+                    break
+            else:
+                # Not a refusal: an unanswered probe is missing evidence, and refusing a seed on
+                # missing evidence is how a ladder loses seeds it should have played.
+                log.write("%s viability at turn %s: no game-state answer, continuing\n"
+                          % (time.strftime("%H:%M:%S"), turn))
         try:
             found, (w, h) = bars(os.path.join(G, "na-screen.bmp"))
         except Exception as exc:  # a half-written BMP is normal, not a fault

@@ -136,12 +136,23 @@ VIABLE_BY_TURN = 20
 
 
 def viability(bases: dict[int, int], our_faction: int) -> tuple[bool, str]:
-    """Is this seed a fair game, judged the same way for every faction?
+    """Has every faction cleared the expansion bar? Judged the same way for all seven.
 
-    A generated map can strand a faction with nowhere to expand. That is not a loss the brain
-    earned, the fairness profile cannot see it — identical slot, identical difficulty, a
-    perfectly legitimate game — and a ladder would score it as a defeat. Measured: seed 4242 put
-    our faction on a handful of tiles in open ocean (na-ywn).
+    A faction that is not expanding cannot lose a game it was ever in, so a ladder that plays on
+    is not measuring decision quality — it is measuring a faction that cannot play. Two different
+    causes produce the same reading and this test deliberately does NOT distinguish them:
+
+      * **the map** — a generated start can strand a faction with nowhere to build. Measured:
+        seed 4242 put our faction on a handful of tiles in open ocean (na-ywn).
+      * **the harness** — nothing in the human slot builds colony pods. Measured on seed 1
+        (na-clk): one base for 122 consecutive turns, on a perfectly good start where that base
+        grew to population 6 in place, while the six CPU factions reached 22-51 bases each. Our
+        faction was eliminated at turn 123 when its only base starved out.
+
+    This docstring asserted "the map, not the play" until seed 1 measured the second cause, so
+    the reason string no longer names a cause at all. It reports the FACT — faction f is below
+    the bar at turn N — and leaves the diagnosis to whoever reads it. A refusal that guesses
+    wrong sends the reader to the map generator when the bug is in the build queue.
 
     **The bar is the same for all seven factions and is applied without reference to which one
     we drive.** A viability test that only ever rejected seeds where WE did badly would be seed
@@ -157,7 +168,7 @@ def viability(bases: dict[int, int], our_faction: int) -> tuple[bool, str]:
         )
         return False, (
             f"faction(s) {who} below {VIABLE_BASES} bases by turn {VIABLE_BY_TURN} — "
-            "the map, not the play"
+            "not expanding; could be the map or the harness, look before assuming"
         )
     return True, ""
 
@@ -214,8 +225,11 @@ def cmd_report(args: argparse.Namespace) -> int:
         for row in sorted(refused, key=lambda r: r["seed"]):
             print(f"  seed {row['seed']:<6} {row.get('why', '')}")
         print(
-            "  These are map faults, not results. Seeds are drawn in sequence and a refused one\n"
-            "  is replaced by the NEXT seed, never by a hand-picked substitute."
+            "  These are NOT results — a refused seed measured a faction that could not expand,\n"
+            "  which says nothing about how well it decides. The cause may be the map OR the\n"
+            "  harness, and this line claimed 'map faults' until seed 1 measured the harness.\n"
+            "  Seeds are drawn in sequence and a refused one is replaced by the NEXT seed,\n"
+            "  never by a hand-picked substitute."
         )
 
     by_arm: dict[str, list[dict]] = {}
