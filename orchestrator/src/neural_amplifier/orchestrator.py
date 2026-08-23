@@ -462,10 +462,33 @@ class Orchestrator:
 
         final = self._fallback(world_view) if degrade_reason is not None else allowed
 
+        # A withdrawal answer is intrinsically a promise about later turns. Do not make its
+        # durability depend on the model remembering to repeat that semantic fact in a second
+        # field: the action space already says this choice decreases the metric, and accepting
+        # it commits the native receiver to keep doing so after this dialog has gone away.
+        issued = list(orders.directives)
+        if (
+            world_view.surface_id == "diplo.tribute"
+            and any(c.action_id == "withdraw:comply" for c in final.choices)
+            and not any(d.metric == "units_in_foreign_territory" for d in issued)
+        ):
+            issued.append(
+                Directive(
+                    id=f"withdraw-foreign-territory-{world_view.turn}",
+                    intent="Honour the accepted demand to withdraw troops from foreign territory.",
+                    metric="units_in_foreign_territory",
+                    comparator="at_most",
+                    target=0,
+                    priority=8,
+                    issued_turn=world_view.turn,
+                )
+            )
+            final = final.model_copy(update={"directives": issued})
+
         # Harvest any plan this decision issued, after the choice is settled. A rejected
         # directive costs an advisory, never the decision it arrived with — the move may be
         # right even where the plan attached to it was not expressible.
-        recorded, plan_rejections = self._issue(orders.directives, world_view, degrade_reason)
+        recorded, plan_rejections = self._issue(issued, world_view, degrade_reason)
 
         record = self._record(
             world_view=world_view,

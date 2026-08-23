@@ -22,9 +22,11 @@ the bottom.
 
 from __future__ import annotations
 
-from neural_amplifier.contract import Directive, WorldView
+from neural_amplifier.brain import ScriptedBrain
+from neural_amplifier.contract import Action, Choice, Directive, Orders, WorldView
 from neural_amplifier.directives import DirectiveStore
 from neural_amplifier.metrics import VOCABULARY
+from neural_amplifier.orchestrator import Orchestrator
 
 
 def withdrawal() -> Directive:
@@ -97,20 +99,49 @@ def test_the_promise_is_checkable_in_both_directions() -> None:
     assert (kept.metrics or {})["units_in_foreign_territory"] <= directive.target
 
 
-def test_the_second_blocker_is_not_claimed_to_be_fixed() -> None:
-    """Deliberately documents what this does NOT show, so the tests above are not over-read.
+def test_accepting_withdrawal_issues_the_promise_without_relying_on_model_memory() -> None:
+    """The comms answer itself creates the durable promise and returns it to the adapter."""
+    view = WorldView(
+        engine="thinker",
+        scope="turn",
+        surface_id="diplo.tribute",
+        turn=38,
+        faction="Peacekeepers",
+        metrics={"units_in_foreign_territory": 3},
+        action_space=[
+            Action(
+                id="withdraw:comply",
+                action="withdraw troops to nearest base",
+                effects={"units_in_foreign_territory": -1},
+            ),
+            Action(id="withdraw:refuse", action="refuse the demand"),
+        ],
+    )
+    plan = DirectiveStore()
+    result = Orchestrator(
+        ScriptedBrain([Orders(choices=[Choice(action_id="withdraw:comply")])]), plan=plan
+    ).decide(view)
 
-    na-nmg's second blocker: nothing would RECEIVE the directive. Directives reach a decision
-    through `relevant()` — hop 0 matches an action whose effects touch the metric, or an entity
-    the decision is about. There is no unit-movement LLM surface and unit moves declare no
-    effects, so this directive would be in force, unmeasurable, and shown to nobody.
+    assert result.orders.choices[0].action_id == "withdraw:comply"
+    assert [(d.metric, d.comparator, d.target) for d in result.orders.directives] == [
+        ("units_in_foreign_territory", "at_most", 0)
+    ]
+    assert [d.id for d in plan.in_force(turn=39)] == ["withdraw-foreign-territory-38"]
 
-    That reads in the PlanBlock as a plan being SERVED (unmeasurable, not unsatisfied) when it
-    is inert — which `scripts/directive_report.py` now surfaces separately and loudly as an
-    adapter gap, rather than letting it average into an adherence figure. Surfacing it is not
-    fixing it.
-    """
-    directive = withdrawal()
-    # No action in any instrumented surface declares an effect on this metric today.
-    assert directive.metric == "units_in_foreign_territory"
-    assert directive.priority == 8, "high priority makes the inertness worse, not better"
+
+def test_refusing_withdrawal_makes_no_promise() -> None:
+    view = WorldView(
+        engine="thinker",
+        scope="turn",
+        surface_id="diplo.tribute",
+        turn=38,
+        faction="Peacekeepers",
+        metrics={"units_in_foreign_territory": 3},
+        action_space=[Action(id="withdraw:refuse", action="refuse the demand")],
+    )
+    plan = DirectiveStore()
+    result = Orchestrator(
+        ScriptedBrain([Orders(choices=[Choice(action_id="withdraw:refuse")])]), plan=plan
+    ).decide(view)
+    assert result.orders.directives == []
+    assert plan.in_force(turn=39) == []

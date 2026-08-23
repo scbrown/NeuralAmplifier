@@ -138,7 +138,6 @@ NO_AI_PATH: Final[frozenset[str]] = frozenset(
         "diplo.base_swap",
         "diplo.treaty_offer",
         "diplo.surrender",
-        "diplo.tribute",
         "diplo.map_trade",
         "council.vote",
         "council.buy_vote",
