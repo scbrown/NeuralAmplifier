@@ -129,6 +129,39 @@ def verdict(state: dict, our_faction: int) -> tuple[str, str]:
     return "unresolved", f"game done with victory={kind} and {ours} bases held"
 
 
+#: A seed is playable if every faction cleared this by the checkpoint turn. SYMMETRIC on
+#: purpose — the same bar for all seven, applied without knowing which one we drive.
+VIABLE_BASES = 2
+VIABLE_BY_TURN = 20
+
+
+def viability(bases: dict[int, int], our_faction: int) -> tuple[bool, str]:
+    """Is this seed a fair game, judged the same way for every faction?
+
+    A generated map can strand a faction with nowhere to expand. That is not a loss the brain
+    earned, the fairness profile cannot see it — identical slot, identical difficulty, a
+    perfectly legitimate game — and a ladder would score it as a defeat. Measured: seed 4242 put
+    our faction on a handful of tiles in open ocean (na-ywn).
+
+    **The bar is the same for all seven factions and is applied without reference to which one
+    we drive.** A viability test that only ever rejected seeds where WE did badly would be seed
+    selection wearing a refusal's clothes — it would quietly delete the ladder's losses. So a
+    seed where an AI faction is stranded is refused too, and the reason names the faction.
+    """
+    if not bases:
+        return False, "no per-faction base counts"
+    starved = sorted(f for f, n in bases.items() if n < VIABLE_BASES)
+    if starved:
+        who = ", ".join(
+            f"{f}{' (ours)' if f == our_faction else ''}" for f in starved
+        )
+        return False, (
+            f"faction(s) {who} below {VIABLE_BASES} bases by turn {VIABLE_BY_TURN} — "
+            "the map, not the play"
+        )
+    return True, ""
+
+
 def load(path: Path) -> dict[tuple[int, str], dict]:
     rows: dict[tuple[int, str], dict] = {}
     if not path.is_file():
@@ -172,8 +205,21 @@ def cmd_report(args: argparse.Namespace) -> int:
             )
         return 1
 
+    # Seeds refused for viability are REPORTED, never silently dropped. A ladder that discards
+    # maps without saying how many is one whose denominator nobody can check.
+    refused = [r for r in rows.values() if r.get("outcome") == "unplayable"]
+    playable = {k: r for k, r in rows.items() if r.get("outcome") != "unplayable"}
+    if refused:
+        print(f"\n{len(refused)} seed(s) refused as unplayable, before any scoring:")
+        for row in sorted(refused, key=lambda r: r["seed"]):
+            print(f"  seed {row['seed']:<6} {row.get('why', '')}")
+        print(
+            "  These are map faults, not results. Seeds are drawn in sequence and a refused one\n"
+            "  is replaced by the NEXT seed, never by a hand-picked substitute."
+        )
+
     by_arm: dict[str, list[dict]] = {}
-    for row in rows.values():
+    for row in playable.values():
         by_arm.setdefault(row.get("arm", "brain"), []).append(row)
 
     for arm, seeds in sorted(by_arm.items()):
