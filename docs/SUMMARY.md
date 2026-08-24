@@ -13,6 +13,7 @@
 
 - [Architecture](knowledge-architecture.md)
 - [Quipu Integration](quipu-integration.md)
+- [Workflow Export](workflow-export.md)
 - [Hank Integration](hank-integration.md)
 - [Gameplay Policy Harness](policy-harness.md)
 - [Strategy Knowledge](strategy-knowledge.md)

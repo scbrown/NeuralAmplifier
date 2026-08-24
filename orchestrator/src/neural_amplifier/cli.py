@@ -7,7 +7,6 @@ import json
 import sys
 from pathlib import Path
 
-from .coverage import report
 from .decisions import DecisionLog
 
 
@@ -93,6 +92,23 @@ def main(argv: list[str] | None = None) -> int:
     )
 
     sub.add_parser("surfaces", help="how much of the game surface is instrumented")
+
+    exp = sub.add_parser(
+        "export-run",
+        help="map a finished game's decision log to a shuttle workflow run",
+    )
+    exp.add_argument("log", type=Path)
+    exp.add_argument(
+        "--agent",
+        required=True,
+        help="the importing agent whose key signs the mapped transitions",
+    )
+    exp.add_argument("--out", type=Path, help="write the transitions JSONL here")
+    exp.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="write the JSONL and stop; do not invoke shuttle",
+    )
 
     ing = sub.add_parser("ingest", help="parse alphax.txt into the smac: datalinks graph")
     ing.add_argument("alphax", type=Path, help="path to alphax.txt in your SMAC install")
@@ -208,6 +224,24 @@ def main(argv: list[str] | None = None) -> int:
             if observe_only:
                 print(f"  observed only, no apply path yet: {', '.join(observe_only)}")
         print("\nSee docs/game-surface.md §2.5 for the per-surface matrix.")
+        return 0
+
+    if args.command == "export-run":
+        from .workflow_export import WorkflowExportError, export_run
+
+        if problem := missing_input(args.log, "decision log"):
+            print(f"FAIL: {problem}", file=sys.stderr)
+            return 2
+        try:
+            report = export_run(args.log, agent=args.agent, out_path=args.out, run=not args.dry_run)
+        except WorkflowExportError as exc:
+            print(f"FAIL: {exc}", file=sys.stderr)
+            return 2
+        did = "mapped (dry run)" if args.dry_run else "imported into shuttle"
+        print(
+            f"game {report.game_id}: {report.turns} turn(s), "
+            f"{report.decisions} decision(s) -> {report.records} record(s) {did}"
+        )
         return 0
 
     if args.command == "ingest":
