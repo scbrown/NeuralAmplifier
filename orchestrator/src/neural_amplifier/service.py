@@ -28,6 +28,7 @@ from .coverage import report
 from .decisions import DecisionLog
 from .deferrals import DeferralSet
 from .directives import DirectiveStore, accept
+from .grounding_evidence import Cache as GroundingCache
 from .intents import IntentError, UnitIntent
 from .intents import validate as validate_intent
 from .memory import memory_scope
@@ -388,7 +389,6 @@ def _accepted_status(pending: Pending) -> str:
     return "accepted — returned to the engine to apply"
 
 
-
 def _brain_counters(brain: object) -> dict[str, object]:
     """The brain's own counters, which reached no output at all until now.
 
@@ -413,6 +413,7 @@ def _brain_counters(brain: object) -> dict[str, object]:
     if isinstance(cost, (int, float)):
         out["cost_usd"] = round(float(cost), 6)
     return out
+
 
 def create_app(
     brain: Brain | None = None,
@@ -485,6 +486,10 @@ def create_app(
         deferrals=deferrals,
         queue=answer_queue,
         turn_plan=turn_plan,
+        # A real run publishes its grounding evidence where Yupana reads it. This is the layer
+        # that knows the run is real — the Orchestrator default writes nothing precisely so a
+        # test cannot manufacture evidence for a live agent (``grounding_evidence.py``).
+        grounding_cache=GroundingCache(),
     )
     app.state.orchestrator = orchestrator
 

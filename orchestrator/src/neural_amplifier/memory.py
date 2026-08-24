@@ -567,6 +567,18 @@ class RememberingRetriever:
         primer = getattr(self.inner, "prime_turn", None)
         return int(primer(turn, faction_id)) if callable(primer) else 0
 
+    def consultation_for(self, turn: int, faction_id: int | None) -> Any:
+        """Pass the turn-boundary grounding *evidence* through too.
+
+        Without this the wrapper silently swallows it: the orchestrator asks the retriever it
+        holds, which is this object, and ``getattr`` finds no such method — so wrapping a
+        Quipu retriever in memory would turn every grounded decision into one Yupana reports
+        as ``missing``. That is the ``_with_latency`` failure again (``knowledge.py``): a
+        pass-through that enumerates what it forwards drops whatever it was not told about.
+        """
+        inner = getattr(self.inner, "consultation_for", None)
+        return inner(turn, faction_id) if callable(inner) else None
+
     def _scope_for(self, world_view: WorldView) -> str | None:
         """The deciding faction's graph, or None when we cannot say whose decision this is.
 

@@ -231,6 +231,22 @@ class DecisionRecord(BaseModel):
     #: What Quipu and Hank contributed (``docs/observability.md`` §7).
     knowledge: KnowledgeBlock = Field(default_factory=KnowledgeBlock)
 
+    #: The turn-boundary grounding evidence this decision is bound to, as the reference Yupana
+    #: verifies: ``{scope, grounding_id, faction_id, worldview_sha256}``
+    #: (``grounding_evidence.py``).
+    #:
+    #: Deliberately a reference and not the evidence. ``knowledge`` already says what retrieval
+    #: *contributed*; this says what can be independently *checked*, by a component that was not
+    #: here when the decision was made and does not trust this record. The two are not
+    #: redundant: ``knowledge`` is self-report, and the whole point of the enforcement contract
+    #: is that a grounding claim must be falsifiable without it.
+    #:
+    #: ``None`` means no consultation was bound — no retriever, an unprimed turn, or a cache
+    #: that could not be written. Absent is the honest answer and Yupana reads it as ``missing``;
+    #: fabricating a reference here would produce ``unresolved`` downstream, which reads as
+    #: corrupted evidence rather than as the absence it actually is.
+    grounding: dict[str, str] | None = None
+
     #: What the standing plan contributed (``directives.py``).
     plan: PlanBlock = Field(default_factory=lambda: PlanBlock())
 
