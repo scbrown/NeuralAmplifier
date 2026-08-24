@@ -1,0 +1,13 @@
+{
+  "bytes": 853092,
+  "captured": "2026-08-23T21:31:20",
+  "md5": "afcf9bb722ca89c4d5de5a0dbb12da6e",
+  "name": "council-vote-blocked",
+  "note": "na-4lr: a Planetary Council vote (ELECT PLANETARY GOVERNOR) blocking an unattended run at turn 143. The panel needs a CHOICE, not a dismissal: clicking VOTE opens a candidate picker with OK/CANCEL, and neither VOTE twice nor CANCEL clears it. This is the ROUTE half of na-4lr with a save attached - load it and the blocked surface is in front of you in 60 seconds.",
+  "readings": {
+    "build-stats": "player=7 reset_enter=1087 reset_managed=1087 build_run=60 reached=37 no_expand=0 cap=32 no_gov=0 no_site=0 queued=5 gov=0xDFBF41 may_pod=1 ai_reset_enter=5664 ai_build_run=2428",
+    "game-state": "state=0x110002 done=0 halted=0 turn=143 player=7 map_seed=2 victory=none bases=1:53,2:47,3:43,4:0,5:47,6:66,7:12",
+    "move-stats": "player=7 enemy_move=0 upkeep_ok=143 colony_move=0 colony_gaveup=9 colony_built=17 colony_pass=2230 enroute=1913 retarget=294 tobase=0 pod=115,87 wp=105,83 order=0 spent=3 speed=3 reg=16 wpreg=16 triad=0 mode=0 left_alone=0 unafford=79 seam_spent=3 at_base=0 defend=0 iter=0 unit_turn=0 zoc=1 state=0x60000 fung=0 fung_dir=0 fung_adj=4 fung_wp=0 path=27 path1=-1 step=114,86 dir=6 cost=3 sfung=1"
+  },
+  "source": "Autosave_2242.sav"
+}
