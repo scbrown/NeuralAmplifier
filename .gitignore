@@ -91,3 +91,6 @@ CLAUDE.local.md
 # provenance question nobody wants to answer later. scripts/fetch-embedding-model.sh puts it
 # here, and keeps whatever it could reach when the weights host is blocked.
 models/
+
+# bobbin tool telemetry — generated per-invocation, never a source artifact
+.bobbin/
