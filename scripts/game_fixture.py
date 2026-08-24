@@ -42,6 +42,7 @@ EXCLUDED_DIRS = frozenset(
         "fx.org",  # a backup of fx/ made by some sound overlay (unclassified, see PROVENANCE)
         "voices.org",  # ditto for voices/
         "EmptySteamDepot",  # Steam packaging artifact, not game data
+        "na-backup-stock",  # play-thinker.sh's pre-mod restore point
     }
 )
 

@@ -280,6 +280,16 @@ def test_staging_never_writes_to_the_source(tmp_path) -> None:
     assert (tmp_path / "play" / "basenames" / "gaians.txt").exists()
 
 
+def test_fixture_scan_excludes_the_launchers_stock_backup(tmp_path) -> None:
+    game_fixture = _stage_module()
+    (tmp_path / "alphax.txt").write_text("vanilla")
+    backup = tmp_path / "na-backup-stock"
+    backup.mkdir()
+    (backup / "thinker.dll").write_text("mod backup")
+
+    assert game_fixture.walk_fixture(tmp_path) == ["alphax.txt"]
+
+
 def test_staging_refuses_a_target_that_overlaps_the_source(tmp_path) -> None:
     """Staging into the source, or into a subdirectory of it, writes to the tree that must not
     be written to — the original bug with a different path spelling."""

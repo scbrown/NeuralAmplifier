@@ -8,7 +8,7 @@ the tree.
 
 | Provenance | Manifest | Status |
 | --- | --- | --- |
-| Steam — Planetary Pack, app 2204130 | `steam-2204130.manifest` | **Primary, working.** 1 624 files recorded; 17 unresolved (see below). |
+| Steam — Planetary Pack, app 2204130 | `steam-2204130.manifest` | **Primary, working.** Complete after depot validation on 2026-08-24. |
 | Physical media + Alien Crossfire v2.0 patch | *(not yet built)* | Optional validator. Proves the fixture is reconstructible without a storefront account. Nothing blocks on it. |
 
 ## The `terranx.exe` anchor
@@ -33,18 +33,13 @@ genuinely unsupported.
 
 ## Unresolved: 17 paths held mod bytes when scanned
 
-The host used to build this manifest has Thinker v5.4 installed **into the Steam directory**, so
-these paths currently hold Thinker's data files rather than the game's. They are listed as
-`unresolved` in the manifest and carry no recorded hash:
-
-- `alphax.txt`
-- `german/alphax.txt`
-- `basenames/*.txt` (15 files)
-
-To resolve: restore the game files (Steam → Properties → Installed Files → **Verify integrity of
-game files**; it re-downloads tracked files and leaves the untracked `thinker.*` additions
-alone), then `just game scan`. `scan` refuses a contaminated tree by default precisely so a
-partial manifest is visible rather than silently wrong.
+The initial scan marked 17 paths unresolved because their hashes also appeared in Thinker v5.4.
+Steam depot validation on 2026-08-24 resolved the ambiguity. Vanilla `alphax.txt` changed from
+Thinker's `f593347…` to depot `578519…`; the 15 `basenames/*.txt` files and
+`german/alphax.txt` did not change. Thinker redistributes those 16 files byte-for-byte from the
+game, so matching the mod archive was not evidence of contamination. Their hashes are now
+recorded as vanilla and removed from `overlays.tsv`; the genuinely different Thinker alphax hash
+remains a contamination detector.
 
 **Why `alphax.txt` matters more than the rest.** `just ingest` labels it **canonical** and
 writes the `smac:` graph. Thinker ships its own tech tree and rules, so ingesting Thinker's copy

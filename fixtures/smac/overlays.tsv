@@ -2,27 +2,14 @@
 # A path listed here holds mod bytes, not game bytes: the fixture is contaminated.
 # Format: sha1 <TAB> relpath <TAB> source
 #
-# Thinker v5.4 (induktio/thinker, Thinker_v5.4.zip, 2026-04-29). Verified byte-identical
-# against the Steam install on the gaming host, 2026-07-29.
+# Thinker v5.4 (induktio/thinker, Thinker_v5.4.zip, 2026-04-29). Re-checked after
+# Steam depot validation on 2026-08-24: the basename files and german/alphax.txt
+# are byte-identical to VANILLA because Thinker redistributes them unchanged, so
+# they are intentionally absent here. A hash match only denotes contamination
+# when the mod bytes actually differ from the depot bytes.
 f59334713b29c9a5132e7fad667ed3875922981e	alphax.txt	thinker-v5.4
-d59579447e5997cbe4209f965f9b8de36571146e	basenames/angels.txt	thinker-v5.4
-bf3a1fb4265bcd9b5804c4bbcb64f90c3fa2d5a2	basenames/believe.txt	thinker-v5.4
-242c03fc0a8373b666e0cf55b80737595d1fd8f1	basenames/caretake.txt	thinker-v5.4
-9b581974359b0cee60feb9a67cd68a9581ce3bdd	basenames/cyborg.txt	thinker-v5.4
-2eb5e9369a7deac794c591e5c795cdee3623a349	basenames/drone.txt	thinker-v5.4
-584a009773372baa7dbf3026e2febf561e55d6f8	basenames/fungboy.txt	thinker-v5.4
-1ec645a76af68f69e6437ee05b7c299cc5422b4f	basenames/gaians.txt	thinker-v5.4
-920055b4bdfd7f3866d046ec50818c37e224411f	basenames/generic.txt	thinker-v5.4
-f6493c1cd7dc946b237a02b4072f914dd913f86c	basenames/hive.txt	thinker-v5.4
-46b81f1f7507767d581644903cdd3fc11a559a46	basenames/morgan.txt	thinker-v5.4
-e4cc073d505db5adccbdc54ec2262a6fcd77dcba	basenames/peace.txt	thinker-v5.4
-dfd2a1f10e6f2ad30c5fb4a99251f165d75e0670	basenames/pirates.txt	thinker-v5.4
-2d639393ada6b1face2b3371eb6f180ce300453a	basenames/spartans.txt	thinker-v5.4
-eb895445cd9370ff36581de62b7d351625ad50b4	basenames/univ.txt	thinker-v5.4
-55d3ea1e2e3a8ee432fa13463f76966100342589	basenames/usurper.txt	thinker-v5.4
 7eacd8879f4c3f678ad5b5e72d4f4105363367b3	Changelog.md	thinker-v5.4
 308f33b58c78ecd66557cb09894d8db9ee543b88	Details.md	thinker-v5.4
-9cb2c0fdce8f4071726ac03beeb9162b64e05dbe	german/alphax.txt	thinker-v5.4
 a0152d57680d4a2955d3e8dc34a5a1406083798d	modmenu.txt	thinker-v5.4
 a41a5050743c926c421480d14d3f547146fae70e	Readme.md	thinker-v5.4
 5cff51d108ec3fc77c94f07e3cc7aa20fca48423	smac_mod/alphax.txt	thinker-v5.4
