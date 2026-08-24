@@ -121,3 +121,30 @@ build: **7:1 at turn 21 before, 7:3 after**, and the viability checkpoint went R
 live run.
 
 The 3-seed request stays deferred until row 1 has a result.
+
+## The gate, and what changed before the third attempt
+
+Two defects had to close before a row could mean anything, and both did:
+
+**na-1lj layer 1** — the site search chose destinations whose FIRST STEP cost more than a colony
+pod's entire movement allowance (`path=16` valid route, `step cost=6` against `speed=3`). Movement
+does not accumulate across turns, so the step was impossible and the pod sat on one tile for
+nineteen turns holding a perfectly valid route. Fixed by excluding such a site and re-planning in
+the same turn (thinker `32d623c`).
+
+**na-2dg** — the engine crash at `004BF423` that ended both earlier attempts, on the dialog
+reporting our HQ being lost. Fixed by malcolm (`b715cb2`): a null secondary draw-surface Release.
+
+**The gate I set before spending another seed was expansion at rough AI parity through turn 50.**
+Measured on a 55-turn run under both fixes:
+
+| turn | 1 | 2 | 3 | 4 | 5 | 6 | **7 (ours)** |
+|---|---|---|---|---|---|---|---|
+| 55 | 5 | 9 | 6 | 10 | 8 | 5 | **7** |
+
+Seven bases — mid-pack, ahead of three AI factions. Against row 1's **7:2 while the AIs held
+11-31 at turn 82**, on the same seed. The gate run also reached its turn limit and exited cleanly
+with no crash dump, which is the first time a seeded run has crossed the turn-120 region alive.
+
+Seed 1 has still never produced a RESULT — refused once, crashed once — so the third attempt is
+the row, not a rerun for its own sake.
