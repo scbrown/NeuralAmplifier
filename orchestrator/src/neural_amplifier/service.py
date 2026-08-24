@@ -533,6 +533,15 @@ def create_app(
         raw = os.environ.get("NA_DASHBOARD_PLAN")
         return dashboard.strategy(Path(raw) if raw else None)
 
+    @app.get("/dashboard/api/graph")
+    def dashboard_graph(q: str | None = None, entity: str | None = None) -> dict[str, object]:
+        from .dashboard import graph_view
+
+        #: The dashboard's graph is whatever the RUN was pointed at, so the browser sees the
+        #: same knowledge the brain saw. NA_DASHBOARD_QUIPU overrides for a read-only viewer.
+        base = os.environ.get("NA_DASHBOARD_QUIPU") or os.environ.get("NA_QUIPU_URL")
+        return graph_view(base, query=q, entity=entity)
+
     @app.get("/dashboard/api/evals")
     def dashboard_evals() -> dict[str, object]:
         return dashboard.evals()

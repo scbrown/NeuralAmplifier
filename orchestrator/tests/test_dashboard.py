@@ -405,3 +405,76 @@ def test_a_plan_file_that_defines_only_some_directives_says_how_many(tmp_path: P
     assert got["directive_count"] == 2
     assert got["definitions_covered"] == 1
     assert got["definitions_missing"] == ["reserve"]
+
+
+def test_graph_names_which_kind_of_nothing_it_found() -> None:
+    """unconfigured / unreachable / empty are three different facts, not one blank list.
+
+    The first two are the operator's problem and the third is the graph's; collapsing them
+    would hide a broken link behind "no results".
+    """
+    from neural_amplifier.dashboard import graph_view
+
+    def boom(*args: object, **kwargs: object) -> object:
+        raise OSError("connection refused")
+
+    unconfigured = graph_view(None)
+    unreachable = graph_view("http://127.0.0.1:1", post=boom)
+    empty = graph_view("http://g", post=lambda *a, **k: {"rows": []})
+
+    assert unconfigured["state"] == "unconfigured"
+    assert unreachable["state"] == "unreachable"
+    assert "connection refused" in unreachable["detail"]
+    assert empty["state"] == "empty"
+    assert len({unconfigured["detail"], unreachable["detail"], empty["detail"]}) == 3
+
+
+def test_graph_census_search_and_entity_are_three_read_shapes() -> None:
+    from neural_amplifier.dashboard import graph_view
+
+    seen: list[tuple[str, dict[str, object]]] = []
+
+    def fake(base: str, path: str, payload: dict[str, object], timeout: float = 8.0) -> object:
+        seen.append((path, payload))
+        if path == "/search":
+            return {"results": [{"entity": "http://g/unit/colony-pod", "score": 0.7, "text": "Colony Pod"}]}
+        if "COUNT" in str(payload.get("query")):
+            return {"rows": [{"t": "http://g/smac/Unit", "n": 26}]}
+        return {"rows": [{"p": "http://g/label", "o": "Colony Pod"}]}
+
+    census = graph_view("http://g", post=fake)
+    assert census["mode"] == "census"
+    assert census["rows"][0] == {"type": "Unit", "iri": "http://g/smac/Unit", "count": 26}
+
+    search = graph_view("http://g", query="colony", post=fake)
+    assert search["mode"] == "search"
+    assert search["rows"][0]["entity"] == "http://g/unit/colony-pod"
+
+    entity = graph_view("http://g", entity="http://g/unit/colony-pod", post=fake)
+    assert entity["mode"] == "entity"
+    assert entity["rows"] == [{"predicate": "http://g/label", "object": "Colony Pod"}]
+    assert [p for p, _ in seen] == ["/query", "/search", "/query"]
+
+
+def test_graph_reads_never_write() -> None:
+    """A browse panel must not be able to mutate the graph the brain reads."""
+    from neural_amplifier.dashboard import graph_view
+
+    paths: list[str] = []
+
+    def fake(base: str, path: str, payload: dict[str, object], timeout: float = 8.0) -> object:
+        paths.append(path)
+        return {"rows": [], "results": []}
+
+    for kwargs in ({}, {"query": "x"}, {"entity": "http://g/e"}):
+        graph_view("http://g", post=fake, **kwargs)  # type: ignore[arg-type]
+    assert set(paths) <= {"/query", "/search"}
+    assert not any(p in {"/episode", "/knot", "/propose"} for p in paths)
+
+
+def test_the_graph_endpoint_is_served_and_reports_unconfigured(monkeypatch) -> None:
+    monkeypatch.delenv("NA_DASHBOARD_QUIPU", raising=False)
+    monkeypatch.delenv("NA_QUIPU_URL", raising=False)
+    client = TestClient(create_app(brain=ScriptedBrain(), log=DecisionLog(Path(os.devnull))))
+    body = client.get("/dashboard/api/graph").json()
+    assert body["state"] == "unconfigured"

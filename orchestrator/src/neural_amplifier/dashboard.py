@@ -110,6 +110,91 @@ def grounding_state(knowledge: dict[str, Any], view: dict[str, Any] | None) -> d
     }
 
 
+#: Read-only graph browsing. The dashboard NEVER writes to the graph and never calls the brain;
+#: it forwards two shapes of read to whatever Quipu the run was pointed at.
+def _graph_post(base: str, path: str, payload: dict[str, Any], timeout: float = 8.0) -> Any:
+    import urllib.error
+    import urllib.request
+
+    request = urllib.request.Request(
+        f"{base.rstrip('/')}{path}",
+        data=json.dumps(payload).encode("utf-8"),
+        headers={"content-type": "application/json"},
+    )
+    with urllib.request.urlopen(request, timeout=timeout) as response:  # noqa: S310
+        return json.loads(response.read())
+
+
+def graph_view(
+    base: str | None,
+    query: str | None = None,
+    entity: str | None = None,
+    post: Any = _graph_post,
+) -> dict[str, Any]:
+    """The NA knowledge graph, browsable, with the reason for an empty result named.
+
+    Three different conditions yield no entities and they are not the same fact: no graph was
+    configured for this run, one was configured and could not be reached, and a real query that
+    matched nothing. The first two are the operator's problem and the third is the graph's, so
+    collapsing them into an empty list would hide a broken link behind "no results" — the same
+    rule the grounding badges follow.
+    """
+    if not base:
+        return {"state": "unconfigured", "detail": "No graph was configured for this run.", "rows": []}
+    try:
+        if entity:
+            payload = {
+                "query": (
+                    "SELECT ?p ?o WHERE { <" + entity.replace(">", "") + "> ?p ?o } LIMIT 200"
+                )
+            }
+            body = post(base, "/query", payload)
+            rows = [
+                {"predicate": r.get("p"), "object": r.get("o")} for r in body.get("rows") or []
+            ]
+            mode = "entity"
+        elif query:
+            body = post(base, "/search", {"query": query})
+            rows = [
+                {
+                    "entity": r.get("entity"),
+                    "score": r.get("score"),
+                    "text": r.get("text"),
+                }
+                for r in body.get("results") or []
+            ]
+            mode = "search"
+        else:
+            body = post(
+                base,
+                "/query",
+                {
+                    "query": (
+                        "SELECT ?t (COUNT(?s) AS ?n) WHERE { ?s a ?t } "
+                        "GROUP BY ?t ORDER BY DESC(?n)"
+                    )
+                },
+            )
+            rows = [
+                {"type": str(r.get("t")).rsplit("/", 1)[-1], "iri": r.get("t"), "count": r.get("n")}
+                for r in body.get("rows") or []
+            ]
+            mode = "census"
+    except Exception as exc:  # noqa: BLE001 - the reason is the payload
+        return {
+            "state": "unreachable",
+            "detail": f"{type(exc).__name__}: {exc}",
+            "base": base,
+            "rows": [],
+        }
+    return {
+        "state": "ok" if rows else "empty",
+        "mode": mode,
+        "base": base,
+        "rows": rows,
+        "detail": "" if rows else "The graph answered, and matched nothing.",
+    }
+
 class DashboardReader:
     """Small, bounded projections over an append-only run."""
 
@@ -426,6 +511,7 @@ DASHBOARD_HTML = """<!doctype html>
 <section class=panel><h2>MISSION CONTROL</h2><div id=summary class=summary></div></section>
 <section class=panel><h2>FACTION STATUS</h2><div id=factions class=factions></div></section>
 <section class=panel><h2>DECISION ARCHIVE</h2><table><thead><tr><th>Turn<th>Faction<th>Surface<th>Tier<th>Choice<th>Native<th>Latency<th>Cost</tr></thead><tbody id=decisions></tbody></table></section>
+<section class=panel><h2>KNOWLEDGE GRAPH</h2><input id=gq placeholder="search the graph (e.g. colony pod)" style="width:60%;background:#092734;color:var(--text);border:2px ridge #287f8b;padding:7px"> <button onclick="loadGraph(gq.value)">SEARCH</button> <button onclick="loadGraph('')">CENSUS</button><div id=graph>Loading graph…</div></section>
 <section class=panel><h2>STRATEGY IN FORCE</h2><div id=strategy>Loading directives…</div></section>
 <section class=panel><h2>EVALUATION DATALINKS</h2><button onclick=loadEvals()>RE-DERIVE COMMITTED TABLES</button><div id=evals class=why>Loading committed scorers…</div></section></main>
 <section id=detail class="panel detail hidden"><button class=close onclick="detail.classList.add('hidden')">CLOSE</button><h2>DECISION DATALINK</h2><div id=detailText class=why></div></section>
@@ -449,6 +535,15 @@ const GROUNDING_NOTE={absent:'No retriever was configured for this run, so nothi
 const list=x=>(x??[]).map(v=>`<li>${esc(typeof v==='object'?JSON.stringify(v):v)}</li>`).join('')||'<li>—</li>';
 async function showDecision(id){const x=await fetch('/dashboard/api/decisions/'+id).then(r=>r.json()),r=x.record,p=r.plan??{},w=x.why??{directives:[],grounding:{state:'empty',label:'',facts:[]},guard:{}},chosen=(r.chosen??[]).map(c=>c.action_id??c.id),native=x.native_choice,disagreed=native!=null&&!chosen.map(String).includes(String(native));detailText.innerHTML=`<section><h3>CONTEXT</h3><b>TURN ${esc(r.turn)} // ${esc(r.faction)}</b><p>${esc(r.surface_id)}</p><p>Tier: ${esc(r.tier)} // Applied: ${esc(chosen.join(', '))}</p><p>Degraded: ${esc(r.degraded)} ${esc(r.degrade_reason??r.fallback_reason??'')}</p></section><section class="${disagreed?'disagreement':''}"><h3>CHOICE ${disagreed?'// DISAGREEMENT':''}</h3><p>Chosen: ${esc(chosen.join(', '))}</p><p>Native: ${esc(native)}</p></section><section class=wide><h3>WHY</h3><p>${esc(r.reason)}</p></section><section class=wide><h3>OFFERED ACTION SPACE</h3><table><thead><tr><th>Action<th>Cost<th>Turns<th>Effects</tr></thead><tbody>${(x.action_space??[]).map(a=>`<tr><td>${esc(a.action??a.name??a.id)}<td>${esc(a.cost)} ${esc(a.cost_unit??'')}<td>${esc(a.turns??a.turns_to_completion)}<td>${esc(a.effects??a.board_effects)}</tr>`).join('')}</tbody></table></section><section class=wide><h3>DIRECTIVES IN FORCE</h3>${w.plan_absent?'<p class=d-none>NO PLAN IN FORCE FOR THIS DECISION</p>':(w.directives??[]).length?`<table><thead><tr><th>Directive<th>Disposition</tr></thead><tbody>${(w.directives??[]).map(d=>`<tr><td>${esc(d.id)}<td>${d.dispositions.length?d.dispositions.map(k=>`<span class="dstate d-${esc(k)}">${esc(k.toUpperCase())}</span>`).join(''):'<span class="dstate d-none">IN FORCE // NO DISPOSITION RECORDED</span>'}</tr>`).join('')}</tbody></table>`:'<p class=d-none>NONE</p>'}</section><section class=wide><h3>GROUNDING FACTS <span class="gs gs-${esc(w.grounding.state)}">${esc(w.grounding.label)}</span></h3>${w.grounding.facts.length?`<ul>${w.grounding.facts.map(f=>`<li class=${f.cited?'cited':'uncited'}>${f.cited?'[CITED] ':''}${esc(f.text)}</li>`).join('')}</ul>`:`<p class=d-none>${esc(GROUNDING_NOTE[w.grounding.state]??'')}</p>`}</section><section><h3>GUARD</h3><p>Verdict: ${esc(w.guard.verdict)}${w.guard.absent?' // ADAPTER ABSENT':''}${w.guard.degraded?' // DEGRADED':''}</p><b>ADVISORIES</b><ul>${list(w.guard.advisories)}</ul><b>STRIPPED</b><ul>${list(w.guard.stripped)}</ul></section><section><h3>TELEMETRY</h3><p>Latency: ${esc(r.latency_ms)} ms</p><p>Cost: $${esc(r.cost_usd??r.usd)}</p><p>Model: ${esc(r.model)}</p></section>`;detail.classList.remove('hidden')}
 function renderEvals(x){const labels={};for(const run of x.runs??[])labels[run.id]=[...(run.tables??[])];const sections=x.tables.trim().split(/\\n(?==== )/).filter(s=>s.startsWith('=== '));evals.innerHTML=sections.map(section=>{const lines=section.split('\\n'),head=lines.shift().replace(/^=== | ===$/g,''),run=head.split(':')[0].trim(),label=(labels[run]??[]).shift()??head,rows=[];for(const line of lines){const m=line.match(/^(\\S+)\\s+(-?\\d+)\\s+(-?\\d+)\\s+([+-]?\\d+)$/);if(m)rows.push(m.slice(1))}const table=rows.length?`<table><thead><tr><th>Metric<th>Baseline<th>Arm<th>Delta</tr></thead><tbody>${rows.map(r=>`<tr><td>${esc(r[0])}<td>${esc(r[1])}<td>${esc(r[2])}<td>${esc(r[3])}</tr>`).join('')}</tbody></table>`:'';const prose=lines.filter(line=>!rows.some(r=>line.trim().startsWith(r[0]))&& !line.trim().startsWith('metric ')).join('\\n').trim();return `<section class=wide><h3>${esc(run)} // ${esc(label)}</h3>${table}<pre>${esc(prose)}</pre></section>`}).join('')+(x.error?`<section class="wide bad"><h3>SCORER ERROR</h3>${esc(x.error)}</section>`:'')}
+async function loadGraph(q){const u=q?('/dashboard/api/graph?q='+encodeURIComponent(q)):'/dashboard/api/graph';const x=await fetch(u).then(r=>r.json());
+//: Each non-ok state gets its own sentence. An unconfigured graph and an unreachable one are
+//: the operator's problem; an empty result is the graph's. One blank list for all three would
+//: hide a broken link behind "no results".
+if(x.state!=='ok'){graph.innerHTML=`<p class="gs gs-${x.state==='empty'?'empty':'degraded'}">${esc(x.state.toUpperCase())}</p><p class=d-none>${esc(x.detail)}</p>`;return}
+if(x.mode==='census'){graph.innerHTML=`<table><thead><tr><th>Type<th>Entities</tr></thead><tbody>${x.rows.map(r=>`<tr><td>${esc(r.type)}<td>${esc(r.count)}</tr>`).join('')}</tbody></table>`;return}
+if(x.mode==='entity'){graph.innerHTML=`<table><thead><tr><th>Predicate<th>Value</tr></thead><tbody>${x.rows.map(r=>`<tr><td>${esc(String(r.predicate).split(/[#/]/).pop())}<td>${esc(r.object)}</tr>`).join('')}</tbody></table>`;return}
+graph.innerHTML=`<table><thead><tr><th>Entity<th>Score<th>Text</tr></thead><tbody>${x.rows.map(r=>`<tr class=decision onclick="showEntity('${esc(r.entity)}')"><td>${esc(String(r.entity).split('/').pop())}<td>${esc(Number(r.score).toFixed(3))}<td>${esc(String(r.text).slice(0,160))}</tr>`).join('')}</tbody></table>`}
+async function showEntity(iri){const x=await fetch('/dashboard/api/graph?entity='+encodeURIComponent(iri)).then(r=>r.json());graph.innerHTML=`<button onclick="loadGraph(gq.value)">BACK</button><h3>${esc(iri.split('/').pop())}</h3>`+(x.state!=='ok'?`<p class=d-none>${esc(x.detail)}</p>`:`<table><thead><tr><th>Predicate<th>Value</tr></thead><tbody>${x.rows.map(r=>`<tr><td>${esc(String(r.predicate).split(/[#/]/).pop())}<td>${esc(r.object)}</tr>`).join('')}</tbody></table>`)}
 async function loadStrategy(){const x=await fetch('/dashboard/api/strategy').then(r=>r.json());const defs=x.definitions??{};
 //: An id is not a directive. When no plan file is wired the panel says so, rather than
 //: listing bare ids as if that were the whole strategy — same rule as the grounding badges.
@@ -456,5 +551,5 @@ const note=(x.definitions_missing??[]).length?`<p class=d-none>Directive TEXT sh
 const totals=(x.totals??[]).map(t=>{const def=defs[t.id]??{};return `<tr><td>${esc(t.id)}${def.intent?`<br><span class=uncited>${esc(def.intent)}</span>`:''}<td>${esc(def.metric)} ${esc(def.comparator)} ${esc(def.target)}<td>${esc(t.in_force)}<td>${esc(t.followed??0)}<td>${esc(t.overrode??0)}<td>${esc(t.unsatisfied??0)}<td>${esc(t.unmeasurable??0)}<td>${t.followed_share==null?'—':esc(t.followed_share)}</tr>`}).join('');
 strategy.innerHTML=note+(totals?`<table><thead><tr><th>Directive<th>Metric<th>Turns in force<th>Followed<th>Overrode<th>Unsatisfied<th>Unmeasurable<th>Followed share</tr></thead><tbody>${totals}</tbody></table>`:'<p class=d-none>No directives were in force in this run.</p>')}
 async function loadEvals(){evals.textContent='Re-deriving…';const x=await fetch('/dashboard/api/evals').then(r=>r.json());renderEvals(x)}
-refresh();loadEvals();loadStrategy();
+refresh();loadEvals();loadStrategy();loadGraph('');
 </script></body></html>"""
