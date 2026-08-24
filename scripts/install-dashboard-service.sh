@@ -28,6 +28,18 @@ write_environment() {
         printf 'NA_DASHBOARD_PORT=%q\n' "$port"
         printf 'NA_DASHBOARD_LOG=%q\n' "$log"
         printf 'NA_DASHBOARD_STORE=%q\n' "$store"
+        # Carry forward every other NA_* setting rather than dropping it. This function
+        # rewrites the file from scratch, so anything it does not know about is destroyed on
+        # the next install — silently, because the dashboard then simply reports that feature
+        # as unconfigured and looks healthy. That has already happened once:
+        # NA_DASHBOARD_GAME_STATE was live in the file and is not written here, so a re-install
+        # would have removed the all-player faction census with nothing to say why.
+        # Preserving unknown keys is deliberately a MECHANISM and not a longer list, so the
+        # next setting somebody adds is safe without this function having to learn about it.
+        if [ -f "$environment_file" ]; then
+            grep -E '^NA_[A-Z_]+=' "$environment_file" 2>/dev/null \
+                | grep -vE '^NA_DASHBOARD_(PORT|LOG|STORE)=' || true
+        fi
     } >"$temporary"
     chmod 600 "$temporary"
     mv "$temporary" "$environment_file"
