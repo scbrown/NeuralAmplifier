@@ -47,6 +47,69 @@ def _record_cost(record: DecisionRecord) -> float | None:
     return float(raw) if isinstance(raw, int | float) else None
 
 
+#: Directive dispositions, most-decision-relevant first. ``in_force`` alone is not a
+#: disposition — it is the population every other list partitions.
+_DISPOSITIONS = ("followed", "overrode", "unsatisfied", "unmeasurable", "rejected", "conflicts")
+
+
+def directive_dispositions(plan: dict[str, Any]) -> list[dict[str, Any]]:
+    """Every in-force directive with what actually became of it.
+
+    The panel used to render ``in_force``/``followed``/``overrode`` as three flat lists, which
+    cannot answer the question the reader is actually asking — *which directive bound this
+    choice, and what happened to the rest?*  A directive in force and absent from ``followed``
+    reads as "the model ignored it", when on the measured data it is almost always
+    ``unsatisfied``: MEASURED across 610 ladder decisions, ``unsatisfied`` is populated on 609
+    and was rendered on none of them, while ``followed`` covers 71%.  Dropping the field that
+    explains the gap is what made an empty ``FOLLOWED`` ambiguous.
+    """
+    in_force = [str(d) for d in plan.get("in_force") or []]
+    seen: dict[str, list[str]] = {d: [] for d in in_force}
+    for key in _DISPOSITIONS:
+        for raw in plan.get(key) or []:
+            seen.setdefault(str(raw), []).append(key)
+    return [
+        {"id": d, "dispositions": seen.get(d) or [], "in_force": d in seen and d in in_force}
+        for d in sorted(seen, key=lambda x: (x not in in_force, x))
+    ]
+
+
+def grounding_state(knowledge: dict[str, Any], view: dict[str, Any] | None) -> dict[str, Any]:
+    """Grounding facts, and WHICH KIND of nothing when there are none.
+
+    Three different conditions all render as an empty fact list, and the orchestrator already
+    tells them apart — ``quipu_absent`` (no retriever was configured), ``quipu_degraded``
+    (configured and it failed), and a real query that matched nothing.  Flattening them into
+    "no facts" would destroy a distinction the data makes: MEASURED, ladder-attempt4 is
+    ``absent`` on 610/610 decisions and arm A is ``degraded`` on 193/193, and a panel that
+    printed "—" for both would report the second as though retrieval had simply found nothing.
+    """
+    facts = [str(f) for f in (knowledge.get("quipu_facts") or [])]
+    if not facts and view:
+        facts = [str(f) for f in (view.get("grounding") or [])]
+    cited = {str(c) for c in (knowledge.get("quipu_cited") or [])}
+    hits = int(knowledge.get("quipu_hits") or 0)
+    if knowledge.get("quipu_absent"):
+        state, label = "absent", "NO RETRIEVER CONFIGURED"
+    elif knowledge.get("quipu_degraded"):
+        state, label = "degraded", "RETRIEVAL FAILED"
+    elif facts or hits:
+        state, label = "present", f"{hits or len(facts)} FACTS RETRIEVED"
+    else:
+        state, label = "empty", "QUERIED // 0 FACTS MATCHED"
+    return {
+        "state": state,
+        "label": label,
+        "hits": hits,
+        "latency_ms": knowledge.get("quipu_latency_ms"),
+        # A fact counts as cited when its id prefix appears in ``quipu_cited``; the contract
+        # says each grounding entry starts with its id (contract.py: "e.g. `unit:colony-pod`").
+        "facts": [
+            {"text": f, "cited": any(f.startswith(c) for c in cited)} for f in facts
+        ],
+    }
+
+
 class DashboardReader:
     """Small, bounded projections over an append-only run."""
 
@@ -228,12 +291,27 @@ class DashboardReader:
             return None
         record = records[position]
         view = self.world_view(record)
+        dumped = record.model_dump(mode="json")
+        plan = dumped.get("plan") or {}
+        knowledge = dumped.get("knowledge") or {}
         return {
-            "record": record.model_dump(mode="json"),
+            "record": dumped,
             "world_view": view,
             "action_space": (view or {}).get("action_space", []),
             "native_choice": (view or {}).get("native_choice"),
             "native_choice_name": (view or {}).get("native_choice_name"),
+            "why": {
+                "directives": directive_dispositions(plan),
+                "plan_absent": bool(plan.get("plan_absent")),
+                "grounding": grounding_state(knowledge, view),
+                "guard": {
+                    "verdict": knowledge.get("hank_verdict"),
+                    "absent": bool(knowledge.get("hank_absent")),
+                    "degraded": bool(knowledge.get("hank_degraded")),
+                    "advisories": [str(a) for a in (knowledge.get("advisories") or [])],
+                    "stripped": [str(a) for a in (knowledge.get("stripped") or [])],
+                },
+            },
         }
 
     def evals(self) -> dict[str, Any]:
@@ -264,7 +342,7 @@ DASHBOARD_HTML = """<!doctype html>
 <html lang=en><head><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1">
 <title>Neural Amplifier // Planetary Datalinks</title><style>
 :root{color-scheme:dark;--bg:#02070d;--panel:#071b28;--edge:#39c9d2;--text:#b8f5ef;--muted:#689aa0;--gold:#f1d56a;--bad:#ff6262}
-*{box-sizing:border-box}body{margin:0;background:radial-gradient(circle at 50% 0,#0b3142,#02070d 55%);color:var(--text);font:14px/1.45 "Lucida Console",Monaco,monospace}header{padding:18px 24px;border-bottom:2px ridge var(--edge);letter-spacing:.15em;background:#031019}h1{margin:0;color:#7ffff5;font-size:20px}.status{color:var(--gold)}main{padding:18px;display:grid;gap:16px}.panel{background:linear-gradient(145deg,#0a2634,#04121b);border:3px ridge #287f8b;box-shadow:0 0 16px #001 inset;padding:14px}h2{font-size:15px;color:#5fe8f0;border-bottom:1px solid #287f8b;padding-bottom:7px;margin:0 0 12px}.summary,.factions{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px}.datum,.faction{border:1px solid #1b6873;padding:8px}.datum b{display:block;color:#fff;font-size:18px}.faction{border-left:7px solid var(--faction)}.faction h3{margin:0 0 8px;color:#fff}.stats{display:grid;grid-template-columns:repeat(2,1fr);gap:4px}.stats span{color:var(--muted)}.stats b{color:var(--text);float:right}table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:7px;border-bottom:1px solid #164650}th{color:#64dfe6}.decision{cursor:pointer}.decision:hover{background:#123b48}.bad{color:var(--bad)}.tabs button{background:#092734;color:var(--text);border:2px ridge #287f8b;padding:8px 14px;cursor:pointer}.hidden{display:none}pre{white-space:pre-wrap;word-break:break-word;color:#c8f7f3;max-height:70vh;overflow:auto}.detail{position:fixed;inset:5%;z-index:2;overflow:auto}.close{float:right}.why{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px}.why section{border:1px solid #1b6873;padding:10px}.why h3{color:var(--gold);margin:0 0 8px}.why .wide{grid-column:1/-1}.why ul{margin:0;padding-left:20px}.disagreement{border-color:var(--bad)!important;color:#ffb0b0}@media(max-width:700px){main{padding:8px}.panel{overflow:auto}}
+*{box-sizing:border-box}body{margin:0;background:radial-gradient(circle at 50% 0,#0b3142,#02070d 55%);color:var(--text);font:14px/1.45 "Lucida Console",Monaco,monospace}header{padding:18px 24px;border-bottom:2px ridge var(--edge);letter-spacing:.15em;background:#031019}h1{margin:0;color:#7ffff5;font-size:20px}.status{color:var(--gold)}main{padding:18px;display:grid;gap:16px}.panel{background:linear-gradient(145deg,#0a2634,#04121b);border:3px ridge #287f8b;box-shadow:0 0 16px #001 inset;padding:14px}h2{font-size:15px;color:#5fe8f0;border-bottom:1px solid #287f8b;padding-bottom:7px;margin:0 0 12px}.summary,.factions{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px}.datum,.faction{border:1px solid #1b6873;padding:8px}.datum b{display:block;color:#fff;font-size:18px}.faction{border-left:7px solid var(--faction)}.faction h3{margin:0 0 8px;color:#fff}.stats{display:grid;grid-template-columns:repeat(2,1fr);gap:4px}.stats span{color:var(--muted)}.stats b{color:var(--text);float:right}table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:7px;border-bottom:1px solid #164650}th{color:#64dfe6}.decision{cursor:pointer}.decision:hover{background:#123b48}.bad{color:var(--bad)}.tabs button{background:#092734;color:var(--text);border:2px ridge #287f8b;padding:8px 14px;cursor:pointer}.hidden{display:none}pre{white-space:pre-wrap;word-break:break-word;color:#c8f7f3;max-height:70vh;overflow:auto}.detail{position:fixed;inset:5%;z-index:2;overflow:auto}.close{float:right}.why{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px}.why section{border:1px solid #1b6873;padding:10px}.why h3{color:var(--gold);margin:0 0 8px}.why .wide{grid-column:1/-1}.why ul{margin:0;padding-left:20px}.disagreement{border-color:var(--bad)!important;color:#ffb0b0}.dstate{display:inline-block;padding:1px 7px;margin-left:6px;border:1px solid currentColor;font-size:11px;letter-spacing:.08em}.d-followed{color:#55e06f}.d-overrode{color:var(--gold)}.d-unsatisfied{color:#ff9f43}.d-unmeasurable,.d-rejected,.d-conflicts{color:var(--muted)}.d-none{color:var(--muted)}.gs{padding:2px 8px;border:1px solid currentColor;letter-spacing:.08em}.gs-absent,.gs-empty{color:var(--muted)}.gs-degraded{color:var(--bad)}.gs-present{color:#55e06f}.cited{color:#7ffff5}.uncited{color:var(--muted)}@media(max-width:700px){main{padding:8px}.panel{overflow:auto}}
 </style></head><body><header><h1>NEURAL AMPLIFIER // PLANETARY DATALINKS</h1><span id=status class=status>LINKING…</span></header><main>
 <section class=panel><h2>MISSION CONTROL</h2><div id=summary class=summary></div></section>
 <section class=panel><h2>FACTION STATUS</h2><div id=factions class=factions></div></section>
@@ -283,8 +361,13 @@ DASHBOARD_HTML = """<!doctype html>
 const statusEl=document.getElementById('status');
 const esc=x=>String(x??'—').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 async function refresh(){let delay=30000;try{const [l,d]=await Promise.all([fetch('/dashboard/api/live').then(r=>r.json()),fetch('/dashboard/api/decisions?limit=100').then(r=>r.json())]);delay=l.active?5000:30000;statusEl.textContent=!l.configured?'NO RUN ARTIFACTS CONFIGURED':l.active?`LIVE // TURN ${l.turn??'—'} // ${l.decisions} DECISIONS`:`IDLE SINCE ${l.updated_at?new Date(l.updated_at).toLocaleString():'UNKNOWN'}`;summary.innerHTML=[['GAME',l.game_id],['TURN',l.turn],['DECISIONS',l.decisions],['SPEND USD',l.spend],['RUN',l.run_id],['ARM',l.arm],['SEED',l.seed],['DIFFICULTY',l.fairness?.difficulty],['SLOT',l.fairness?.slot],['VICTORY',l.victory]].map(x=>`<div class=datum>${esc(x[0])}<b>${esc(x[1])}</b></div>`).join('');factions.innerHTML=l.factions.map(f=>`<article class=faction style="--faction:${esc(f.colour)}"><h3>${esc(f.name)}</h3><div class=stats>${[['BASES',f.bases],['POP',f.population],['MINERALS',f.minerals],['ENERGY',f.energy],['INCOME',f.income],['LABS',f.labs],['MILITARY',f.military],['TECHS',f.techs]].map(x=>`<span>${esc(x[0])}<b>${esc(x[1])}</b></span>`).join('')}</div></article>`).join('');decisions.innerHTML=d.map(x=>`<tr class="decision ${x.disagreed?'bad':''}" onclick="showDecision(${x.id})"><td>${esc(x.turn)}<td>${esc(x.faction)}<td>${esc(x.surface)}<td>${esc(x.degraded?'DEGRADED':x.tier)}<td>${esc(x.chosen.join(', '))}<td>${esc(x.native)}<td>${esc(x.latency_ms)} ms<td>${esc(x.cost)}</tr>`).join('')}catch(e){statusEl.textContent='LINK DEGRADED // '+e}finally{setTimeout(refresh,delay)}}
+//: Each empty state gets its OWN sentence. "No facts" for all three would erase the
+//: distinction the orchestrator went to the trouble of recording (quipu_absent vs
+//: quipu_degraded vs a real query that matched nothing) - and the degraded case is a
+//: FAULT that would then read as a quiet, healthy nothing.
+const GROUNDING_NOTE={absent:'No retriever was configured for this run, so nothing was ever asked. This is not "the graph had nothing to say".',degraded:'Retrieval was configured and FAILED for this decision. The brain decided without grounding it should have had.',empty:'Retrieval ran and matched nothing. The graph genuinely had no fact for this surface.',present:''};
 const list=x=>(x??[]).map(v=>`<li>${esc(typeof v==='object'?JSON.stringify(v):v)}</li>`).join('')||'<li>—</li>';
-async function showDecision(id){const x=await fetch('/dashboard/api/decisions/'+id).then(r=>r.json()),r=x.record,p=r.plan??{},chosen=(r.chosen??[]).map(c=>c.action_id??c.id),native=x.native_choice,disagreed=native!=null&&!chosen.map(String).includes(String(native));detailText.innerHTML=`<section><h3>CONTEXT</h3><b>TURN ${esc(r.turn)} // ${esc(r.faction)}</b><p>${esc(r.surface_id)}</p><p>Tier: ${esc(r.tier)} // Applied: ${esc(chosen.join(', '))}</p><p>Degraded: ${esc(r.degraded)} ${esc(r.degrade_reason??r.fallback_reason??'')}</p></section><section class="${disagreed?'disagreement':''}"><h3>CHOICE ${disagreed?'// DISAGREEMENT':''}</h3><p>Chosen: ${esc(chosen.join(', '))}</p><p>Native: ${esc(native)}</p></section><section class=wide><h3>WHY</h3><p>${esc(r.reason)}</p></section><section class=wide><h3>OFFERED ACTION SPACE</h3><table><thead><tr><th>Action<th>Cost<th>Turns<th>Effects</tr></thead><tbody>${(x.action_space??[]).map(a=>`<tr><td>${esc(a.action??a.name??a.id)}<td>${esc(a.cost)} ${esc(a.cost_unit??'')}<td>${esc(a.turns??a.turns_to_completion)}<td>${esc(a.effects??a.board_effects)}</tr>`).join('')}</tbody></table></section><section><h3>PLAN DIRECTIVES</h3><b>IN FORCE</b><ul>${list(p.in_force)}</ul><b>FOLLOWED</b><ul>${list(p.followed)}</ul><b>OVERRODE</b><ul>${list(p.overrode)}</ul></section><section><h3>TELEMETRY</h3><p>Latency: ${esc(r.latency_ms)} ms</p><p>Cost: $${esc(r.cost_usd??r.usd)}</p><p>Model: ${esc(r.model)}</p></section>`;detail.classList.remove('hidden')}
+async function showDecision(id){const x=await fetch('/dashboard/api/decisions/'+id).then(r=>r.json()),r=x.record,p=r.plan??{},w=x.why??{directives:[],grounding:{state:'empty',label:'',facts:[]},guard:{}},chosen=(r.chosen??[]).map(c=>c.action_id??c.id),native=x.native_choice,disagreed=native!=null&&!chosen.map(String).includes(String(native));detailText.innerHTML=`<section><h3>CONTEXT</h3><b>TURN ${esc(r.turn)} // ${esc(r.faction)}</b><p>${esc(r.surface_id)}</p><p>Tier: ${esc(r.tier)} // Applied: ${esc(chosen.join(', '))}</p><p>Degraded: ${esc(r.degraded)} ${esc(r.degrade_reason??r.fallback_reason??'')}</p></section><section class="${disagreed?'disagreement':''}"><h3>CHOICE ${disagreed?'// DISAGREEMENT':''}</h3><p>Chosen: ${esc(chosen.join(', '))}</p><p>Native: ${esc(native)}</p></section><section class=wide><h3>WHY</h3><p>${esc(r.reason)}</p></section><section class=wide><h3>OFFERED ACTION SPACE</h3><table><thead><tr><th>Action<th>Cost<th>Turns<th>Effects</tr></thead><tbody>${(x.action_space??[]).map(a=>`<tr><td>${esc(a.action??a.name??a.id)}<td>${esc(a.cost)} ${esc(a.cost_unit??'')}<td>${esc(a.turns??a.turns_to_completion)}<td>${esc(a.effects??a.board_effects)}</tr>`).join('')}</tbody></table></section><section class=wide><h3>DIRECTIVES IN FORCE</h3>${w.plan_absent?'<p class=d-none>NO PLAN IN FORCE FOR THIS DECISION</p>':(w.directives??[]).length?`<table><thead><tr><th>Directive<th>Disposition</tr></thead><tbody>${(w.directives??[]).map(d=>`<tr><td>${esc(d.id)}<td>${d.dispositions.length?d.dispositions.map(k=>`<span class="dstate d-${esc(k)}">${esc(k.toUpperCase())}</span>`).join(''):'<span class="dstate d-none">IN FORCE // NO DISPOSITION RECORDED</span>'}</tr>`).join('')}</tbody></table>`:'<p class=d-none>NONE</p>'}</section><section class=wide><h3>GROUNDING FACTS <span class="gs gs-${esc(w.grounding.state)}">${esc(w.grounding.label)}</span></h3>${w.grounding.facts.length?`<ul>${w.grounding.facts.map(f=>`<li class=${f.cited?'cited':'uncited'}>${f.cited?'[CITED] ':''}${esc(f.text)}</li>`).join('')}</ul>`:`<p class=d-none>${esc(GROUNDING_NOTE[w.grounding.state]??'')}</p>`}</section><section><h3>GUARD</h3><p>Verdict: ${esc(w.guard.verdict)}${w.guard.absent?' // ADAPTER ABSENT':''}${w.guard.degraded?' // DEGRADED':''}</p><b>ADVISORIES</b><ul>${list(w.guard.advisories)}</ul><b>STRIPPED</b><ul>${list(w.guard.stripped)}</ul></section><section><h3>TELEMETRY</h3><p>Latency: ${esc(r.latency_ms)} ms</p><p>Cost: $${esc(r.cost_usd??r.usd)}</p><p>Model: ${esc(r.model)}</p></section>`;detail.classList.remove('hidden')}
 function renderEvals(x){const labels={};for(const run of x.runs??[])labels[run.id]=[...(run.tables??[])];const sections=x.tables.trim().split(/\\n(?==== )/).filter(s=>s.startsWith('=== '));evals.innerHTML=sections.map(section=>{const lines=section.split('\\n'),head=lines.shift().replace(/^=== | ===$/g,''),run=head.split(':')[0].trim(),label=(labels[run]??[]).shift()??head,rows=[];for(const line of lines){const m=line.match(/^(\\S+)\\s+(-?\\d+)\\s+(-?\\d+)\\s+([+-]?\\d+)$/);if(m)rows.push(m.slice(1))}const table=rows.length?`<table><thead><tr><th>Metric<th>Baseline<th>Arm<th>Delta</tr></thead><tbody>${rows.map(r=>`<tr><td>${esc(r[0])}<td>${esc(r[1])}<td>${esc(r[2])}<td>${esc(r[3])}</tr>`).join('')}</tbody></table>`:'';const prose=lines.filter(line=>!rows.some(r=>line.trim().startsWith(r[0]))&& !line.trim().startsWith('metric ')).join('\\n').trim();return `<section class=wide><h3>${esc(run)} // ${esc(label)}</h3>${table}<pre>${esc(prose)}</pre></section>`}).join('')+(x.error?`<section class="wide bad"><h3>SCORER ERROR</h3>${esc(x.error)}</section>`:'')}
 async function loadEvals(){evals.textContent='Re-deriving…';const x=await fetch('/dashboard/api/evals').then(r=>r.json());renderEvals(x)}
 refresh();loadEvals();

@@ -72,7 +72,9 @@ def test_dashboard_page_recreates_the_datalinks_look_without_assets() -> None:
     assert "<article class=faction" in response.text
     assert "<div id=factions class=factions>" in response.text
     assert "OFFERED ACTION SPACE" in response.text
-    assert "PLAN DIRECTIVES" in response.text
+    assert "DIRECTIVES IN FORCE" in response.text
+    assert "GROUNDING FACTS" in response.text
+    assert "GROUNDING_NOTE" in response.text
     assert "DISAGREEMENT" in response.text
     assert "setTimeout(refresh,delay)" in response.text
     assert "IDLE SINCE" in response.text
@@ -190,3 +192,114 @@ def test_quiet_log_is_reported_as_idle(tmp_path: Path) -> None:
     live = client.get("/dashboard/api/live").json()
     assert live["active"] is False
     assert live["idle_seconds"] > 15
+
+
+# ---------------------------------------------------------------------------
+# na-cjv slice 1: the why-view. These assert the two distinctions the panel
+# exists to preserve, because both failures are silent — an ambiguous panel
+# renders perfectly and simply answers a different question than the reader asked.
+# ---------------------------------------------------------------------------
+
+
+def test_an_in_force_directive_carries_what_became_of_it() -> None:
+    """`in_force` minus `followed` must not read as "the model ignored it".
+
+    MEASURED on ladder-attempt4: `unsatisfied` is populated on 609 of 610 decisions and the
+    panel rendered it on none, so four directives in force with two followed left the other
+    two unexplained.
+    """
+    from neural_amplifier.dashboard import directive_dispositions
+
+    rows = directive_dispositions(
+        {
+            "in_force": ["expand-20-by-80", "hq-formers-before-pods", "arbitration-court"],
+            "followed": ["expand-20-by-80"],
+            "unsatisfied": ["hq-formers-before-pods"],
+            "overrode": ["arbitration-court"],
+        }
+    )
+    got = {r["id"]: r["dispositions"] for r in rows}
+    assert got["expand-20-by-80"] == ["followed"]
+    assert got["hq-formers-before-pods"] == ["unsatisfied"]
+    assert got["arbitration-court"] == ["overrode"]
+
+
+def test_a_directive_with_no_recorded_disposition_is_labelled_not_dropped() -> None:
+    from neural_amplifier.dashboard import directive_dispositions
+
+    rows = directive_dispositions({"in_force": ["lonely-directive"], "followed": []})
+    assert rows == [{"id": "lonely-directive", "dispositions": [], "in_force": True}]
+
+
+def test_the_three_kinds_of_no_grounding_are_distinguishable() -> None:
+    """absent / degraded / empty must never collapse into one blank.
+
+    The degraded case is a FAULT. If it renders the same as "the graph had nothing to say",
+    a failed retrieval is reported as a quiet healthy nothing — the exact class this panel
+    is built to make visible.
+    """
+    from neural_amplifier.dashboard import grounding_state
+
+    absent = grounding_state({"quipu_absent": True, "quipu_facts": []}, None)
+    degraded = grounding_state({"quipu_degraded": True, "quipu_facts": []}, None)
+    empty = grounding_state({"quipu_hits": 0, "quipu_facts": []}, None)
+
+    assert absent["state"] == "absent"
+    assert degraded["state"] == "degraded"
+    assert empty["state"] == "empty"
+    # the labels a reader actually sees must differ too, not just the enum
+    assert len({absent["label"], degraded["label"], empty["label"]}) == 3
+
+
+def test_grounding_marks_which_facts_were_actually_cited() -> None:
+    from neural_amplifier.dashboard import grounding_state
+
+    got = grounding_state(
+        {
+            "quipu_hits": 2,
+            "quipu_facts": ["unit:colony-pod expands the base count", "tech:centauri unrelated"],
+            "quipu_cited": ["unit:colony-pod"],
+        },
+        None,
+    )
+    assert got["state"] == "present"
+    assert [f["cited"] for f in got["facts"]] == [True, False]
+
+
+def test_grounding_falls_back_to_the_world_view_list() -> None:
+    """The retriever writes facts into the world view; the knowledge block is a summary."""
+    from neural_amplifier.dashboard import grounding_state
+
+    got = grounding_state({"quipu_hits": 1}, {"grounding": ["base:hq holds 3 minerals"]})
+    assert [f["text"] for f in got["facts"]] == ["base:hq holds 3 minerals"]
+
+
+def test_the_decision_endpoint_carries_the_why_block(tmp_path: Path, monkeypatch) -> None:
+    """End to end: the API a browser calls must actually ship the block."""
+    from neural_amplifier.decisions import DecisionRecord
+
+    log = DecisionLog(tmp_path / "decisions.jsonl")
+    log.write(
+        DecisionRecord(
+            turn=7,
+            faction="Peacekeepers",
+            engine="thinker",
+            scope="base",
+            surface_id="base.production",
+            tier="llm",
+            world_view_hash="h",
+            action_space_size=2,
+            chosen=[{"action_id": "unit:0", "reason": "expansion is the binding lever"}],
+            reason="expansion is the binding lever",
+            plan={"in_force": ["expand-20-by-80"], "unsatisfied": ["expand-20-by-80"]},
+            knowledge={"quipu_absent": True, "quipu_facts": [], "hank_verdict": "allow"},
+        )
+    )
+    client = TestClient(create_app(brain=ScriptedBrain(), log=log))
+    body = client.get("/dashboard/api/decisions/0").json()
+    why = body["why"]
+    assert why["directives"] == [
+        {"id": "expand-20-by-80", "dispositions": ["unsatisfied"], "in_force": True}
+    ]
+    assert why["grounding"]["state"] == "absent"
+    assert why["guard"]["verdict"] == "allow"
