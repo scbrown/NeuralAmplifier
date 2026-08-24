@@ -20,6 +20,8 @@ import json
 import subprocess
 from typing import Any
 
+import pytest
+
 from neural_amplifier.claude_code_brain import _why_it_failed
 
 
@@ -78,3 +80,153 @@ def test_the_message_is_bounded() -> None:
     """A brain error becomes a degrade_reason on every fallback record; it cannot be unbounded."""
     why = _why()(_done(json.dumps({"result": "x" * 5000}), "y" * 5000))
     assert len(why) < 700
+
+
+# --------------------------------------------------------------------------------------
+# Retrying a failure the service itself calls temporary — measured on ladder-attempt4.
+# --------------------------------------------------------------------------------------
+
+from neural_amplifier.claude_code_brain import _is_transient  # noqa: E402
+
+
+def test_the_measured_529_is_recognised_as_transient() -> None:
+    """The exact string the row produced, once the reason stopped being blank."""
+    assert _is_transient(
+        "result: API Error: 529 Overloaded. This is a server-side issue, usually temporary "
+        "— try again in a moment."
+    )
+
+
+def test_a_quota_wall_is_NOT_retried() -> None:
+    """Retrying one of these cannot succeed for hours; it spends a blocked game thread."""
+    assert not _is_transient("result: Usage limit reached for this account.")
+    assert not _is_transient("result: You have exceeded your quota.")
+    # and it must lose even when a transient-looking token is also present
+    assert not _is_transient("result: Usage limit reached. API Error: 529 seen earlier.")
+
+
+def test_a_bad_model_is_NOT_retried() -> None:
+    assert not _is_transient(
+        "result: There's an issue with the selected model (bogus). It may not exist or you may "
+        "not have access to it."
+    )
+
+
+def test_an_empty_reason_is_not_treated_as_transient() -> None:
+    """The old blank message must not become a licence to retry everything."""
+    assert not _is_transient("")
+    assert not _is_transient("both stdout and stderr were EMPTY")
+
+
+# --------------------------------------------------------------------------------------
+# The LOOP, not just the predicate. Classifying 529 correctly is worth nothing if nothing
+# retries on it — and a predicate test cannot tell the difference.
+# --------------------------------------------------------------------------------------
+
+from pathlib import Path  # noqa: E402
+
+from neural_amplifier.claude_code_brain import ClaudeCodeBrain  # noqa: E402
+from neural_amplifier.contract import WorldView  # noqa: E402
+
+FIXTURES = Path(__file__).parent / "fixtures"
+
+_A_529 = json.dumps(
+    {
+        "is_error": True,
+        "result": "API Error: 529 Overloaded. This is a server-side issue, usually temporary.",
+    }
+)
+_A_QUOTA = json.dumps({"is_error": True, "result": "Usage limit reached for this account."})
+
+
+def _reply(action_id: str) -> str:
+    return json.dumps(
+        {
+            "is_error": False,
+            "total_cost_usd": 0.0,
+            "result": json.dumps(
+                {"choices": [{"action_id": action_id, "reason": "because"}], "directives": []}
+            ),
+        }
+    )
+
+
+def _world() -> WorldView:
+    raw = (FIXTURES / "thinker_base_production.json").read_text()
+    return WorldView.model_validate(json.loads(raw))
+
+
+def _scripted(monkeypatch: Any, mod: Any, outcomes: list[tuple[int, str]]) -> list[int]:
+    """Replace subprocess.run with a script of (returncode, stdout) and count the calls."""
+    calls: list[int] = []
+
+    def fake_run(*_a: Any, **_k: Any) -> subprocess.CompletedProcess:
+        code, out = outcomes[len(calls)]
+        calls.append(1)
+        return subprocess.CompletedProcess(args=["claude"], returncode=code, stdout=out, stderr="")
+
+    monkeypatch.setattr(mod.subprocess, "run", fake_run)
+    monkeypatch.setattr(mod.time, "sleep", lambda _s: None)
+    return calls
+
+
+def test_a_529_is_actually_RETRIED_and_the_second_attempt_is_used(monkeypatch: Any) -> None:
+    """The regression that matters: one transient failure must not become a fallback."""
+    from neural_amplifier import claude_code_brain as mod
+
+    world = _world()
+    action = world.action_space[0].id
+    calls = _scripted(monkeypatch, mod, [(1, _A_529), (0, _reply(action))])
+    brain = ClaudeCodeBrain()
+
+    orders = brain.decide(world)
+
+    assert len(calls) == 2, "the transient failure was not retried"
+    assert brain.transient_retries == 1
+    assert orders.choices[0].action_id == action
+
+
+def test_the_retry_is_BOUNDED(monkeypatch: Any) -> None:
+    """Two transient failures still fail, and are not retried a third time."""
+    from neural_amplifier import claude_code_brain as mod
+    from neural_amplifier.brain import BrainError
+
+    calls = _scripted(monkeypatch, mod, [(1, _A_529), (1, _A_529)])
+    brain = ClaudeCodeBrain()
+
+    with pytest.raises(BrainError) as caught:
+        brain.decide(_world())
+
+    assert len(calls) == 2, "retried more times than TRANSIENT_RETRIES allows"
+    assert brain.transient_retries == 1
+    assert "529" in str(caught.value), "the surviving error must still name the cause"
+
+
+def test_a_quota_wall_is_not_retried_by_the_LOOP(monkeypatch: Any) -> None:
+    """Predicate and loop must agree; a quota failure costs exactly one attempt."""
+    from neural_amplifier import claude_code_brain as mod
+    from neural_amplifier.brain import BrainError
+
+    calls = _scripted(monkeypatch, mod, [(1, _A_QUOTA), (0, _reply("unit:0"))])
+    brain = ClaudeCodeBrain()
+
+    with pytest.raises(BrainError):
+        brain.decide(_world())
+
+    assert len(calls) == 1, "a quota wall must not spend a second attempt"
+    assert brain.transient_retries == 0
+
+
+def test_a_clean_call_does_not_count_a_retry(monkeypatch: Any) -> None:
+    """Anti-vacuity: the counter must be able to stay at zero."""
+    from neural_amplifier import claude_code_brain as mod
+
+    world = _world()
+    action = world.action_space[0].id
+    calls = _scripted(monkeypatch, mod, [(0, _reply(action))])
+    brain = ClaudeCodeBrain()
+
+    brain.decide(world)
+
+    assert len(calls) == 1
+    assert brain.transient_retries == 0

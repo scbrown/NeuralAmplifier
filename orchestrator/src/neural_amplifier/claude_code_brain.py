@@ -29,6 +29,7 @@ from __future__ import annotations
 import json
 import re
 import subprocess
+import time
 
 from .brain import _SYSTEM, DEFAULT_MODEL, BrainError
 from .contract import Orders, WorldView
@@ -81,7 +82,53 @@ turn — see the section above for when that applies and what makes a plan check
 
 
 
-def _why_it_failed(done: "subprocess.CompletedProcess[str]") -> str:
+#: Substrings that identify a failure the upstream service itself calls TEMPORARY.
+#:
+#: MEASURED on ladder-attempt4, 2026-08-24 — and only visible because the reason stopped being
+#: blank. Every one of the row's fallbacks was:
+#:
+#:     API Error: 529 Overloaded. This is a server-side issue, usually temporary
+#:
+#: which had been recorded as `claude -p exited 1: ` with the cause as the empty string. I read
+#: the blank as local contention and reported it as such; the account had 17% of its five-hour
+#: and 46% of its seven-day budget left, which never fitted that story. It was upstream.
+#:
+#: A usage or quota limit is deliberately NOT here. Retrying one of those cannot succeed for
+#: hours, so a retry would spend the game thread's time on a certain failure — the opposite of
+#: what this list is for.
+TRANSIENT_MARKERS = (
+    "529",
+    "overloaded",
+    "api error: 500",
+    "api error: 502",
+    "api error: 503",
+    "internal server error",
+    "connection error",
+    "connection reset",
+)
+
+#: Retry a transient failure this many times before giving up. ONE by default, and the reason is
+#: cost, not caution: a failing attempt on this row took 185,994 ms, because the CLI already
+#: retries internally before it reports. So each extra attempt costs another ~3 minutes of a
+#: BLOCKED GAME THREAD, and a generous retry count would turn one decision into a ten-minute
+#: stall. One retry converts a 3-minute failure into either a real decision or a 6-minute one,
+#: which is the trade worth making once and not three times.
+TRANSIENT_RETRIES = 1
+
+#: Wait between attempts. Short, because 529 clears in seconds when it clears at all, and the
+#: expensive part is the attempt rather than the gap.
+RETRY_BACKOFF_SECONDS = 2.0
+
+
+def _is_transient(reason: str) -> bool:
+    """Whether a failure reason is one the service itself describes as temporary."""
+    low = reason.lower()
+    if "usage limit" in low or "quota" in low:
+        return False
+    return any(marker in low for marker in TRANSIENT_MARKERS)
+
+
+def _why_it_failed(done: subprocess.CompletedProcess[str]) -> str:
     """The diagnosis is on STDOUT, and reporting only stderr throws it away.
 
     MEASURED 2026-08-24 against the real CLI (`claude -p --output-format json` with a bad
@@ -141,6 +188,10 @@ class ClaudeCodeBrain:
         #: failure rate would report stability it had not measured.
         self.malformed = 0
         self.cost_usd = 0.0
+        #: Transient upstream failures that were retried. Counted rather than hidden: a row whose
+        #: decisions each needed a retry is a different measurement from one whose did not, and
+        #: nothing else in the record would show it.
+        self.transient_retries = 0
 
     def _system(self) -> str:
         system = _SYSTEM
@@ -164,21 +215,33 @@ class ClaudeCodeBrain:
         if self.model:
             argv += ["--model", self.model]
 
-        try:
-            done = subprocess.run(
-                argv,
-                input=world_view.model_dump_json(),
-                capture_output=True,
-                text=True,
-                timeout=self.timeout,
-            )
-        except subprocess.TimeoutExpired as exc:
-            raise BrainError(f"claude -p timed out after {self.timeout}s") from exc
-        except OSError as exc:
-            raise BrainError(f"could not run claude: {exc}") from exc
+        payload = world_view.model_dump_json()
+        for attempt in range(TRANSIENT_RETRIES + 1):
+            try:
+                done = subprocess.run(
+                    argv,
+                    input=payload,
+                    capture_output=True,
+                    text=True,
+                    timeout=self.timeout,
+                )
+            except subprocess.TimeoutExpired as exc:
+                raise BrainError(f"claude -p timed out after {self.timeout}s") from exc
+            except OSError as exc:
+                raise BrainError(f"could not run claude: {exc}") from exc
 
-        if done.returncode != 0:
-            raise BrainError(f"claude -p exited {done.returncode}: {_why_it_failed(done)}")
+            if done.returncode == 0:
+                break
+
+            why = _why_it_failed(done)
+            # A failure the service calls temporary must not become a permanent `safe fallback`
+            # in the row's record on the first try. Anything else fails immediately: retrying a
+            # bad model or a quota wall spends a blocked game thread on a certain failure.
+            if attempt < TRANSIENT_RETRIES and _is_transient(why):
+                self.transient_retries += 1
+                time.sleep(RETRY_BACKOFF_SECONDS * (attempt + 1))
+                continue
+            raise BrainError(f"claude -p exited {done.returncode}: {why}")
 
         try:
             envelope = json.loads(done.stdout)
