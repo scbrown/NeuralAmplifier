@@ -2,7 +2,13 @@ from __future__ import annotations
 
 import json
 import os
+import re
+import shutil
+import subprocess
+import tempfile
 from pathlib import Path
+
+import pytest
 
 from fastapi.testclient import TestClient
 
@@ -75,6 +81,48 @@ def test_dashboard_page_recreates_the_datalinks_look_without_assets() -> None:
     assert "Baseline<th>Arm<th>Delta" in response.text
     assert "refresh();loadEvals();" in response.text
     assert "<img" not in response.text
+
+
+def _inline_script(text: str) -> str:
+    match = re.search(r"<script>(.*)</script>", text, re.S)
+    assert match, "the page has no inline script"
+    return match.group(1)
+
+
+def test_the_page_script_actually_parses() -> None:
+    """na-uq1: every substring assertion above passed while the page rendered NOTHING.
+
+    `DASHBOARD_HTML` is a plain triple-quoted string, so a `\\n` written for JavaScript is
+    consumed by PYTHON and emitted as a real newline. A JS regex literal and a JS string
+    literal cannot span lines, so `renderEvals`'s `split(/\\n(?==== )/)` became a SyntaxError —
+    and a SyntaxError anywhere in an inline script means the WHOLE script never executes, so
+    `refresh()` was never defined and never ran. Measured in a real browser:
+    `Invalid regular expression: missing /`, with the API serving turn 62 and 430 decisions.
+
+    The author already knew about the double-escape — `\\\\S` and `\\\\d` on the same line are
+    correct. Three `\\n` were missed, and no test could see it, because presence is not
+    validity: `"function renderEvals" in response.text` is true of a script that cannot run.
+    """
+    client = TestClient(create_app(brain=ScriptedBrain(), log=DecisionLog(Path(os.devnull))))
+    script = _inline_script(client.get("/dashboard").text)
+
+    # Node-free, and specific to the defect: these three must survive as the two characters
+    # backslash-n, not as a line break.
+    assert r"split(/\n(?==== )/)" in script
+    assert r"section.split('\n')" in script
+    assert r".join('\n').trim()" in script
+
+    node = shutil.which("node")
+    if node is None:  # pragma: no cover - CI without node still gets the assertions above
+        pytest.skip("node not available for a real syntax check")
+    with tempfile.NamedTemporaryFile("w", suffix=".js", delete=False) as fh:
+        fh.write(script)
+        path = fh.name
+    try:
+        done = subprocess.run([node, "--check", path], capture_output=True, text=True)
+    finally:
+        os.unlink(path)
+    assert done.returncode == 0, f"the served script does not parse:\n{done.stderr}"
 
 
 def test_dashboard_publishes_the_real_game_directive_report() -> None:
