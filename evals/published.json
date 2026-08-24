@@ -22,6 +22,14 @@
       "retained": "the per-turn observation logs for all three arms. NOT the 2.8GB game copy or its autosaves — the numbers in the table come only from the logs."
     },
     {
+      "id": "na-mmp",
+      "tables": ["per-directive attention and override rates for the M2 real-game arm"],
+      "derives": [
+        ["scripts/directive_report.py", "evals/runs/na-mmp/decisions.jsonl"]
+      ],
+      "retained": "the 723 decision records carrying the M2 plan blocks, copied byte-for-byte from the original m1c run. NOT the game copy, saves, model credentials, or Wine prefix."
+    },
+    {
       "id": "na-clk",
       "tables": ["win ladder rows", "seed 1 base census at turns 13 / 21 / 123"],
       "derives": [

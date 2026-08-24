@@ -77,6 +77,15 @@ def test_dashboard_page_recreates_the_datalinks_look_without_assets() -> None:
     assert "<img" not in response.text
 
 
+def test_dashboard_publishes_the_real_game_directive_report() -> None:
+    result = TestClient(create_app(brain=ScriptedBrain())).get("/dashboard/api/evals").json()
+
+    assert result["ok"] is True
+    assert any(run["id"] == "na-mmp" for run in result["runs"])
+    assert "hold-reserve-floor" in result["tables"]
+    assert "723 decisions with a plan block" in result["tables"]
+
+
 def test_missing_world_view_store_keeps_the_known_faction_visible(tmp_path: Path) -> None:
     log = DecisionLog(tmp_path / "decisions.jsonl")
     source = json.loads((FIXTURES / "thinker_base_production.json").read_text())
