@@ -127,6 +127,22 @@ def audit_regressions(before: dict[str, dict], after: dict[str, dict]) -> list[s
     return problems
 
 
+def merge_audit(
+    snapshot: dict[str, dict], live_tail: dict[str, dict]
+) -> tuple[dict[str, dict], list[str]]:
+    """Append the rotated live tail without pretending it is the whole audit history.
+
+    ``interactions.jsonl`` is deliberately rotated after snapshotting.  Absence from that
+    short tail therefore says nothing about a historical record.  An id collision, however,
+    must be byte-for-byte equivalent or the append-only contract has been violated.
+    """
+    problems = []
+    for interaction_id in sorted(set(snapshot) & set(live_tail)):
+        if snapshot[interaction_id] != live_tail[interaction_id]:
+            problems.append(f"audit {interaction_id}: append-only record changed")
+    return {**snapshot, **live_tail}, problems
+
+
 def regressions(before: dict[str, dict], after: dict[str, dict]) -> list[str]:
     """Only ever-backwards changes. Additions and edits are normal; losses are not."""
     problems: list[str] = []
@@ -187,7 +203,8 @@ def main() -> int:
 
     fresh = load(fresh_path)
     audit_path = live_audit_path()
-    fresh_audit = load(audit_path)
+    audit_base = committed_audit()
+    fresh_audit, audit_merge_problems = merge_audit(audit_base, load(audit_path))
     if not fresh:
         # An empty export over a populated tracker is the worst possible write.
         print("refusing to install an empty export", file=sys.stderr)
@@ -214,6 +231,7 @@ def main() -> int:
         return 1
 
     problems = regressions(committed(), fresh)
+    problems.extend(audit_merge_problems)
     problems.extend(audit_regressions(committed_audit(), fresh_audit))
     if problems:
         print("refusing to write: the export loses work relative to HEAD", file=sys.stderr)
@@ -224,7 +242,12 @@ def main() -> int:
 
     before = load(TRACKED) if TRACKED.exists() else {}
     TRACKED.write_text(fresh_path.read_text())
-    AUDIT_SNAPSHOT.write_text(audit_path.read_text())
+    AUDIT_SNAPSHOT.write_text(
+        "".join(
+            json.dumps(record, separators=(",", ":"), ensure_ascii=False) + "\n"
+            for record in fresh_audit.values()
+        )
+    )
     fresh_path.unlink(missing_ok=True)
 
     changed = [i for i in fresh if before.get(i) != fresh.get(i)]
