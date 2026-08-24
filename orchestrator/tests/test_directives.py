@@ -81,6 +81,11 @@ def test_an_absolute_comparator_without_a_target_is_refused() -> None:
         validate(saving(target=None))
 
 
+def test_a_checkpoint_whose_window_can_never_open_is_refused() -> None:
+    with pytest.raises(DirectiveError, match="could never be active"):
+        validate(saving(starts_turn=61, horizon_turn=60))
+
+
 def test_a_rejected_directive_does_not_cost_the_decision_it_arrived_with() -> None:
     """The choice may be perfectly good even where the plan attached to it was not expressible."""
     good = saving()
@@ -260,6 +265,32 @@ def test_in_force_drops_what_has_expired() -> None:
 
     assert [d.id for d in store.in_force(turn=35)] == ["grow"]
     assert len(store) == 1  # and the expired one is gone, not merely hidden
+
+
+def test_staged_checkpoints_activate_one_at_a_time_without_losing_the_future() -> None:
+    """A compounding plan is a curve, not several conflicting endpoints shown together."""
+    store = DirectiveStore()
+    store.add(
+        [
+            saving(id="bases-10", metric="base_count", target=10, starts_turn=1, horizon_turn=50),
+            saving(id="bases-20", metric="base_count", target=20, starts_turn=51, horizon_turn=80),
+            saving(id="bases-40", metric="base_count", target=40, starts_turn=81, horizon_turn=110),
+        ]
+    )
+
+    assert [d.id for d in store.in_force(turn=40)] == ["bases-10"]
+    assert len(store) == 3, "reading turn 40 must not delete future checkpoints"
+    assert [d.id for d in store.in_force(turn=65)] == ["bases-20"]
+    assert len(store) == 2, "only the expired checkpoint is retired"
+    assert [d.id for d in store.in_force(turn=95)] == ["bases-40"]
+
+
+def test_future_checkpoint_is_neither_relevant_nor_evaluated() -> None:
+    future = saving(id="bases-20", metric="base_count", target=20, starts_turn=51)
+    world = view(turn=50, metrics={"base_count": 9})
+
+    assert relevant([future], world).hits == []
+    assert evaluate([future], world) == []
 
 
 def test_directives_survive_a_restart(tmp_path: Path) -> None:

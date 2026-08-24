@@ -116,6 +116,10 @@ class Directive(_Model):
     entities: list[str] = Field(default_factory=list)
 
     issued_turn: int | None = None
+    #: The first turn on which this directive applies. Hand-written plans use this to express a
+    #: sequence of measurable checkpoints without showing every future target at once. ``None``
+    #: preserves the original behaviour: active as soon as it is issued or loaded.
+    starts_turn: int | None = None
     #: The turn after which this stops applying. ``None`` means it stands until revoked, which
     #: should be rare: a plan with no horizon cannot fail, and one that cannot fail teaches
     #: nothing.

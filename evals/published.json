@@ -78,6 +78,12 @@
       "tables": [],
       "derives": [],
       "retained": "fixtures; no published numeric table."
+    },
+    {
+      "id": "na-e55",
+      "tables": [],
+      "derives": [],
+      "retained": "the compound-expansion plan and its exact checkpoint rationale. No outcome table is published until the seed-1 A/B arm has run; README.md states the slope acceptance and fairness profile."
     }
   ]
 }

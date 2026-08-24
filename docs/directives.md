@@ -43,9 +43,16 @@ buys the appearance of strategy.
   "priority": 7,                        // 1-10, see below
   "entities": ["fac:the-weather-paradigm"],   // datalinks ids — the retrieval keys
   "issued_turn": 30,
+  "starts_turn": 30,                    // optional: keep a future checkpoint dormant
   "horizon_turn": 60                    // a plan that cannot fail teaches nothing
 }
 ```
+
+`starts_turn` and `horizon_turn` make a sequence of checkpoints a curve rather than a pile of
+conflicting endpoints. Future checkpoints remain in the persisted plan but are not shown or
+evaluated until their window opens; expired checkpoints are retired. This is useful for plans
+whose success is a rate — for example 10 bases by turn 50, 20 by turn 80, then 40 by turn 110 —
+where showing only the final target would hide whether expansion is compounding soon enough.
 
 `increase`/`decrease`/`hold` are measured against a **baseline** stamped by the orchestrator from
 the world view that issued the directive — not supplied by the model, which was shown the number

@@ -64,6 +64,15 @@ def validate(directive: Directive) -> None:
         raise DirectiveError(
             f"{directive.comparator!r} needs a target — without one there is nothing to compare"
         )
+    if (
+        directive.starts_turn is not None
+        and directive.horizon_turn is not None
+        and directive.starts_turn > directive.horizon_turn
+    ):
+        raise DirectiveError(
+            f"starts_turn {directive.starts_turn} is after horizon_turn "
+            f"{directive.horizon_turn}; that directive could never be active"
+        )
 
 
 def accept(issued: Iterable[Directive], world_view: WorldView) -> tuple[list[Directive], list[str]]:
@@ -200,7 +209,7 @@ def relevant(
     (``ALWAYS_SHOW_PRIORITY``) is shown regardless, because a plan nobody is told about cannot be
     followed.
     """
-    live = [d for d in directives if not _expired(d, world_view.turn)]
+    live = [d for d in directives if _active(d, world_view.turn)]
     reported = set((world_view.metrics or {}).keys())
 
     # Hop 0 seeds: the resources this decision would move, and the entities it is about.
@@ -292,7 +301,7 @@ def evaluate(
     statuses: list[DirectiveStatus] = []
     for item in directives:
         directive = item.directive if isinstance(item, Hit) else item
-        if _expired(directive, world_view.turn):
+        if not _active(directive, world_view.turn):
             continue
         status = _status(directive, measurements)
         if isinstance(item, Hit):
@@ -326,6 +335,17 @@ def entities_shown(world_view: WorldView) -> set[str]:
 
 def _expired(directive: Directive, turn: int) -> bool:
     return directive.horizon_turn is not None and turn > directive.horizon_turn
+
+
+def _active(directive: Directive, turn: int) -> bool:
+    """Whether a directive belongs in this turn's plan.
+
+    Future checkpoints stay persisted but invisible. Deleting a not-yet-active checkpoint would
+    collapse a staged plan to its first target on the first store read.
+    """
+    return (directive.starts_turn is None or turn >= directive.starts_turn) and not _expired(
+        directive, turn
+    )
 
 
 def _status(directive: Directive, measurements: dict[str, float]) -> DirectiveStatus:
@@ -495,11 +515,12 @@ class DirectiveStore:
         that explains it. Expired ones are dropped from the store as they are noticed rather
         than in a sweep — the read is where the current turn is known.
         """
-        live = [d for d in self._by_id.values() if not _expired(d, turn)]
-        if len(live) != len(self._by_id):
-            self._by_id = {d.id: d for d in live}
+        expired = [d for d in self._by_id.values() if _expired(d, turn)]
+        if expired:
+            self._by_id = {k: d for k, d in self._by_id.items() if not _expired(d, turn)}
             self._save()
-        return sorted(live, key=lambda d: (d.issued_turn or 0, d.id))
+        live = [d for d in self._by_id.values() if _active(d, turn)]
+        return sorted(live, key=lambda d: (d.issued_turn or d.starts_turn or 0, d.id))
 
     def for_entities(self, entity_ids: Iterable[str]) -> list[Directive]:
         """Directives naming any of these datalinks entities.
