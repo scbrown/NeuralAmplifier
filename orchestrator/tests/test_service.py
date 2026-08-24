@@ -10,9 +10,20 @@ from fastapi.testclient import TestClient
 from neural_amplifier.brain import BrainError, ScriptedBrain
 from neural_amplifier.contract import Choice, Orders
 from neural_amplifier.decisions import DecisionLog
-from neural_amplifier.service import create_app
+from neural_amplifier.config import Brain, Config, Knowledge, Run
+from neural_amplifier.service import build_brain, create_app
 
 FIXTURES = Path(__file__).parent / "fixtures"
+
+
+def test_claude_code_is_an_explicit_served_brain() -> None:
+    config = Config(
+        brain=Brain(kind="claude-code", model=None, effort=None),
+        knowledge=Knowledge(),
+        run=Run(),
+    )
+
+    assert build_brain(config).name == "claude-code"
 
 
 def _payload(name: str) -> dict:

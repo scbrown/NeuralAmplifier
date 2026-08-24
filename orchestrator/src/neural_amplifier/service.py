@@ -63,6 +63,10 @@ def build_brain(config: Config | None = None) -> Brain:
     cfg = (config or load_config()).brain
     if cfg.kind == "agent":
         return AgentBrain()
+    if cfg.kind == "claude-code":
+        from .claude_code_brain import ClaudeCodeBrain
+
+        return ClaudeCodeBrain(model=cfg.model)
     if cfg.kind != "claude":
         return ScriptedBrain()
     kwargs: dict[str, str] = {}
