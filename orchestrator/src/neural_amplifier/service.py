@@ -388,6 +388,32 @@ def _accepted_status(pending: Pending) -> str:
     return "accepted — returned to the engine to apply"
 
 
+
+def _brain_counters(brain: object) -> dict[str, object]:
+    """The brain's own counters, which reached no output at all until now.
+
+    `malformed`, `cost_usd` and `transient_retries` are maintained on the brain and were read
+    by nothing — measured 2026-08-24 by grepping the whole source tree for readers and finding
+    only the assignments. `malformed`'s docstring claims it is "surfaced rather than swallowed —
+    a lane that hid its own failure rate would report stability it had not measured", and it was
+    surfaced nowhere; `transient_retries` was added the same night, for exactly that reason, and
+    made just as invisible. A fault that is silently retried away is a fault nobody can ever
+    root-cause: after a retry landed on a live row, a clean decision came back and there was no
+    way to tell the retry from the upstream storm easing.
+
+    Only counters the brain actually has are reported, so a scripted or agent brain does not
+    grow empty fields, and adding one here can never break a brain that lacks it.
+    """
+    out: dict[str, object] = {}
+    for name in ("malformed", "transient_retries"):
+        value = getattr(brain, name, None)
+        if isinstance(value, int):
+            out[name] = value
+    cost = getattr(brain, "cost_usd", None)
+    if isinstance(cost, (int, float)):
+        out["cost_usd"] = round(float(cost), 6)
+    return out
+
 def create_app(
     brain: Brain | None = None,
     log: DecisionLog | None = None,
@@ -1285,7 +1311,11 @@ def create_app(
         """Live coverage for this run — the assertion surface for the harness."""
         if orchestrator.log is None:
             return {"error": "no decision log configured (set NA_DECISION_LOG)"}
-        return report(orchestrator.log.read()).summary()
+        summary = report(orchestrator.log.read()).summary()
+        brain_counters = _brain_counters(orchestrator.brain)
+        if brain_counters:
+            summary["brain"] = brain_counters
+        return summary
 
     return app
 
