@@ -32,6 +32,24 @@ G = sys.argv[1]
 OUT = sys.argv[2]
 DEADLINE = time.time() + float(sys.argv[3] if len(sys.argv) > 3 else 5400)
 
+#: Turn the viability checkpoint off for a DIAGNOSTIC run (`--no-viability`).
+#:
+#: Not a convenience. The checkpoint stops a run at turn 20 when our faction is below the bar,
+#: which is exactly right for a ladder row and exactly wrong when the thing being investigated is
+#: WHY it is below the bar — every diagnostic run was ending three turns after the first colony
+#: pod appeared. The flag is explicit, per-invocation, and says so in the log, so a ladder row
+#: cannot pick it up by accident and a reader of the log cannot mistake one for the other.
+NO_VIABILITY = "--no-viability" in sys.argv
+
+#: Stop sending SPACE (`--no-space`), for a DIAGNOSTIC run.
+#:
+#: SPACE is "skip this unit", and a skip consumes the unit's whole movement allowance. The driver
+#: sends it when the turn will not advance, on the assumption that whatever is waiting for orders
+#: is something we do not care about. A COLONY POD waiting for orders is something we care about
+#: very much: na-1lj measures pods that hold a stable waypoint five tiles away, on the same land
+#: region, with a full movement budget, and never change tile.
+NO_SPACE = "--no-space" in sys.argv
+
 
 def cmd(line, wait=15.0):
     res = os.path.join(G, "na-command-result")
@@ -134,7 +152,11 @@ def main():
         #
         # Applied ONCE, at the checkpoint turn, to all seven factions by the same rule — a check
         # that re-ran later would start refusing seeds for losing, which is a different thing.
-        if turn is not None and turn >= VIABLE_BY_TURN and not checked_viability:
+        if turn is not None and turn >= VIABLE_BY_TURN and not checked_viability and NO_VIABILITY:
+            checked_viability = True
+            log.write("%s viability at turn %s: CHECK DISABLED (--no-viability). This run is a "
+                      "DIAGNOSTIC and is not a ladder row.\n" % (time.strftime("%H:%M:%S"), turn))
+        elif turn is not None and turn >= VIABLE_BY_TURN and not checked_viability:
             checked_viability = True
             st = cmd("game-state")
             if st and st.get("detail"):
@@ -210,8 +232,9 @@ def main():
             # needed depends on state we cannot see, and both are harmless when not needed.
             note = "no dialog (%dx%d)" % (w, h)
             if stuck >= 2:
-                key(VK_SPACE if stuck % 2 else VK_RETURN)
-                note += " — sent %s" % ("SPACE" if stuck % 2 else "RETURN")
+                send_space = bool(stuck % 2) and not NO_SPACE
+                key(VK_SPACE if send_space else VK_RETURN)
+                note += " — sent %s" % ("SPACE" if send_space else "RETURN")
         stuck = stuck + 1 if turn == last_turn else 0
         last_turn = turn
         log.write(
