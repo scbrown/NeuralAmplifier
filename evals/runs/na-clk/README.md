@@ -148,3 +148,37 @@ with no crash dump, which is the first time a seeded run has crossed the turn-12
 
 Seed 1 has still never produced a RESULT — refused once, crashed once — so the third attempt is
 the row, not a rerun for its own sake.
+
+
+## Attempt 3 — unresolved at turn 143, blocked on a Planetary Council vote
+
+The furthest any seeded run has got, and the first to fail for a reason that is neither a stall
+nor a crash.
+
+| turn | 1 | 2 | 3 | 4 | 5 | 6 | **7 (ours)** |
+|---|---|---|---|---|---|---|---|
+| 55 | 5 | 9 | 6 | 10 | 8 | 5 | **7** |
+| 91 | 39 | 30 | 18 | 13 | 20 | 26 | **10** |
+| 143 | 53 | 47 | 43 | 0 | 47 | 66 | **12** |
+
+**Level with the AIs at turn 55, last by turn 91.** We go linear, they go exponential. That is
+the first time this ladder has measured PLAY rather than a harness fault, and it is the number
+na-xb1 now has to move.
+
+**The expansion fix worked at scale**: `colony_built=17` and **79 unaffordable-first-step
+rescues** over the run, against 2 bases founded in every previous attempt. It also passed turns
+119 and 126 alive — the two points where the earlier attempts died — with malcolm's `b715cb2`
+holding.
+
+**Why it stopped**: a Planetary Council vote (ELECT PLANETARY GOVERNOR). The panel needs a
+CHOICE, not a dismissal — clicking VOTE opens a candidate picker with OK/CANCEL — and the harness
+has no sanctioned way to make one. That is na-4lr's unfinished ROUTE half.
+
+**Disclosed**: before ending the row I clicked VOTE twice and CANCEL once by hand trying to clear
+it. None worked, and a row where the harness took game actions is not a clean measurement, so it
+is recorded on the row rather than left out of it. Voting for a Planetary Governor is a game
+action with consequences, which is exactly the line a win ladder must not cross to unblock
+itself — so the row ends here instead.
+
+The blocked state is kept as the fixture `council-vote-blocked`: load it and the surface is in
+front of you in 60 seconds instead of 143 turns of play.
