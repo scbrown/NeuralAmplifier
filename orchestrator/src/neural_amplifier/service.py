@@ -513,7 +513,13 @@ def create_app(
 
     @app.get("/dashboard/api/live")
     def dashboard_live() -> dict[str, object]:
-        return dashboard.live()
+        return dashboard.live_with_state()
+
+    @app.get("/dashboard/api/glossary")
+    def dashboard_glossary() -> dict[str, object]:
+        from .dashboard import glossary
+
+        return glossary()
 
     @app.get("/dashboard/api/decisions")
     def dashboard_decisions(limit: int = 100) -> list[dict[str, object]]:

@@ -74,11 +74,15 @@ def test_dashboard_page_recreates_the_datalinks_look_without_assets() -> None:
     assert "<div id=factions class=factions>" in response.text
     assert "OFFERED ACTION SPACE" in response.text
     assert "DIRECTIVES IN FORCE" in response.text
-    assert "GROUNDING FACTS" in response.text
+    # renamed in the plain-language pass: "grounding" is our word, not the reader's.
+    assert "FACTS THE MODEL WAS GIVEN" in response.text
     assert "GROUNDING_NOTE" in response.text
     assert "DISAGREEMENT" in response.text
     assert "setTimeout(refresh,delay)" in response.text
-    assert "IDLE SINCE" in response.text
+    # "IDLE SINCE <timestamp>" was replaced by a plain-language run banner: on a row
+    # stopped 79 minutes ago the old wording read as a page that had failed to load.
+    assert "id=banner" in response.text
+    assert "loadGlossary" in response.text
     assert "SPEND USD" in response.text
     assert "function renderEvals" in response.text
     assert "Baseline<th>Arm<th>Delta" in response.text
@@ -478,3 +482,67 @@ def test_the_graph_endpoint_is_served_and_reports_unconfigured(monkeypatch) -> N
     client = TestClient(create_app(brain=ScriptedBrain(), log=DecisionLog(Path(os.devnull))))
     body = client.get("/dashboard/api/graph").json()
     assert body["state"] == "unconfigured"
+
+
+def test_a_paused_run_says_the_game_stopped_not_that_the_page_is_stale() -> None:
+    """Stiwi, 2026-08-24: a quiet page with no explanation reads as broken.
+
+    "IDLE SINCE <timestamp>" is a fact about the ARTIFACTS. The reader manages a game and
+    wants a fact about the GAME.
+    """
+    from neural_amplifier.dashboard import run_state
+
+    got = run_state({"configured": True, "active": False, "idle_seconds": 4721.1, "turn": 78, "decisions": 610})
+    assert got["state"] == "paused"
+    assert "79 MINUTES" in got["headline"]
+    assert "not a broken page" in got["detail"]
+
+
+def test_run_state_separates_no_run_from_paused_from_live() -> None:
+    from neural_amplifier.dashboard import run_state
+
+    states = {
+        run_state({"configured": False})["state"],
+        run_state({"configured": True, "active": False, "idle_seconds": 300, "turn": 1})["state"],
+        run_state({"configured": True, "active": True, "turn": 5, "decisions": 9})["state"],
+    }
+    assert states == {"no-run", "paused", "live"}
+
+
+def test_every_internal_term_the_page_shows_has_a_plain_name_and_help() -> None:
+    """The audience manages a game, not this service. "degraded" meant nothing to him."""
+    from neural_amplifier.dashboard import PLAIN_DISPOSITION, _DISPOSITIONS, glossary
+
+    g = glossary()
+    # every disposition the why-panel can render is translated
+    assert set(_DISPOSITIONS) <= set(PLAIN_DISPOSITION)
+    for group in ("tier", "disposition", "grounding"):
+        for key, entry in g[group].items():
+            assert entry["name"] and entry["help"], f"{group}.{key} has no plain wording"
+            assert entry["name"] != key, f"{group}.{key} was not actually translated"
+    assert "engine's safe default" in g["fallback"]["help"]
+
+
+def test_the_fallback_wording_never_calls_it_degraded() -> None:
+    """The word the user could not read must not survive in what he is shown."""
+    from neural_amplifier.dashboard import glossary
+
+    g = glossary()
+    shown = " ".join(
+        entry["name"] for group in ("tier", "disposition", "grounding") for entry in g[group].values()
+    )
+    shown += " " + g["fallback"]["name"]
+    assert "degraded" not in shown.lower()
+
+
+def test_the_glossary_endpoint_is_served() -> None:
+    client = TestClient(create_app(brain=ScriptedBrain(), log=DecisionLog(Path(os.devnull))))
+    body = client.get("/dashboard/api/glossary").json()
+    assert body["tier"]["llm"]["name"] == "LLM decided"
+    assert body["disposition"]["unsatisfied"]["name"] == "Goal not met yet"
+
+
+def test_live_endpoint_carries_the_run_state() -> None:
+    client = TestClient(create_app(brain=ScriptedBrain(), log=DecisionLog(Path(os.devnull))))
+    body = client.get("/dashboard/api/live").json()
+    assert body["run_state"]["state"] in {"no-run", "paused", "live"}

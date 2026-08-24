@@ -112,6 +112,99 @@ def grounding_state(knowledge: dict[str, Any], view: dict[str, Any] | None) -> d
 
 #: Read-only graph browsing. The dashboard NEVER writes to the graph and never calls the brain;
 #: it forwards two shapes of read to whatever Quipu the run was pointed at.
+#: The page is read by someone who manages a GAME, not by someone who maintains this service
+#: (Stiwi, 2026-08-24: "degraded" meant nothing to him). Every internal term the page shows gets
+#: a plain-language name and a one-line explanation, defined ONCE here in Python so the glossary
+#: is unit-testable and the HTML cannot drift from it.
+PLAIN_TIER = {
+    "llm": ("LLM decided", "The language model chose this action."),
+    "deterministic": ("Engine decided", "The game engine's own logic chose this, with no model involved."),
+    "deferred": ("Put off", "The decision was parked to be answered later."),
+    "queued": ("Waiting", "The decision is queued and has not been answered yet."),
+    "plan": ("From the plan", "A pre-set plan entry supplied this action."),
+}
+
+PLAIN_DISPOSITION = {
+    "followed": ("Followed", "This turn's choice obeyed this directive."),
+    "overrode": ("Overrode", "The model deliberately went against this directive."),
+    "unsatisfied": (
+        "Goal not met yet",
+        "About the GOAL, not this choice: the directive's target has not been reached. A"
+        " directive can be followed this turn and still have its goal unmet.",
+    ),
+    "unmeasurable": (
+        "Could not check",
+        "The number this directive tracks was not in view, so it could not be checked here.",
+    ),
+    "rejected": ("Rejected", "The directive was refused when it was issued."),
+    "conflicts": ("Conflicts", "This directive pulls against another one in force."),
+}
+
+PLAIN_GROUNDING = {
+    "absent": ("No knowledge graph connected", "This run was not given a graph, so nothing was ever looked up."),
+    "degraded": ("Knowledge graph FAILED", "A graph was connected and it did not answer. The model decided without facts it should have had."),
+    "empty": ("Nothing relevant found", "The graph answered and had no fact for this situation."),
+    "present": ("Facts retrieved", "These facts were looked up and shown to the model."),
+}
+
+PLAIN_FALLBACK = (
+    "Fallback — engine default used",
+    "The language model could not be reached, so the engine's safe default action was applied"
+    " instead. The reasoning below is not the model's.",
+)
+
+
+def glossary() -> dict[str, Any]:
+    """Every internal term the page can show, with its plain name and explanation."""
+    return {
+        "tier": {k: {"name": v[0], "help": v[1]} for k, v in PLAIN_TIER.items()},
+        "disposition": {k: {"name": v[0], "help": v[1]} for k, v in PLAIN_DISPOSITION.items()},
+        "grounding": {k: {"name": v[0], "help": v[1]} for k, v in PLAIN_GROUNDING.items()},
+        "fallback": {"name": PLAIN_FALLBACK[0], "help": PLAIN_FALLBACK[1]},
+    }
+
+
+def run_state(live: dict[str, Any], paused_after: float = 120.0) -> dict[str, Any]:
+    """LIVE / PAUSED / NO RUN, in words, with how long it has been that way.
+
+    A page that has simply gone quiet is indistinguishable from a broken one, and the old
+    banner said only "IDLE SINCE <timestamp>" — which on a row stopped 79 minutes ago reads as
+    a page that failed to load rather than a game that is not running. Idle is a fact about the
+    ARTIFACTS; the reader wants a fact about the GAME.
+    """
+    if not live.get("configured"):
+        return {
+            "state": "no-run",
+            "headline": "NO RUN CONNECTED",
+            "detail": "This dashboard has not been pointed at a game's decision log.",
+        }
+    idle = live.get("idle_seconds")
+    if live.get("active"):
+        return {
+            "state": "live",
+            "headline": f"LIVE // TURN {live.get('turn') or '—'}",
+            "detail": f"{live.get('decisions') or 0} decisions so far. The game is advancing.",
+        }
+    if idle is None:
+        return {
+            "state": "paused",
+            "headline": "PAUSED",
+            "detail": "A run is connected but has never written a decision.",
+        }
+    minutes = idle / 60.0
+    span = f"{idle:.0f} seconds" if idle < 120 else (
+        f"{minutes:.0f} minutes" if minutes < 120 else f"{minutes / 60:.1f} hours"
+    )
+    return {
+        "state": "paused",
+        "headline": f"PAUSED // NO NEW DECISION FOR {span.upper()}",
+        "detail": (
+            f"The game reached turn {live.get('turn') or '—'} and stopped there."
+            " The page is up to date — this is the game not running, not a broken page."
+        ),
+        "idle_seconds": idle,
+    }
+
 def _graph_post(base: str, path: str, payload: dict[str, Any], timeout: float = 8.0) -> Any:
     import urllib.error
     import urllib.request
@@ -330,6 +423,8 @@ class DashboardReader:
             "active": idle_seconds is not None and idle_seconds < 15,
             "updated_at": updated_at.isoformat() if updated_at else None,
             "idle_seconds": round(idle_seconds, 1) if idle_seconds is not None else None,
+            # computed here rather than in the page so the wording is testable
+            "run_state": None,  # filled below
             "game_id": newest.game_id if newest is not None else None,
             "turn": newest.turn if newest is not None else None,
             "decisions": len(records),
@@ -342,6 +437,12 @@ class DashboardReader:
             or (newest_view or {}).get("victory_state"),
             "factions": factions,
         }
+
+    def live_with_state(self) -> dict[str, Any]:
+        """``live()`` plus the plain-language run state the banner shows."""
+        payload = self.live()
+        payload["run_state"] = run_state(payload)
+        return payload
 
     def decisions(self, limit: int = 100) -> list[dict[str, Any]]:
         all_records = self.records()
@@ -506,11 +607,12 @@ DASHBOARD_HTML = """<!doctype html>
 <html lang=en><head><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1">
 <title>Neural Amplifier // Planetary Datalinks</title><style>
 :root{color-scheme:dark;--bg:#02070d;--panel:#071b28;--edge:#39c9d2;--text:#b8f5ef;--muted:#689aa0;--gold:#f1d56a;--bad:#ff6262}
-*{box-sizing:border-box}body{margin:0;background:radial-gradient(circle at 50% 0,#0b3142,#02070d 55%);color:var(--text);font:14px/1.45 "Lucida Console",Monaco,monospace}header{padding:18px 24px;border-bottom:2px ridge var(--edge);letter-spacing:.15em;background:#031019}h1{margin:0;color:#7ffff5;font-size:20px}.status{color:var(--gold)}main{padding:18px;display:grid;gap:16px}.panel{background:linear-gradient(145deg,#0a2634,#04121b);border:3px ridge #287f8b;box-shadow:0 0 16px #001 inset;padding:14px}h2{font-size:15px;color:#5fe8f0;border-bottom:1px solid #287f8b;padding-bottom:7px;margin:0 0 12px}.summary,.factions{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px}.datum,.faction{border:1px solid #1b6873;padding:8px}.datum b{display:block;color:#fff;font-size:18px}.faction{border-left:7px solid var(--faction)}.faction h3{margin:0 0 8px;color:#fff}.stats{display:grid;grid-template-columns:repeat(2,1fr);gap:4px}.stats span{color:var(--muted)}.stats b{color:var(--text);float:right}table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:7px;border-bottom:1px solid #164650}th{color:#64dfe6}.decision{cursor:pointer}.decision:hover{background:#123b48}.bad{color:var(--bad)}.tabs button{background:#092734;color:var(--text);border:2px ridge #287f8b;padding:8px 14px;cursor:pointer}.hidden{display:none}pre{white-space:pre-wrap;word-break:break-word;color:#c8f7f3;max-height:70vh;overflow:auto}.detail{position:fixed;inset:5%;z-index:2;overflow:auto}.close{float:right}.why{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px}.why section{border:1px solid #1b6873;padding:10px}.why h3{color:var(--gold);margin:0 0 8px}.why .wide{grid-column:1/-1}.why ul{margin:0;padding-left:20px}.disagreement{border-color:var(--bad)!important;color:#ffb0b0}.dstate{display:inline-block;padding:1px 7px;margin-left:6px;border:1px solid currentColor;font-size:11px;letter-spacing:.08em}.d-followed{color:#55e06f}.d-overrode{color:var(--gold)}.d-unsatisfied{color:#ff9f43}.d-unmeasurable,.d-rejected,.d-conflicts{color:var(--muted)}.d-none{color:var(--muted)}.gs{padding:2px 8px;border:1px solid currentColor;letter-spacing:.08em}.gs-absent,.gs-empty{color:var(--muted)}.gs-degraded{color:var(--bad)}.gs-present{color:#55e06f}.cited{color:#7ffff5}.uncited{color:var(--muted)}@media(max-width:700px){main{padding:8px}.panel{overflow:auto}}
+*{box-sizing:border-box}body{margin:0;background:radial-gradient(circle at 50% 0,#0b3142,#02070d 55%);color:var(--text);font:14px/1.45 "Lucida Console",Monaco,monospace}header{padding:18px 24px;border-bottom:2px ridge var(--edge);letter-spacing:.15em;background:#031019}h1{margin:0;color:#7ffff5;font-size:20px}.status{color:var(--gold)}main{padding:18px;display:grid;gap:16px}.panel{background:linear-gradient(145deg,#0a2634,#04121b);border:3px ridge #287f8b;box-shadow:0 0 16px #001 inset;padding:14px}h2{font-size:15px;color:#5fe8f0;border-bottom:1px solid #287f8b;padding-bottom:7px;margin:0 0 12px}.summary,.factions{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px}.datum,.faction{border:1px solid #1b6873;padding:8px}.datum b{display:block;color:#fff;font-size:18px}.faction{border-left:7px solid var(--faction)}.faction h3{margin:0 0 8px;color:#fff}.stats{display:grid;grid-template-columns:repeat(2,1fr);gap:4px}.stats span{color:var(--muted)}.stats b{color:var(--text);float:right}table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:7px;border-bottom:1px solid #164650}th{color:#64dfe6}.decision{cursor:pointer}.decision:hover{background:#123b48}.bad{color:var(--bad)}.tabs button{background:#092734;color:var(--text);border:2px ridge #287f8b;padding:8px 14px;cursor:pointer}.hidden{display:none}pre{white-space:pre-wrap;word-break:break-word;color:#c8f7f3;max-height:70vh;overflow:auto}.detail{position:fixed;inset:5%;z-index:2;overflow:auto}.close{float:right}.why{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px}.why section{border:1px solid #1b6873;padding:10px}.why h3{color:var(--gold);margin:0 0 8px}.why .wide{grid-column:1/-1}.why ul{margin:0;padding-left:20px}.disagreement{border-color:var(--bad)!important;color:#ffb0b0}.dstate{display:inline-block;padding:1px 7px;margin-left:6px;border:1px solid currentColor;font-size:11px;letter-spacing:.08em}.d-followed{color:#55e06f}.d-overrode{color:var(--gold)}.d-unsatisfied{color:#ff9f43}.d-unmeasurable,.d-rejected,.d-conflicts{color:var(--muted)}.d-none{color:var(--muted)}.gs{padding:2px 8px;border:1px solid currentColor;letter-spacing:.08em}.gs-absent,.gs-empty{color:var(--muted)}.gs-degraded{color:var(--bad)}.gs-present{color:#55e06f}.cited{color:#7ffff5}.uncited{color:var(--muted)}.banner{padding:12px 16px;margin:0 0 4px;border:3px ridge #287f8b;background:#071b28}.banner b{display:block;font-size:17px;letter-spacing:.1em}.banner.paused{border-color:var(--gold);color:var(--gold)}.banner.live{border-color:#55e06f;color:#9ef7b5}.banner.no-run{border-color:var(--bad);color:#ffb0b0}.banner span{color:var(--muted)}abbr{text-decoration:underline dotted;cursor:help}@media(max-width:700px){main{padding:8px}.panel{overflow:auto}}
 </style></head><body><header><h1>NEURAL AMPLIFIER // PLANETARY DATALINKS</h1><span id=status class=status>LINKING…</span></header><main>
+<div id=banner class=banner><b>LINKING…</b></div>
 <section class=panel><h2>MISSION CONTROL</h2><div id=summary class=summary></div></section>
 <section class=panel><h2>FACTION STATUS</h2><div id=factions class=factions></div></section>
-<section class=panel><h2>DECISION ARCHIVE</h2><table><thead><tr><th>Turn<th>Faction<th>Surface<th>Tier<th>Choice<th>Native<th>Latency<th>Cost</tr></thead><tbody id=decisions></tbody></table></section>
+<section class=panel><h2>DECISION ARCHIVE</h2><table><thead><tr><th>Turn<th>Faction<th>What was decided<th><abbr title="Who actually chose: the language model, or the game engine's own default when the model could not be reached.">Decided by</abbr><th>Action taken<th><abbr title="What the game engine would have picked on its own, for comparison.">Engine would pick</abbr><th>Took<th>Cost</tr></thead><tbody id=decisions></tbody></table></section>
 <section class=panel><h2>KNOWLEDGE GRAPH</h2><input id=gq placeholder="search the graph (e.g. colony pod)" style="width:60%;background:#092734;color:var(--text);border:2px ridge #287f8b;padding:7px"> <button onclick="loadGraph(gq.value)">SEARCH</button> <button onclick="loadGraph('')">CENSUS</button><div id=graph>Loading graph…</div></section>
 <section class=panel><h2>STRATEGY IN FORCE</h2><div id=strategy>Loading directives…</div></section>
 <section class=panel><h2>EVALUATION DATALINKS</h2><button onclick=loadEvals()>RE-DERIVE COMMITTED TABLES</button><div id=evals class=why>Loading committed scorers…</div></section></main>
@@ -525,15 +627,17 @@ DASHBOARD_HTML = """<!doctype html>
 //: 'LINK DEGRADED // '+e could never be shown either, so the page had no way to report its own
 //: failure. na-uq1.
 const statusEl=document.getElementById('status');
+let GLOSS={};
+async function loadGlossary(){try{GLOSS=await fetch('/dashboard/api/glossary').then(r=>r.json())}catch(e){GLOSS={}}}
 const esc=x=>String(x??'—').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-async function refresh(){let delay=30000;try{const [l,d]=await Promise.all([fetch('/dashboard/api/live').then(r=>r.json()),fetch('/dashboard/api/decisions?limit=100').then(r=>r.json())]);delay=l.active?5000:30000;statusEl.textContent=!l.configured?'NO RUN ARTIFACTS CONFIGURED':l.active?`LIVE // TURN ${l.turn??'—'} // ${l.decisions} DECISIONS`:`IDLE SINCE ${l.updated_at?new Date(l.updated_at).toLocaleString():'UNKNOWN'}`;summary.innerHTML=[['GAME',l.game_id],['TURN',l.turn],['DECISIONS',l.decisions],['SPEND USD',l.spend],['RUN',l.run_id],['ARM',l.arm],['SEED',l.seed],['DIFFICULTY',l.fairness?.difficulty],['SLOT',l.fairness?.slot],['VICTORY',l.victory]].map(x=>`<div class=datum>${esc(x[0])}<b>${esc(x[1])}</b></div>`).join('');factions.innerHTML=l.factions.map(f=>`<article class=faction style="--faction:${esc(f.colour)}"><h3>${esc(f.name)}</h3><div class=stats>${[['BASES',f.bases],['POP',f.population],['MINERALS',f.minerals],['ENERGY',f.energy],['INCOME',f.income],['LABS',f.labs],['MILITARY',f.military],['TECHS',f.techs]].map(x=>`<span>${esc(x[0])}<b>${esc(x[1])}</b></span>`).join('')}</div></article>`).join('');decisions.innerHTML=d.map(x=>`<tr class="decision ${x.disagreed?'bad':''}" onclick="showDecision(${x.id})"><td>${esc(x.turn)}<td>${esc(x.faction)}<td>${esc(x.surface)}<td>${esc(x.degraded?'DEGRADED':x.tier)}<td>${esc(x.chosen.join(', '))}<td>${esc(x.native)}<td>${esc(x.latency_ms)} ms<td>${esc(x.cost)}</tr>`).join('')}catch(e){statusEl.textContent='LINK DEGRADED // '+e}finally{setTimeout(refresh,delay)}}
+async function refresh(){let delay=30000;try{const [l,d]=await Promise.all([fetch('/dashboard/api/live').then(r=>r.json()),fetch('/dashboard/api/decisions?limit=100').then(r=>r.json())]);delay=l.active?5000:30000;const rs=l.run_state??{state:'paused',headline:'UNKNOWN',detail:''};statusEl.textContent=rs.headline;banner.className='banner '+rs.state;banner.innerHTML=`<b>${esc(rs.headline)}</b><span>${esc(rs.detail)}</span>`;summary.innerHTML=[['GAME',l.game_id],['TURN',l.turn],['DECISIONS',l.decisions],['SPEND USD',l.spend],['RUN',l.run_id],['ARM',l.arm],['SEED',l.seed],['DIFFICULTY',l.fairness?.difficulty],['SLOT',l.fairness?.slot],['VICTORY',l.victory]].map(x=>`<div class=datum>${esc(x[0])}<b>${esc(x[1])}</b></div>`).join('');factions.innerHTML=l.factions.map(f=>`<article class=faction style="--faction:${esc(f.colour)}"><h3>${esc(f.name)}</h3><div class=stats>${[['BASES',f.bases],['POP',f.population],['MINERALS',f.minerals],['ENERGY',f.energy],['INCOME',f.income],['LABS',f.labs],['MILITARY',f.military],['TECHS',f.techs]].map(x=>`<span>${esc(x[0])}<b>${esc(x[1])}</b></span>`).join('')}</div></article>`).join('');decisions.innerHTML=d.map(x=>`<tr class="decision ${x.disagreed?'bad':''}" onclick="showDecision(${x.id})"><td>${esc(x.turn)}<td>${esc(x.faction)}<td>${esc(x.surface)}<td>${x.degraded?`<abbr title="${esc(GLOSS.fallback?.help??'')}">${esc(GLOSS.fallback?.name??'Fallback')}</abbr>`:`<abbr title="${esc(GLOSS.tier?.[x.tier]?.help??'')}">${esc(GLOSS.tier?.[x.tier]?.name??x.tier)}</abbr>`}<td>${esc(x.chosen.join(', '))}<td>${esc(x.native)}<td>${esc(x.latency_ms)} ms<td>${esc(x.cost)}</tr>`).join('')}catch(e){statusEl.textContent='LINK DEGRADED // '+e}finally{setTimeout(refresh,delay)}}
 //: Each empty state gets its OWN sentence. "No facts" for all three would erase the
 //: distinction the orchestrator went to the trouble of recording (quipu_absent vs
 //: quipu_degraded vs a real query that matched nothing) - and the degraded case is a
 //: FAULT that would then read as a quiet, healthy nothing.
 const GROUNDING_NOTE={absent:'No retriever was configured for this run, so nothing was ever asked. This is not "the graph had nothing to say".',degraded:'Retrieval was configured and FAILED for this decision. The brain decided without grounding it should have had.',empty:'Retrieval ran and matched nothing. The graph genuinely had no fact for this surface.',present:''};
 const list=x=>(x??[]).map(v=>`<li>${esc(typeof v==='object'?JSON.stringify(v):v)}</li>`).join('')||'<li>—</li>';
-async function showDecision(id){const x=await fetch('/dashboard/api/decisions/'+id).then(r=>r.json()),r=x.record,p=r.plan??{},w=x.why??{directives:[],grounding:{state:'empty',label:'',facts:[]},guard:{}},chosen=(r.chosen??[]).map(c=>c.action_id??c.id),native=x.native_choice,disagreed=native!=null&&!chosen.map(String).includes(String(native));detailText.innerHTML=`<section><h3>CONTEXT</h3><b>TURN ${esc(r.turn)} // ${esc(r.faction)}</b><p>${esc(r.surface_id)}</p><p>Tier: ${esc(r.tier)} // Applied: ${esc(chosen.join(', '))}</p><p>Degraded: ${esc(r.degraded)} ${esc(r.degrade_reason??r.fallback_reason??'')}</p></section><section class="${disagreed?'disagreement':''}"><h3>CHOICE ${disagreed?'// DISAGREEMENT':''}</h3><p>Chosen: ${esc(chosen.join(', '))}</p><p>Native: ${esc(native)}</p></section><section class=wide><h3>WHY</h3><p>${esc(r.reason)}</p></section><section class=wide><h3>OFFERED ACTION SPACE</h3><table><thead><tr><th>Action<th>Cost<th>Turns<th>Effects</tr></thead><tbody>${(x.action_space??[]).map(a=>`<tr><td>${esc(a.action??a.name??a.id)}<td>${esc(a.cost)} ${esc(a.cost_unit??'')}<td>${esc(a.turns??a.turns_to_completion)}<td>${esc(a.effects??a.board_effects)}</tr>`).join('')}</tbody></table></section><section class=wide><h3>DIRECTIVES IN FORCE</h3>${w.plan_absent?'<p class=d-none>NO PLAN IN FORCE FOR THIS DECISION</p>':(w.directives??[]).length?`<table><thead><tr><th>Directive<th>Disposition</tr></thead><tbody>${(w.directives??[]).map(d=>`<tr><td>${esc(d.id)}<td>${d.dispositions.length?d.dispositions.map(k=>`<span class="dstate d-${esc(k)}">${esc(k.toUpperCase())}</span>`).join(''):'<span class="dstate d-none">IN FORCE // NO DISPOSITION RECORDED</span>'}</tr>`).join('')}</tbody></table>`:'<p class=d-none>NONE</p>'}</section><section class=wide><h3>GROUNDING FACTS <span class="gs gs-${esc(w.grounding.state)}">${esc(w.grounding.label)}</span></h3>${w.grounding.facts.length?`<ul>${w.grounding.facts.map(f=>`<li class=${f.cited?'cited':'uncited'}>${f.cited?'[CITED] ':''}${esc(f.text)}</li>`).join('')}</ul>`:`<p class=d-none>${esc(GROUNDING_NOTE[w.grounding.state]??'')}</p>`}</section><section><h3>GUARD</h3><p>Verdict: ${esc(w.guard.verdict)}${w.guard.absent?' // ADAPTER ABSENT':''}${w.guard.degraded?' // DEGRADED':''}</p><b>ADVISORIES</b><ul>${list(w.guard.advisories)}</ul><b>STRIPPED</b><ul>${list(w.guard.stripped)}</ul></section><section><h3>TELEMETRY</h3><p>Latency: ${esc(r.latency_ms)} ms</p><p>Cost: $${esc(r.cost_usd??r.usd)}</p><p>Model: ${esc(r.model)}</p></section>`;detail.classList.remove('hidden')}
+async function showDecision(id){const x=await fetch('/dashboard/api/decisions/'+id).then(r=>r.json()),r=x.record,p=r.plan??{},w=x.why??{directives:[],grounding:{state:'empty',label:'',facts:[]},guard:{}},chosen=(r.chosen??[]).map(c=>c.action_id??c.id),native=x.native_choice,disagreed=native!=null&&!chosen.map(String).includes(String(native));detailText.innerHTML=`<section><h3>CONTEXT</h3><b>TURN ${esc(r.turn)} // ${esc(r.faction)}</b><p>${esc(r.surface_id)}</p><p>Tier: ${esc(r.tier)} // Applied: ${esc(chosen.join(', '))}</p><p>Degraded: ${esc(r.degraded)} ${esc(r.degrade_reason??r.fallback_reason??'')}</p></section><section class="${disagreed?'disagreement':''}"><h3>CHOICE ${disagreed?'// DISAGREEMENT':''}</h3><p>Chosen: ${esc(chosen.join(', '))}</p><p>Native: ${esc(native)}</p></section><section class=wide><h3>WHY</h3><p>${esc(r.reason)}</p></section><section class=wide><h3>OFFERED ACTION SPACE</h3><table><thead><tr><th>Action<th>Cost<th>Turns<th>Effects</tr></thead><tbody>${(x.action_space??[]).map(a=>`<tr><td>${esc(a.action??a.name??a.id)}<td>${esc(a.cost)} ${esc(a.cost_unit??'')}<td>${esc(a.turns??a.turns_to_completion)}<td>${esc(a.effects??a.board_effects)}</tr>`).join('')}</tbody></table></section><section class=wide><h3>DIRECTIVES IN FORCE</h3>${w.plan_absent?'<p class=d-none>NO PLAN IN FORCE FOR THIS DECISION</p>':(w.directives??[]).length?`<table><thead><tr><th>Directive<th>Disposition</tr></thead><tbody>${(w.directives??[]).map(d=>`<tr><td>${esc(d.id)}<td>${d.dispositions.length?d.dispositions.map(k=>`<span class="dstate d-${esc(k)}" title="${esc(GLOSS.disposition?.[k]?.help??'')}">${esc((GLOSS.disposition?.[k]?.name??k).toUpperCase())}</span>`).join(''):'<span class="dstate d-none">IN FORCE // NO DISPOSITION RECORDED</span>'}</tr>`).join('')}</tbody></table>`:'<p class=d-none>NONE</p>'}</section><section class=wide><h3>FACTS THE MODEL WAS GIVEN <abbr class="gs gs-${esc(w.grounding.state)}" title="${esc(GLOSS.grounding?.[w.grounding.state]?.help??'')}">${esc(GLOSS.grounding?.[w.grounding.state]?.name??w.grounding.label)}</abbr></h3>${w.grounding.facts.length?`<ul>${w.grounding.facts.map(f=>`<li class=${f.cited?'cited':'uncited'}>${f.cited?'[CITED] ':''}${esc(f.text)}</li>`).join('')}</ul>`:`<p class=d-none>${esc(GROUNDING_NOTE[w.grounding.state]??'')}</p>`}</section><section><h3>GUARD</h3><p>Verdict: ${esc(w.guard.verdict)}${w.guard.absent?' // ADAPTER ABSENT':''}${w.guard.degraded?' // DEGRADED':''}</p><b>ADVISORIES</b><ul>${list(w.guard.advisories)}</ul><b>STRIPPED</b><ul>${list(w.guard.stripped)}</ul></section><section><h3>TELEMETRY</h3><p>Latency: ${esc(r.latency_ms)} ms</p><p>Cost: $${esc(r.cost_usd??r.usd)}</p><p>Model: ${esc(r.model)}</p></section>`;detail.classList.remove('hidden')}
 function renderEvals(x){const labels={};for(const run of x.runs??[])labels[run.id]=[...(run.tables??[])];const sections=x.tables.trim().split(/\\n(?==== )/).filter(s=>s.startsWith('=== '));evals.innerHTML=sections.map(section=>{const lines=section.split('\\n'),head=lines.shift().replace(/^=== | ===$/g,''),run=head.split(':')[0].trim(),label=(labels[run]??[]).shift()??head,rows=[];for(const line of lines){const m=line.match(/^(\\S+)\\s+(-?\\d+)\\s+(-?\\d+)\\s+([+-]?\\d+)$/);if(m)rows.push(m.slice(1))}const table=rows.length?`<table><thead><tr><th>Metric<th>Baseline<th>Arm<th>Delta</tr></thead><tbody>${rows.map(r=>`<tr><td>${esc(r[0])}<td>${esc(r[1])}<td>${esc(r[2])}<td>${esc(r[3])}</tr>`).join('')}</tbody></table>`:'';const prose=lines.filter(line=>!rows.some(r=>line.trim().startsWith(r[0]))&& !line.trim().startsWith('metric ')).join('\\n').trim();return `<section class=wide><h3>${esc(run)} // ${esc(label)}</h3>${table}<pre>${esc(prose)}</pre></section>`}).join('')+(x.error?`<section class="wide bad"><h3>SCORER ERROR</h3>${esc(x.error)}</section>`:'')}
 async function loadGraph(q){const u=q?('/dashboard/api/graph?q='+encodeURIComponent(q)):'/dashboard/api/graph';const x=await fetch(u).then(r=>r.json());
 //: Each non-ok state gets its own sentence. An unconfigured graph and an unreachable one are
@@ -551,5 +655,5 @@ const note=(x.definitions_missing??[]).length?`<p class=d-none>Directive TEXT sh
 const totals=(x.totals??[]).map(t=>{const def=defs[t.id]??{};return `<tr><td>${esc(t.id)}${def.intent?`<br><span class=uncited>${esc(def.intent)}</span>`:''}<td>${esc(def.metric)} ${esc(def.comparator)} ${esc(def.target)}<td>${esc(t.in_force)}<td>${esc(t.followed??0)}<td>${esc(t.overrode??0)}<td>${esc(t.unsatisfied??0)}<td>${esc(t.unmeasurable??0)}<td>${t.followed_share==null?'—':esc(t.followed_share)}</tr>`}).join('');
 strategy.innerHTML=note+(totals?`<table><thead><tr><th>Directive<th>Metric<th>Turns in force<th>Followed<th>Overrode<th>Unsatisfied<th>Unmeasurable<th>Followed share</tr></thead><tbody>${totals}</tbody></table>`:'<p class=d-none>No directives were in force in this run.</p>')}
 async function loadEvals(){evals.textContent='Re-deriving…';const x=await fetch('/dashboard/api/evals').then(r=>r.json());renderEvals(x)}
-refresh();loadEvals();loadStrategy();loadGraph('');
+loadGlossary().then(()=>{refresh();loadEvals();loadStrategy();loadGraph('')});
 </script></body></html>"""
