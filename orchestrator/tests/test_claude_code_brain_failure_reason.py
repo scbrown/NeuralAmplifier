@@ -217,6 +217,45 @@ def test_a_quota_wall_is_not_retried_by_the_LOOP(monkeypatch: Any) -> None:
     assert brain.transient_retries == 0
 
 
+def test_a_quota_refusal_emits_a_provider_neutral_event(
+    monkeypatch: pytest.MonkeyPatch, tmp_path
+) -> None:
+    import neural_amplifier.claude_code_brain as subject
+
+    event_log = tmp_path / "calls.jsonl"
+    monkeypatch.setattr(subject, "PROVIDER_EVENT_LOG", event_log)
+    monkeypatch.setattr(subject, "transient_attempts", lambda: 1)
+    monkeypatch.setattr(
+        subject.subprocess,
+        "run",
+        lambda *args, **kwargs: subject.subprocess.CompletedProcess(
+            args[0], 1, '{"result":"You have hit your monthly spend limit"}', ""
+        ),
+    )
+
+    with pytest.raises(Exception, match="spend limit"):
+        ClaudeCodeBrain().decide(_world())
+
+    event = json.loads(event_log.read_text())
+    assert event["provider"] == "anthropic"
+    assert event["outcome"] == "failure"
+    assert event["reason"] == "quota"
+
+
+def test_telemetry_failure_never_masks_the_provider_result(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import neural_amplifier.claude_code_brain as subject
+
+    class RefusingPath:
+        @property
+        def parent(self):
+            raise OSError("telemetry unavailable")
+
+    monkeypatch.setattr(subject, "PROVIDER_EVENT_LOG", RefusingPath())
+    subject._record_provider_call("failure", "quota")
+
+
 def test_a_clean_call_does_not_count_a_retry(monkeypatch: Any) -> None:
     """Anti-vacuity: the counter must be able to stay at zero."""
     from neural_amplifier import claude_code_brain as mod
