@@ -306,12 +306,10 @@ So the brain is backed by two sibling services (design:
   masquerade as canonical); curated **strategy/doctrine** (real SMAC unit designs and base build
   orders — see [docs/strategy-knowledge.md](docs/strategy-knowledge.md)); and **learned memory**
   (tactics and opponent patterns the brain accumulates across games).
-  Production runs select the dedicated dataset
-  `urn:neuralamplifier:dataset:agent-grounding` from [`na.toml`](na.toml), backed by graph
-  `urn:neuralamplifier:graph:knowledge`. Grounding is fetched once at the `/turn` boundary,
-  cached by `(turn, faction_id)`, then filtered locally for each decision. A decision-time graph
-  query would multiply with every base/unit choice and is deliberately not the production path;
-  cross-faction cache reuse is refused so grounding cannot become a fog leak.
+  Grounding is fetched once at the `/turn` boundary, cached by `(turn, faction_id)`, then
+  filtered locally for each decision. A decision-time graph query would multiply with every
+  base/unit choice and is deliberately not the production path; cross-faction cache reuse is
+  refused so grounding cannot become a fog leak.
 - **[Yupana](https://github.com/scbrown/yupana) — hot in-memory board + guardrail harness.**
   Holds the per-faction, fog-limited board graph in memory (multi-tenant, copy-on-write) and runs
   a strategic **policy guard** and **what-if** analysis on proposed orders before they apply,

@@ -34,25 +34,14 @@ source-grounded and will save you a day.
 
 ## Tool Order: Context Before Code
 
-Use the deployed semantic tools before reconstructing context from files or memory:
+Use the repository's configured semantic and code-search tools before reconstructing context from
+files or memory:
 
-1. **MCP first.** Query Quipu with `quipu_search`, `quipu_query` or `quipu_ask` for prior
-   decisions, operational facts and graph relationships. Search code/docs with Bobbin's MCP
-   `search`, `grep` and `find_refs` tools. The deployed Homelab MCP also exposes
-   `quipu_episode` and generic `quipu_tool`; use those instead of composing write JSON in a
-   shell.
-2. **CLI second.** Use `bobbin search`, `bobbin grep` and related commands when MCP is not
-   available. The installed `quipu` CLI currently operates on a local `--db`; it is useful for
-   local graphs and validation but is not a remote-service client. Do not mistake a local query
-   for the deployed knowledge graph.
-3. **Documented HTTP fallback.** For Bobbin search, use `GET $BOBBIN_URL/search?q=...` (the
-   parameter is `q`). For Quipu, use JSON `POST` requests to `$QUIPU_URL/search` or
-   `$QUIPU_URL/query`. Writes such as `/episode`, and `/shapes` even when listing, require the
-   provisioned bearer; reads/search do not. Put episode/query bodies in files or stdin so prose
-   never becomes executable shell text.
-
-Search before minting a Quipu entity and reuse the existing node's exact name. Every episode
-node needs a loaded-vocabulary `type`; one invalid node rejects the whole episode.
+1. **MCP first.** Prefer the configured semantic-context and code-search MCP tools.
+2. **CLI second.** Use the corresponding project CLIs when MCP is unavailable.
+3. **Documented HTTP fallback.** Use the service's own HTTP documentation only when neither MCP
+   nor CLI is available. Keep environment-specific endpoints, credentials and deployment wiring
+   in private operator documentation, not this public repository.
 
 ## Design Invariants
 
