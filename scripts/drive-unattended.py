@@ -94,7 +94,44 @@ VK_SPACE = 32
 #:
 #: Long enough to ride out a modal that briefly deafens the channel; short enough that a
 #: finished run does not leave a driver polling for hours, which is the failure this exists for.
+#:
+#: This bound now applies ONLY to a silence with no live heartbeat behind it — see
+#: `heartbeat()` and BUSY_LIMIT. It counted every silence until na-xl3, and that conflated a
+#: game the driver had killed with a game that was simply busy answering.
 SILENT_LIMIT = 6
+
+#: Consecutive unanswered polls with a LIVE, ADVANCING heartbeat after which we stop anyway.
+#:
+#: A silence with the game's own tick still advancing is the game working, not the game gone:
+#: the input result channel is unavailable while a model decision is synchronously in flight.
+#: MEASURED on ladder-attempt4 turn 57 — four back-to-back `base.production` decisions of
+#: 29.5s / 26.7s / 47.7s / 15.8s (119.7s total) produced a 5-consecutive silence, one short of
+#: SILENT_LIMIT, on a game whose heartbeat never missed a beat. Decisions per turn rose 3.40 ->
+#: 9.78 over turns 0-48 and the plan mandates 20 bases by turn 80, so that burst gets LONGER;
+#: on the old rule the row was going to be stopped, and the log was going to say the game was
+#: gone. It was not.
+#:
+#: Still bounded, because a game that ticks forever without ever answering is also a failure —
+#: just a different one, and it deserves its own words.
+BUSY_LIMIT = 90
+
+
+def heartbeat():
+    """The game's OWN liveness tick, written by the game thread.
+
+    Returns `(ticks, age_seconds)`, or `(None, None)` when the file is absent or unreadable.
+
+    This is the discriminator the no-result classification was missing. It is written by the
+    game, not by us, so it separates the three cases the old message ran together:
+    absent -> gone; present but FROZEN -> stalled/deafened; ADVANCING -> busy.
+    """
+    path = os.path.join(G, "na-input-heartbeat")
+    try:
+        age = time.time() - os.stat(path).st_mtime
+        with open(path) as fh:
+            return json.load(fh).get("ticks"), age
+    except Exception:
+        return None, None
 
 
 def click(x, y):
@@ -117,29 +154,66 @@ def main():
     last_dialog = None
     tries = 0
     silent = 0
+    busy = 0
+    #: Seeded BEFORE the first poll on purpose. Without a baseline the first silent cycle has
+    #: nothing to compare against and falls through to "the game is gone" — the exact sentence
+    #: this classification exists to stop the driver saying about a live game.
+    last_ticks = heartbeat()[0]
     checked_viability = False
     while time.time() < DEADLINE:
         r = cmd("shot")
         if r is None:
-            # TWO causes, and the message used to name only one. A modal CAN deafen the channel;
-            # far more often the game has simply exited, and a driver that keeps polling a dead
-            # game logs "a modal can deafen the channel" every 20 seconds for hours. Read from
-            # outside that is indistinguishable from a live run parked on a dialog — it cost a
-            # real misdiagnosis, of a run that had finished cleanly at turn 140.
-            silent += 1
-            log.write(
-                "%s no-result (%d consecutive) — the game is gone, or a modal has deafened "
-                "the channel\n" % (time.strftime("%H:%M:%S"), silent)
-            )
-            if silent >= SILENT_LIMIT:
+            # THREE causes, and the message used to name two — then ran them together anyway.
+            # A modal CAN deafen the channel; the game CAN have exited; and — the one that was
+            # missing, na-xl3 — the game can simply be BUSY, because the input result channel is
+            # unavailable while a model decision is synchronously in flight. All three looked
+            # identical from the log, and the driver charged all three to one counter, so a busy
+            # game was on a six-cycle path to being declared dead.
+            #
+            # The game's own heartbeat separates them, and it costs one stat + one read.
+            ticks, hb_age = heartbeat()
+            evidence = "ticks=%s hb_age=%s" % (
+                ticks, "n/a" if hb_age is None else "%.0fs" % hb_age)
+            if ticks is not None and last_ticks is not None and ticks != last_ticks:
+                busy += 1
                 log.write(
-                    "no answer for %d cycles — treating the game as gone and stopping. A "
-                    "driver that outlives its game is noise, not patience.\n" % silent
+                    "%s no-result (%d consecutive) — BUSY: heartbeat advancing (%s, +%s "
+                    "ticks). The game is working, not gone; not counted against SILENT_LIMIT.\n"
+                    % (time.strftime("%H:%M:%S"), busy, evidence, ticks - last_ticks)
                 )
-                break
+                last_ticks = ticks
+                if busy >= BUSY_LIMIT:
+                    log.write(
+                        "no answer for %d cycles WITH a live advancing heartbeat — the game is "
+                        "alive and never answering. That is not a dead game and must not be "
+                        "logged as one; stopping so it gets looked at.\n" % busy
+                    )
+                    break
+            else:
+                silent += 1
+                why = ("no heartbeat file" if ticks is None
+                       else "heartbeat FROZEN at %s" % ticks)
+                log.write(
+                    "%s no-result (%d consecutive) — %s (%s): the game is gone, or a modal has "
+                    "deafened the channel\n"
+                    % (time.strftime("%H:%M:%S"), silent, why, evidence)
+                )
+                if ticks is not None:
+                    last_ticks = ticks
+                if silent >= SILENT_LIMIT:
+                    log.write(
+                        "no answer for %d cycles and no advancing heartbeat — treating the game "
+                        "as gone and stopping. A driver that outlives its game is noise, not "
+                        "patience.\n" % silent
+                    )
+                    break
             time.sleep(5)
             continue
         silent = 0
+        busy = 0
+        ticks, _ = heartbeat()
+        if ticks is not None:
+            last_ticks = ticks
         turn = r.get("turn")
         halted = r.get("halted")
 
