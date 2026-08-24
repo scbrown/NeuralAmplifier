@@ -3,7 +3,13 @@
 
 ## Why this exists
 
-`bd` auto-exports to `.beads/issues.jsonl` on a write, but that auto-export is **gated**. A
+The repository disables `bd` auto-export. When enabled it writes directly into the checkout
+that ran the lifecycle command, which made ordinary store updates dirty the shared deploy
+checkout and caused its correct clean-tree guard to refuse every automatic deployment until a
+human reconciled the projection. JSONL is therefore a deliberate tracked artifact, refreshed
+only through this command from an owned worktree.
+
+There is a second reason not to use auto-export: it is **gated**. A
 second write shortly after the first does not export, `bd` exits 0, and nothing says so — so the
 git-tracked tracker silently lags the store. Measured on this repo (na-2a9):
 

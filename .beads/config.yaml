@@ -69,4 +69,8 @@ sync.remote: "git+http://local_proxy@127.0.0.1:41729/git/scbrown/NeuralAmplifier
 agents:
     file: BD-TEMPLATE.md
 export:
-    auto: true
+    # The deploy checkout is also a bd client. Auto-export made every lifecycle write modify
+    # tracked JSONL there, so the deploy timer's correct ff-only/clean-tree guard refused until
+    # somebody hand-committed the projection. The store is Dolt; JSONL is a deliberate release
+    # artifact refreshed by `just beads-export`, never a side effect of an interactive write.
+    auto: false
