@@ -13,6 +13,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from neural_amplifier.brain import ScriptedBrain
+from neural_amplifier.dashboard import DashboardReader
 from neural_amplifier.decisions import DecisionLog
 from neural_amplifier.service import create_app
 
@@ -303,3 +304,104 @@ def test_the_decision_endpoint_carries_the_why_block(tmp_path: Path, monkeypatch
     ]
     assert why["grounding"]["state"] == "absent"
     assert why["guard"]["verdict"] == "allow"
+
+
+def _plan_log(tmp_path: Path) -> DecisionLog:
+    from neural_amplifier.decisions import DecisionRecord
+
+    log = DecisionLog(tmp_path / "decisions.jsonl")
+    for turn, plan in (
+        (1, {"in_force": ["expand", "reserve"], "followed": ["expand"], "unsatisfied": ["expand", "reserve"]}),
+        (2, {"in_force": ["expand", "reserve"], "overrode": ["reserve"], "unsatisfied": ["expand"]}),
+    ):
+        log.write(
+            DecisionRecord(
+                turn=turn,
+                faction="Peacekeepers",
+                engine="thinker",
+                scope="base",
+                tier="llm",
+                world_view_hash="h",
+                action_space_size=1,
+                chosen=[{"action_id": "unit:0"}],
+                plan=plan,
+            )
+        )
+    return log
+
+
+def test_strategy_reports_each_directive_per_turn_with_its_dispositions(tmp_path: Path) -> None:
+    reader = DashboardReader(_plan_log(tmp_path), None)
+    got = reader.strategy()
+    assert [t["turn"] for t in got["turns"]] == [1, 2]
+    totals = {t["id"]: t for t in got["totals"]}
+    assert totals["expand"]["in_force"] == 2
+    assert totals["expand"]["followed"] == 1
+    assert totals["expand"]["unsatisfied"] == 2
+    assert totals["reserve"]["overrode"] == 1
+
+
+def test_followed_share_is_over_turns_in_force_not_over_followed_plus_unsatisfied(
+    tmp_path: Path,
+) -> None:
+    """`followed` and `unsatisfied` co-occur, so the naive denominator exceeds the population.
+
+    MEASURED: followed+unsatisfied happens 568 times in ladder-attempt4. Dividing by their sum
+    would report a directive that was followed every single turn as roughly half-followed.
+    """
+    reader = DashboardReader(_plan_log(tmp_path), None)
+    totals = {t["id"]: t for t in reader.strategy()["totals"]}
+    # expand: in force twice, followed once -> 0.5, NOT 1/(1+2)=0.333
+    assert totals["expand"]["followed_share"] == 0.5
+
+
+def test_missing_plan_file_is_named_not_silently_rendered_as_bare_ids(tmp_path: Path) -> None:
+    reader = DashboardReader(_plan_log(tmp_path), None)
+    got = reader.strategy(None)
+    assert got["definitions_source"] == "unavailable"
+    assert got["definitions"] == {}
+    # the dispositions are still complete — only the TEXT is missing
+    assert got["totals"]
+
+
+def test_a_plan_file_supplies_the_directive_text(tmp_path: Path) -> None:
+    plan = tmp_path / "plan.json"
+    plan.write_text(
+        json.dumps(
+            {"directives": [{"id": "expand", "intent": "grow to 20 bases", "metric": "base_count"}]}
+        ),
+        encoding="utf-8",
+    )
+    reader = DashboardReader(_plan_log(tmp_path), None)
+    got = reader.strategy(plan)
+    assert got["definitions_source"] == "plan-file"
+    assert got["definitions"]["expand"]["intent"] == "grow to 20 bases"
+
+
+def test_an_unreadable_plan_file_is_distinguished_from_an_absent_one(tmp_path: Path) -> None:
+    plan = tmp_path / "broken.json"
+    plan.write_text("{ not json", encoding="utf-8")
+    reader = DashboardReader(_plan_log(tmp_path), None)
+    assert reader.strategy(plan)["definitions_source"] == "unreadable"
+
+
+def test_the_strategy_endpoint_is_served(tmp_path: Path) -> None:
+    client = TestClient(create_app(brain=ScriptedBrain(), log=_plan_log(tmp_path)))
+    body = client.get("/dashboard/api/strategy").json()
+    assert {t["id"] for t in body["totals"]} == {"expand", "reserve"}
+
+
+def test_a_plan_file_that_defines_only_some_directives_says_how_many(tmp_path: Path) -> None:
+    """`source == "plan-file"` is not the claim that every directive has text.
+
+    MEASURED on ladder-attempt4: the plan file defines 1 directive while 8 appear in the log,
+    because the rest were issued at runtime. Reporting only the source would leave seven rows
+    blank with nothing saying why.
+    """
+    plan = tmp_path / "plan.json"
+    plan.write_text(json.dumps({"directives": [{"id": "expand", "intent": "grow"}]}), encoding="utf-8")
+    got = DashboardReader(_plan_log(tmp_path), None).strategy(plan)
+    assert got["definitions_source"] == "plan-file"
+    assert got["directive_count"] == 2
+    assert got["definitions_covered"] == 1
+    assert got["definitions_missing"] == ["reserve"]

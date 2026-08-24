@@ -314,6 +314,85 @@ class DashboardReader:
             },
         }
 
+    def strategy(self, plan_path: Path | None = None) -> dict[str, Any]:
+        """Directives in force per turn, and what became of each one.
+
+        Built from the decision log, which every run writes, rather than from a live
+        DirectiveStore — the log is the committed artifact and it carries the disposition the
+        orchestrator actually recorded at decision time. A store read would answer "what is in
+        force now", which is a different question from "what was in force at turn 42".
+
+        Directive TEXT (intent, metric, target, rationale) lives in a plan file that the
+        dashboard is not necessarily given. When it is missing this reports
+        ``definitions: "unavailable"`` rather than rendering bare ids as though an id were the
+        whole directive — the same rule as grounding: name which kind of nothing this is.
+        """
+        by_turn: dict[int, dict[str, Any]] = {}
+        totals: dict[str, dict[str, int]] = {}
+        for record in self.records():
+            plan = (record.model_dump(mode="json").get("plan")) or {}
+            in_force = [str(d) for d in plan.get("in_force") or []]
+            if not in_force and not plan.get("plan_absent"):
+                continue
+            turn = by_turn.setdefault(
+                record.turn, {"turn": record.turn, "decisions": 0, "directives": {}}
+            )
+            turn["decisions"] += 1
+            for directive in in_force:
+                seat = turn["directives"].setdefault(directive, {"id": directive, "in_force": 0})
+                tally = totals.setdefault(directive, {"in_force": 0})
+                seat["in_force"] += 1
+                tally["in_force"] += 1
+                for key in _DISPOSITIONS:
+                    if directive in (plan.get(key) or []):
+                        seat[key] = seat.get(key, 0) + 1
+                        tally[key] = tally.get(key, 0) + 1
+
+        definitions: dict[str, Any] = {}
+        source = "unavailable"
+        if plan_path is not None and plan_path.exists():
+            try:
+                raw = json.loads(plan_path.read_text(encoding="utf-8"))
+                for directive in raw.get("directives") or []:
+                    definitions[str(directive.get("id"))] = directive
+                source = "plan-file"
+            except (OSError, ValueError):
+                source = "unreadable"
+
+        # A source of "plan-file" does NOT mean every directive has text: most are issued at
+        # runtime through /agent/directive and never appear in the plan file. MEASURED on
+        # ladder-attempt4: the file defines 1 directive while 8 appear in the log. Reporting only
+        # the source would let seven rows render blank with nothing saying why, which is the
+        # same ambiguity the grounding badges exist to remove.
+        missing = sorted(d for d in totals if d not in definitions)
+        return {
+            "definitions": definitions,
+            "definitions_source": source,
+            "definitions_missing": missing,
+            "definitions_covered": len(totals) - len(missing),
+            "directive_count": len(totals),
+            "turns": [
+                {**t, "directives": sorted(t["directives"].values(), key=lambda d: d["id"])}
+                for t in sorted(by_turn.values(), key=lambda t: t["turn"])
+            ],
+            "totals": [
+                {
+                    "id": directive,
+                    **counts,
+                    # Share of the decisions this directive was in force for that recorded it
+                    # as followed. Deliberately NOT followed/(followed+unsatisfied): the two
+                    # co-occur (568 times on ladder-attempt4), so that denominator would be
+                    # larger than the population and the ratio would read low for no reason.
+                    "followed_share": (
+                        round(counts.get("followed", 0) / counts["in_force"], 3)
+                        if counts.get("in_force")
+                        else None
+                    ),
+                }
+                for directive, counts in sorted(totals.items())
+            ],
+        }
+
     def evals(self) -> dict[str, Any]:
         manifest = REPO / "evals" / "published.json"
         stamp = manifest.stat().st_mtime_ns
@@ -347,6 +426,7 @@ DASHBOARD_HTML = """<!doctype html>
 <section class=panel><h2>MISSION CONTROL</h2><div id=summary class=summary></div></section>
 <section class=panel><h2>FACTION STATUS</h2><div id=factions class=factions></div></section>
 <section class=panel><h2>DECISION ARCHIVE</h2><table><thead><tr><th>Turn<th>Faction<th>Surface<th>Tier<th>Choice<th>Native<th>Latency<th>Cost</tr></thead><tbody id=decisions></tbody></table></section>
+<section class=panel><h2>STRATEGY IN FORCE</h2><div id=strategy>Loading directives…</div></section>
 <section class=panel><h2>EVALUATION DATALINKS</h2><button onclick=loadEvals()>RE-DERIVE COMMITTED TABLES</button><div id=evals class=why>Loading committed scorers…</div></section></main>
 <section id=detail class="panel detail hidden"><button class=close onclick="detail.classList.add('hidden')">CLOSE</button><h2>DECISION DATALINK</h2><div id=detailText class=why></div></section>
 <script>
@@ -369,6 +449,12 @@ const GROUNDING_NOTE={absent:'No retriever was configured for this run, so nothi
 const list=x=>(x??[]).map(v=>`<li>${esc(typeof v==='object'?JSON.stringify(v):v)}</li>`).join('')||'<li>—</li>';
 async function showDecision(id){const x=await fetch('/dashboard/api/decisions/'+id).then(r=>r.json()),r=x.record,p=r.plan??{},w=x.why??{directives:[],grounding:{state:'empty',label:'',facts:[]},guard:{}},chosen=(r.chosen??[]).map(c=>c.action_id??c.id),native=x.native_choice,disagreed=native!=null&&!chosen.map(String).includes(String(native));detailText.innerHTML=`<section><h3>CONTEXT</h3><b>TURN ${esc(r.turn)} // ${esc(r.faction)}</b><p>${esc(r.surface_id)}</p><p>Tier: ${esc(r.tier)} // Applied: ${esc(chosen.join(', '))}</p><p>Degraded: ${esc(r.degraded)} ${esc(r.degrade_reason??r.fallback_reason??'')}</p></section><section class="${disagreed?'disagreement':''}"><h3>CHOICE ${disagreed?'// DISAGREEMENT':''}</h3><p>Chosen: ${esc(chosen.join(', '))}</p><p>Native: ${esc(native)}</p></section><section class=wide><h3>WHY</h3><p>${esc(r.reason)}</p></section><section class=wide><h3>OFFERED ACTION SPACE</h3><table><thead><tr><th>Action<th>Cost<th>Turns<th>Effects</tr></thead><tbody>${(x.action_space??[]).map(a=>`<tr><td>${esc(a.action??a.name??a.id)}<td>${esc(a.cost)} ${esc(a.cost_unit??'')}<td>${esc(a.turns??a.turns_to_completion)}<td>${esc(a.effects??a.board_effects)}</tr>`).join('')}</tbody></table></section><section class=wide><h3>DIRECTIVES IN FORCE</h3>${w.plan_absent?'<p class=d-none>NO PLAN IN FORCE FOR THIS DECISION</p>':(w.directives??[]).length?`<table><thead><tr><th>Directive<th>Disposition</tr></thead><tbody>${(w.directives??[]).map(d=>`<tr><td>${esc(d.id)}<td>${d.dispositions.length?d.dispositions.map(k=>`<span class="dstate d-${esc(k)}">${esc(k.toUpperCase())}</span>`).join(''):'<span class="dstate d-none">IN FORCE // NO DISPOSITION RECORDED</span>'}</tr>`).join('')}</tbody></table>`:'<p class=d-none>NONE</p>'}</section><section class=wide><h3>GROUNDING FACTS <span class="gs gs-${esc(w.grounding.state)}">${esc(w.grounding.label)}</span></h3>${w.grounding.facts.length?`<ul>${w.grounding.facts.map(f=>`<li class=${f.cited?'cited':'uncited'}>${f.cited?'[CITED] ':''}${esc(f.text)}</li>`).join('')}</ul>`:`<p class=d-none>${esc(GROUNDING_NOTE[w.grounding.state]??'')}</p>`}</section><section><h3>GUARD</h3><p>Verdict: ${esc(w.guard.verdict)}${w.guard.absent?' // ADAPTER ABSENT':''}${w.guard.degraded?' // DEGRADED':''}</p><b>ADVISORIES</b><ul>${list(w.guard.advisories)}</ul><b>STRIPPED</b><ul>${list(w.guard.stripped)}</ul></section><section><h3>TELEMETRY</h3><p>Latency: ${esc(r.latency_ms)} ms</p><p>Cost: $${esc(r.cost_usd??r.usd)}</p><p>Model: ${esc(r.model)}</p></section>`;detail.classList.remove('hidden')}
 function renderEvals(x){const labels={};for(const run of x.runs??[])labels[run.id]=[...(run.tables??[])];const sections=x.tables.trim().split(/\\n(?==== )/).filter(s=>s.startsWith('=== '));evals.innerHTML=sections.map(section=>{const lines=section.split('\\n'),head=lines.shift().replace(/^=== | ===$/g,''),run=head.split(':')[0].trim(),label=(labels[run]??[]).shift()??head,rows=[];for(const line of lines){const m=line.match(/^(\\S+)\\s+(-?\\d+)\\s+(-?\\d+)\\s+([+-]?\\d+)$/);if(m)rows.push(m.slice(1))}const table=rows.length?`<table><thead><tr><th>Metric<th>Baseline<th>Arm<th>Delta</tr></thead><tbody>${rows.map(r=>`<tr><td>${esc(r[0])}<td>${esc(r[1])}<td>${esc(r[2])}<td>${esc(r[3])}</tr>`).join('')}</tbody></table>`:'';const prose=lines.filter(line=>!rows.some(r=>line.trim().startsWith(r[0]))&& !line.trim().startsWith('metric ')).join('\\n').trim();return `<section class=wide><h3>${esc(run)} // ${esc(label)}</h3>${table}<pre>${esc(prose)}</pre></section>`}).join('')+(x.error?`<section class="wide bad"><h3>SCORER ERROR</h3>${esc(x.error)}</section>`:'')}
+async function loadStrategy(){const x=await fetch('/dashboard/api/strategy').then(r=>r.json());const defs=x.definitions??{};
+//: An id is not a directive. When no plan file is wired the panel says so, rather than
+//: listing bare ids as if that were the whole strategy — same rule as the grounding badges.
+const note=(x.definitions_missing??[]).length?`<p class=d-none>Directive TEXT shown for ${esc(x.definitions_covered)} of ${esc(x.directive_count)} (source: ${esc(x.definitions_source)}). The rest were issued at runtime and their text is not in any committed artifact — the dispositions below are still complete.</p>`:'';
+const totals=(x.totals??[]).map(t=>{const def=defs[t.id]??{};return `<tr><td>${esc(t.id)}${def.intent?`<br><span class=uncited>${esc(def.intent)}</span>`:''}<td>${esc(def.metric)} ${esc(def.comparator)} ${esc(def.target)}<td>${esc(t.in_force)}<td>${esc(t.followed??0)}<td>${esc(t.overrode??0)}<td>${esc(t.unsatisfied??0)}<td>${esc(t.unmeasurable??0)}<td>${t.followed_share==null?'—':esc(t.followed_share)}</tr>`}).join('');
+strategy.innerHTML=note+(totals?`<table><thead><tr><th>Directive<th>Metric<th>Turns in force<th>Followed<th>Overrode<th>Unsatisfied<th>Unmeasurable<th>Followed share</tr></thead><tbody>${totals}</tbody></table>`:'<p class=d-none>No directives were in force in this run.</p>')}
 async function loadEvals(){evals.textContent='Re-deriving…';const x=await fetch('/dashboard/api/evals').then(r=>r.json());renderEvals(x)}
-refresh();loadEvals();
+refresh();loadEvals();loadStrategy();
 </script></body></html>"""

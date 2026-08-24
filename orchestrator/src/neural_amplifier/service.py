@@ -526,6 +526,13 @@ def create_app(
             raise HTTPException(404, f"no decision at position {position}")
         return item
 
+    @app.get("/dashboard/api/strategy")
+    def dashboard_strategy() -> dict[str, object]:
+        #: NA_DASHBOARD_PLAN is optional on purpose. Without it the panel reports its
+        #: definitions as unavailable rather than pretending a bare id is the directive.
+        raw = os.environ.get("NA_DASHBOARD_PLAN")
+        return dashboard.strategy(Path(raw) if raw else None)
+
     @app.get("/dashboard/api/evals")
     def dashboard_evals() -> dict[str, object]:
         return dashboard.evals()
