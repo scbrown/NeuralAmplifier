@@ -6,8 +6,10 @@
 The repository disables `bd` auto-export. When enabled it writes directly into the checkout
 that ran the lifecycle command, which made ordinary store updates dirty the shared deploy
 checkout and caused its correct clean-tree guard to refuse every automatic deployment until a
-human reconciled the projection. JSONL is therefore a deliberate tracked artifact, refreshed
-only through this command from an owned worktree.
+human reconciled the projection. `bd` also unconditionally appends status changes to
+`.beads/interactions.jsonl`, so that live audit file is ignored and this command copies it to
+the tracked `.beads/interactions.snapshot.jsonl`. JSONL is therefore a deliberate tracked
+artifact, refreshed only through this command from an owned worktree.
 
 There is a second reason not to use auto-export: it is **gated**. A
 second write shortly after the first does not export, `bd` exits 0, and nothing says so — so the
@@ -48,6 +50,20 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[1]
 TRACKED = REPO / ".beads" / "issues.jsonl"
+AUDIT_SNAPSHOT = REPO / ".beads" / "interactions.snapshot.jsonl"
+
+
+def live_audit_path() -> Path:
+    """Return bd's real audit path, which is in the main checkout for worktrees."""
+    proc = subprocess.run(
+        ["bd", "context", "--json"],
+        cwd=REPO,
+        capture_output=True,
+        text=True,
+    )
+    if proc.returncode != 0:
+        raise RuntimeError(f"bd context failed: {proc.stderr.strip()}")
+    return Path(json.loads(proc.stdout)["beads_dir"]) / "interactions.jsonl"
 
 
 def load(path: Path) -> dict[str, dict]:
@@ -82,6 +98,33 @@ def committed() -> dict[str, dict]:
             record = json.loads(line)
             out[record["id"]] = record
     return out
+
+
+def committed_audit() -> dict[str, dict]:
+    proc = subprocess.run(
+        ["git", "show", "HEAD:.beads/interactions.snapshot.jsonl"],
+        cwd=REPO,
+        capture_output=True,
+        text=True,
+    )
+    if proc.returncode != 0:
+        return {}
+    out: dict[str, dict] = {}
+    for line in proc.stdout.splitlines():
+        if line.strip():
+            record = json.loads(line)
+            out[record["id"]] = record
+    return out
+
+
+def audit_regressions(before: dict[str, dict], after: dict[str, dict]) -> list[str]:
+    problems = []
+    for lost in sorted(set(before) - set(after)):
+        problems.append(f"audit {lost}: present in committed snapshot and absent from live log")
+    for changed in sorted(set(before) & set(after)):
+        if before[changed] != after[changed]:
+            problems.append(f"audit {changed}: append-only record changed")
+    return problems
 
 
 def regressions(before: dict[str, dict], after: dict[str, dict]) -> list[str]:
@@ -143,6 +186,8 @@ def main() -> int:
         return 1
 
     fresh = load(fresh_path)
+    audit_path = live_audit_path()
+    fresh_audit = load(audit_path)
     if not fresh:
         # An empty export over a populated tracker is the worst possible write.
         print("refusing to install an empty export", file=sys.stderr)
@@ -150,19 +195,26 @@ def main() -> int:
 
     if args.check:
         current = load(TRACKED) if TRACKED.exists() else {}
-        if current == fresh:
+        current_audit = load(AUDIT_SNAPSHOT) if AUDIT_SNAPSHOT.exists() else {}
+        if current == fresh and current_audit == fresh_audit:
             print("beads export is current")
             return 0
         stale = [i for i in fresh if current.get(i) != fresh.get(i)]
+        stale_audit = [i for i in fresh_audit if current_audit.get(i) != fresh_audit.get(i)]
         print(
-            f"beads export is STALE — {len(stale)} record(s) differ from the store: "
+            f"beads export is STALE — {len(stale)} issue record(s) differ from the store: "
             f"{', '.join(sorted(stale)[:8])}",
+            file=sys.stderr,
+        )
+        print(
+            f"audit snapshot is STALE — {len(stale_audit)} record(s) differ from the live log",
             file=sys.stderr,
         )
         print("run `just beads-export` to refresh", file=sys.stderr)
         return 1
 
     problems = regressions(committed(), fresh)
+    problems.extend(audit_regressions(committed_audit(), fresh_audit))
     if problems:
         print("refusing to write: the export loses work relative to HEAD", file=sys.stderr)
         for problem in problems:
@@ -172,6 +224,7 @@ def main() -> int:
 
     before = load(TRACKED) if TRACKED.exists() else {}
     TRACKED.write_text(fresh_path.read_text())
+    AUDIT_SNAPSHOT.write_text(audit_path.read_text())
     fresh_path.unlink(missing_ok=True)
 
     changed = [i for i in fresh if before.get(i) != fresh.get(i)]
