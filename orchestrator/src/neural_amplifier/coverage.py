@@ -107,6 +107,14 @@ class Report:
             "surfaces_known": len(surfaces.ALL),
             "llm_decisions": self.llm_decisions,
             "deterministic_decisions": self.deterministic_decisions,
+            # The COUNT, not only the rate. `degrade_rate` is a rounded ratio and it was the
+            # only place a fallback showed, so a reader who computed the obvious
+            # `llm_decisions / decisions` got 1.00 for a row with 19 fallbacks and 1.00 for a
+            # row with none. MEASURED on ladder-attempt4, where I read it that way myself and
+            # reported "coverage all-LLM and clean" from a row that had already fallen back —
+            # twice, holding all the context. A rate answers "how bad"; only the count answers
+            # "did this happen at all", and that is the question a row's provenance turns on.
+            "degraded": self.degraded,
             "degrade_rate": round(self.degrade_rate, 4),
             "adherence_violations": self.adherence_violations,
             "repeated_actions": self.repeated_actions,
