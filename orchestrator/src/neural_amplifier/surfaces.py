@@ -139,7 +139,6 @@ NO_AI_PATH: Final[frozenset[str]] = frozenset(
         "diplo.treaty_offer",
         "diplo.surrender",
         "diplo.map_trade",
-        "council.vote",
         "council.buy_vote",
     }
 )
@@ -226,6 +225,7 @@ OBSERVED: Final[frozenset[str]] = frozenset(
         "faction.tech",
         "faction.se",
         "base.hurry",
+        "council.vote",
         # Observed, NOT applied — the first of the 27 ready surfaces (na-yd4), chosen by
         # decision-inputs.md's own rule: low frequency, high stakes. It fires once per
         # faction-turn and the ratio it sets divides every base's energy for that whole turn,
@@ -315,7 +315,7 @@ OBSERVED: Final[frozenset[str]] = frozenset(
 #: - `faction.se` — `na_decide_faction_se`, in/out params read at `faction.cpp`.
 #: - `base.hurry` — `na_decide_base_hurry`, replacing the call at `build.cpp`.
 #:
-#: Four of the five observed surfaces apply. It briefly equalled OBSERVED, and then
+#: Five observed surfaces apply. It briefly equalled OBSERVED, and then
 #: `econ.energy_sliders` was instrumented observation-only and the gap reopened — which is the
 #: rule working, not a regression. A newly instrumented surface starts observation-only and
 #: must not be added here until its own decide path lands, or this number goes back to claiming
@@ -326,6 +326,7 @@ APPLIED: Final[frozenset[str]] = frozenset(
         "faction.tech",
         "faction.se",
         "base.hurry",
+        "council.vote",
     }
 )
 
