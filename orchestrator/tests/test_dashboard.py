@@ -125,6 +125,27 @@ def test_the_page_script_actually_parses() -> None:
     assert done.returncode == 0, f"the served script does not parse:\n{done.stderr}"
 
 
+def test_the_status_banner_is_addressed_by_a_binding_and_not_by_a_bare_id() -> None:
+    """na-uq1: `status` is not the element — `window.status` is a legacy STRING property.
+
+    Every other id on this page (summary, factions, decisions, evals, detail, detailText) is
+    reachable as a bare global; `status` alone collides with a built-in, so
+    `status.textContent = ...` assigns to a throwaway String wrapper and is silently discarded.
+    Measured in a real browser: `(0,eval)('status')` returns `""`, and `bare === el` is false.
+
+    The banner could therefore never leave "LINKING…" — and the catch block's
+    `'LINK DEGRADED // ' + e` could never be displayed either, so the page had no channel to
+    report its own failure. That is why the SyntaxError above was invisible in the UI and read
+    to a human as "the dashboard shows no data".
+    """
+    client = TestClient(create_app(brain=ScriptedBrain(), log=DecisionLog(Path(os.devnull))))
+    script = _inline_script(client.get("/dashboard").text)
+
+    assert "const statusEl=document.getElementById('status')" in script
+    assert re.search(r"(?<![A-Za-z])status\.textContent", script) is None
+    assert script.count("statusEl.textContent") == 3
+
+
 def test_dashboard_publishes_the_real_game_directive_report() -> None:
     result = TestClient(create_app(brain=ScriptedBrain())).get("/dashboard/api/evals").json()
 
