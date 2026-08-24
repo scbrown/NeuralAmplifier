@@ -11,8 +11,10 @@ JSON [contract](docs/contract.md). See [VISION.md](VISION.md) for the full desig
 Thinker fork. It is the complete, balanced game and is controllable now. GLSMAC (Track B) is the
 long-term open platform but most of its game systems don't exist yet. Don't assume GLSMAC.
 
-**Status: pre-alpha.** The repo holds design docs and scaffold; no component has landed yet.
-Read the design before writing code — it is source-grounded and will save you a day.
+**Status: pre-alpha, with live-game integration.** The orchestrator, Thinker adapter, named
+fixtures, unattended harness and read-only dashboard have all run against a real game. Long-form
+outcome evaluation is still in progress. Read the design before writing code — it is
+source-grounded and will save you a day.
 
 ## Before You Implement
 
@@ -29,6 +31,28 @@ Read the design before writing code — it is source-grounded and will save you 
 | A GLSMAC mod or the GSE builtin | [docs/glsmac-integration-notes.md](docs/glsmac-integration-notes.md) |
 | Knowledge, memory, or guardrails | [docs/knowledge-architecture.md](docs/knowledge-architecture.md) |
 | An agent playing the game, MCP, or the decision queue | [docs/agent-play.md](docs/agent-play.md) — and the `play-alpha-centauri` skill is the agent-facing half |
+
+## Tool Order: Context Before Code
+
+Use the deployed semantic tools before reconstructing context from files or memory:
+
+1. **MCP first.** Query Quipu with `quipu_search`, `quipu_query` or `quipu_ask` for prior
+   decisions, operational facts and graph relationships. Search code/docs with Bobbin's MCP
+   `search`, `grep` and `find_refs` tools. The deployed Homelab MCP also exposes
+   `quipu_episode` and generic `quipu_tool`; use those instead of composing write JSON in a
+   shell.
+2. **CLI second.** Use `bobbin search`, `bobbin grep` and related commands when MCP is not
+   available. The installed `quipu` CLI currently operates on a local `--db`; it is useful for
+   local graphs and validation but is not a remote-service client. Do not mistake a local query
+   for the deployed knowledge graph.
+3. **Documented HTTP fallback.** For Bobbin search, use `GET $BOBBIN_URL/search?q=...` (the
+   parameter is `q`). For Quipu, use JSON `POST` requests to `$QUIPU_URL/search` or
+   `$QUIPU_URL/query`. Writes such as `/episode`, and `/shapes` even when listing, require the
+   provisioned bearer; reads/search do not. Put episode/query bodies in files or stdin so prose
+   never becomes executable shell text.
+
+Search before minting a Quipu entity and reuse the existing node's exact name. Every episode
+node needs a loaded-vocabulary `type`; one invalid node rejects the whole episode.
 
 ## Design Invariants
 

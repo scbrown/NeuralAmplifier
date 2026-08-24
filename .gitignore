@@ -53,7 +53,6 @@ tmp/lastmap.*
 !.claude/skills/
 .logs/
 state.json
-CLAUDE.md
 CLAUDE.local.md
 
 # Beads / Dolt files (added by bd init)

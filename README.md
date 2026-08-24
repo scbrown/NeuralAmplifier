@@ -110,6 +110,12 @@ brain never knows which game it's driving — it speaks one [contract](docs/cont
 
 **🎮 The brain is pluggable — and can be an agent in your terminal**
 
+- `NA_BRAIN=claude-code` runs the model through the host's Claude Code subscription;
+  `NA_BRAIN=claude` uses the Anthropic SDK; `NA_BRAIN=scripted` is the deterministic,
+  no-cost default used by CI. A launch is not an LLM run merely because `/health` is green:
+  require `brain=claude-code` (or the intended paid brain) from `/health`, then require
+  `llm_decisions > 0` from `/coverage` after play. `just play check <port>` performs the
+  launch-side identity checks.
 - `NA_BRAIN=agent` makes the orchestrator *serve* decisions instead of calling a model. Claude
   Code (or anything speaking MCP) attaches, collects the world view, and answers.
 - Control inverts, invariants do not: an agent is not a privileged client, and its orders go
@@ -160,7 +166,7 @@ Full design — the contract Claude speaks, the two-engine strategy, and the roa
 
 ## 📊 Coverage & Plan
 
-**4 of 77 decision surfaces the brain can actually decide**, plus **9 it can watch**. Those are
+**5 of 77 decision surfaces the brain can actually decide**, plus **9 it can watch**. Those are
 two different numbers and conflating them overstates coverage by half. A surface is not covered
 until its decision can be *applied*; observing changes what is recorded, not what the game does.
 `just surfaces` prints both from the frozen registry rather than from this table. The registry
@@ -173,6 +179,7 @@ is frozen at 77 (`orchestrator/surfaces.py`), partitioned by contract scope: `ba
 | `faction.tech` | turn | **Applied** · posts the world view and applies the returned tech, falling back to the engine's own answer |
 | `faction.se` | turn | **Applied** · applies the returned social model, refusing one the faction cannot afford |
 | `base.hurry` | base | **Applied** · spends or holds, through the engine's own `hurry_item` |
+| `council.vote` | turn | **Applied** · routes the council choice through the dialog hook and applies the returned candidate or abstention |
 | `econ.energy_sliders` | turn | Observed · records what `mod_allocate_energy` chose and every split that was legal |
 | `base.retool` | base | Observed · the odd one — its deterministic tier already existed inside `select_build`, so what was missing was the *record*, not an answer |
 | `base.staple` | base | Observed · nerve stapling, recorded only when the engine's eligibility gate opened |
@@ -198,9 +205,12 @@ its C++ emitter, because the adapter writes the contract by hand with `snprintf`
 In-game **dialogs** are intercepted too (invariant 7) — one hook on the engine's `popp` function
 pointer, so every dialog Thinker raises is seen without patching a single call site. Nothing is
 suppressed; a dialog the table does not recognise is recorded and flagged so the inventory can be
-built from a real game rather than guessed.
+built from a real game rather than guessed. Communication answers are directives, not disposable
+popup clicks: the routed answer is read back on later turns. Planetary Council voting is a real
+choice surface through the same machinery, including the candidate picker that otherwise blocks
+an unattended row.
 
-All four **emit the contract directly** — no translation layer between the adapter and the brain.
+All five **emit the contract directly** — no translation layer between the adapter and the brain.
 
 Each was **observed before it was applied** — deliberately, because that makes a surface
 falsifiable on its own before anything depends on it. Which surfaces the brain may decide is set
@@ -214,10 +224,10 @@ base, and the whole exchange is bounded by `llm_timeout_ms` (default 2500 ms). E
 unreachable orchestrator, timeout, malformed reply, illegal id — applies the deterministic tier's
 choice and records why.
 
-> **Built, not yet proven.** The wire is tested end-to-end under Wine against a real orchestrator
-> (`just thinker wire`), but no decision has executed inside a running game — that needs a game
-> fixture and the unattended harness. Honest status: the loop closes in the code and has not yet
-> closed on a board.
+> **Proven in a running game.** Named save fixtures reproduce blocking surfaces, and unattended
+> rows have executed LLM decisions through Wine with brain identity, coverage, degradation,
+> adherence and fair-play read-backs. Long-form ladder evaluation is still in progress; a live
+> turn is proof of the wire, not yet proof of strategic strength.
 
 ### The plan, in dependency order
 
@@ -296,6 +306,12 @@ So the brain is backed by two sibling services (design:
   masquerade as canonical); curated **strategy/doctrine** (real SMAC unit designs and base build
   orders — see [docs/strategy-knowledge.md](docs/strategy-knowledge.md)); and **learned memory**
   (tactics and opponent patterns the brain accumulates across games).
+  Production runs select the dedicated dataset
+  `urn:neuralamplifier:dataset:agent-grounding` from [`na.toml`](na.toml), backed by graph
+  `urn:neuralamplifier:graph:knowledge`. Grounding is fetched once at the `/turn` boundary,
+  cached by `(turn, faction_id)`, then filtered locally for each decision. A decision-time graph
+  query would multiply with every base/unit choice and is deliberately not the production path;
+  cross-faction cache reuse is refused so grounding cannot become a fog leak.
 - **[Yupana](https://github.com/scbrown/yupana) — hot in-memory board + guardrail harness.**
   Holds the per-faction, fog-limited board graph in memory (multi-tenant, copy-on-write) and runs
   a strategic **policy guard** and **what-if** analysis on proposed orders before they apply,
@@ -337,22 +353,17 @@ and the rollout are in the [design doc](docs/knowledge-architecture.md).
 
 ## 🚀 Quick Start
 
-> **Status: pre-alpha, but the brain runs.** The orchestrator is real and tested — the
+> **Status: pre-alpha, and the brain has played live turns.** The orchestrator is real and tested — the
 > contract types, `POST /decide`, action-space validation, safe degradation, the decision
 > record and JSONL log, the OTel exporter, replay, the derived fairness ledger, the
-> Quipu/Yupana seam, and the SMAC datalinks ingester. All of it runs with **no game present**.
+> Quipu/Yupana seam, and the SMAC datalinks ingester. The full quality gate still runs with
+> **no game present**; Wine integration and long-form play use a locally supplied game copy.
 >
-> What is *not* proven: nothing has played a turn of Alpha Centauri yet.
 > **Track A (Thinker) is the current focus** — the complete, balanced game, controllable
-> today. The fork now instruments fifteen decision surfaces and *applies* four of them, intercepts
+> today. The fork now instruments fourteen decision surfaces and *applies* five of them, intercepts
 > in-game dialogs, and ships a side-effect-free probe for every surface. The wire is tested
-> against a real orchestrator under Wine with no game present.
->
-> **The honest gap is the same one it has always been: no hook has fired inside a running
-> game.** Every surface here is built and unverified against a board, which is exactly why each
-> ships a probe — so whoever has a game can check any of them in one command rather than playing
-> until a rare decision happens. Closing that gap needs the game fixture (the assets are
-> copyrighted and this repo carries only a checksum manifest) and the unattended harness.
+> against real orchestrators and live game fixtures. The remaining honest gap is outcome quality:
+> completing and comparing long rows, not whether the hook fires.
 
 ```bash
 git clone https://github.com/scbrown/NeuralAmplifier && cd NeuralAmplifier
@@ -380,6 +391,31 @@ docs/               contract.md         the world-view / action-space interface
 [CONTRIBUTING.md](CONTRIBUTING.md#the-game-fixture-bring-your-own-smac). Building, linting, and
 the whole test suite run with **no game present**.
 
+Named save states make rare/blocking surfaces reproducible without replaying dozens of turns:
+
+```bash
+python3 scripts/fixture.py list
+python3 scripts/fixture.py show council-vote-blocked
+NA_SAVE=evals/fixtures/council-vote-blocked.sav scripts/play-thinker.sh headless
+```
+
+`fixture.py capture` writes the save plus its manifest; `show` verifies the recorded checksum,
+so a published fixture remains a fixed point. `NA_SAVE` and `NA_SEED` are mutually exclusive.
+Wine audio is disabled per isolated prefix by default so unattended boots stay silent;
+`NA_SOUND=1` explicitly opts back in.
+
+The dashboard is a read-only view over a run's append-only evidence:
+
+```bash
+just dashboard 8088 path/to/decisions.jsonl path/to/worldviews
+just dashboard-service set-run path/to/decisions.jsonl path/to/worldviews 8088
+# open http://localhost:8088/dashboard
+```
+
+For a live row, set `NA_DASHBOARD_GAME_STATE` to its existing `na-command-result` path. That
+makes the census reader consume the result without writing `na-command` or competing with the
+unattended driver.
+
 **Setting up a machine or a Claude Code cloud environment?**
 [`scripts/setup-environment.sh`](scripts/setup-environment.sh) installs everything —
 `just`, `bd`, the 32-bit MinGW cross-compiler, Wine, and Quipu — and reports what actually
@@ -400,6 +436,8 @@ just docs serve          # The docs site at localhost, with hot reload
 
 just thinker wire        # Adapter's HTTP client under Wine vs. a real orchestrator — no game
 just play                # Serve decisions for an attached agent (NA_BRAIN=agent)
+just play check 8000     # Refuse a silent wrong-brain/grounding launch
+just dashboard           # Read-only live/eval view at /dashboard
 just eval list           # Behavioural evals: what was measured, and what it found
 just coverage            # Run health: surfaces fired, fallback rate, adherence
 just replay              # Re-run a recorded log against the current code — no game
