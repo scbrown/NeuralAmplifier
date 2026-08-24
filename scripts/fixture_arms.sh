@@ -9,6 +9,16 @@ set -u
 FIX="$1"; G="$2"; TURNS="${3:-8}"; shift 3
 NA="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SP="$(dirname "$G")/.."
+# The Thinker checkout to run the arms against. An env var with no default on purpose: this
+# named one operator's worktree, which is both unusable on any other machine and an internal
+# path in a PUBLIC repo. Unset is a loud failure below rather than a silent run against
+# whatever the ambient environment happened to hold.
+THINKER_DIR="${THINKER_DIR:-}"
+if [ -z "$THINKER_DIR" ]; then
+  echo "THINKER_DIR is unset — point it at your Thinker checkout, e.g." >&2
+  echo "  THINKER_DIR=~/workspace/thinker $0 $*" >&2
+  exit 2
+fi
 
 kill_all() {
   for p in $(ps -eo pid,args | grep -E 'drive-unattended|terranx.exe' | grep -v grep | awk '{print $1}'); do
@@ -22,7 +32,7 @@ for arm in "$@"; do
   echo "=== ARM $label   setup: ${setup:-none}"
   kill_all
   ( cd "$NA" && SMAC_PLAY_DIR="$G" NA_WINEPREFIX="$SP/lad1/wine" \
-      THINKER_DIR=/home/braino/workspace/thinker-wt/harding \
+      THINKER_DIR="$THINKER_DIR" \
       NA_SAVE="evals/fixtures/$FIX.sav" NA_EXIT_TURN=999 NA_AUTO_TURN=20 NA_TIMEOUT=900 \
       setsid nohup ./scripts/play-thinker.sh headless > "/tmp/arm-$label.log" 2>&1 & )
   sleep 55
