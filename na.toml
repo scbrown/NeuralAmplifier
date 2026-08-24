@@ -22,9 +22,13 @@ kind = "scripted"
 
 [knowledge]
 # The Quipu/Hank seam. All optional: absent means a less-informed decision, never a stalled
-# turn. Overrides: NA_QUIPU_URL, NA_ENGINE, NA_TOKEN_BUDGET, NA_HANK_GUARD.
+# turn. Overrides: NA_QUIPU_URL, NA_QUIPU_DATASET, NA_ENGINE, NA_TOKEN_BUDGET,
+# NA_HANK_GUARD.
 engine = "thinker"
 # quipu_url = "http://127.0.0.1:3030"
+# Dedicated graph selected for every decision-time query.  The graph is
+# `urn:neuralamplifier:graph:knowledge`; this dataset is its reusable query handle.
+quipu_dataset = "urn:neuralamplifier:dataset:agent-grounding"
 # Approximate token ceiling for grounding, 0 to disable. Bounding the fact count alone says
 # nothing about prompt size when one fact is a paragraph.
 token_budget = 0

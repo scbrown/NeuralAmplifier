@@ -12,6 +12,15 @@ datalinks plane (canonical SMAC rules) and the learned-memory plane
 [Quipu](https://github.com/scbrown/quipu), a governed bitemporal knowledge graph.
 Hank holds the *hot, ephemeral* board; Quipu holds what must survive the turn — see
 the hot-vs-persisted split in [knowledge-architecture.md](knowledge-architecture.md).
+
+The deployed tenancy boundary is the committed named graph
+`urn:neuralamplifier:graph:knowledge`, exposed to agents through the named dataset
+`urn:neuralamplifier:dataset:agent-grounding`. Set `NA_QUIPU_URL` to the server;
+the shipped `na.toml` makes the turn-boundary `/query` activate that dataset through
+Quipu's `graph` request parameter, then decisions filter the cached result locally.
+Override it only with `NA_QUIPU_DATASET`. Capture belongs in the same plane: POST
+episodes with `"graph":"urn:neuralamplifier:graph:knowledge"`. A graph that exists
+but is absent from the decision request is not integration.
 This doc covers only the orchestrator↔Quipu wire: interfaces, the retrieval calls at
 `/decide`, budgeting, `group_id` conventions, and degradation.
 
@@ -46,12 +55,13 @@ MCP tools). The orchestrator uses two of them:
   is not read by the binaries. Budget latency for brute-force similarity until an
   embedder wires LanceDB (planned).
 
-## The retrieval calls at `/decide`
+## Retrieval primes at `/turn`; `/decide` reads the cache
 
 These mirror step 3 of the retrieval flow in
 [knowledge-architecture.md](knowledge-architecture.md) exactly. Two classes of call:
-a **cached-once static briefing** paid at game start, and **per-turn fetches** bounded
-to this turn's scope.
+a **cached-once static briefing** paid at game start, and one **per-turn fetch** at the
+adapter's turn boundary. The game thread may call `/decide` hundreds of times in a turn;
+that path performs no Quipu I/O when a dataset is configured.
 
 > **K1 landed as a local retriever.** `neural_amplifier.datalinks.DatalinksRetriever` serves
 > both shapes below straight from a parsed `alphax.txt`, with no server, no embeddings, and
@@ -73,17 +83,18 @@ Assembled once and **prompt-cached** for the whole game:
 Because the engine and opponent set are fixed at game start, this whole block is
 static: assemble once, mark it prompt-cached, and pay its tokens a single time.
 
-### Per-turn fetch (bounded to this turn's scope)
+### Per-turn fetch
 
 Run each turn, kept small:
 
 - **`quipu_context` on a situation string.** A natural-language digest of the current
   turn (`world_view` summary) → ranked facts. One call; NL→ranked entities with
   relevance scores.
-- **Action-space grounding — one batched SPARQL query.** A **single** SPARQL disjunction
-  query enumerating *only* the items in this turn's `action_space`, so the model gets
-  the canonical rule fact behind each legal move (cost, prerequisites, effect) without
-  a per-item round-trip. Scope is exactly the `action_space` — nothing wider.
+- **Rulebook grounding — one engine-scoped SPARQL query.** `/turn` does not yet know the
+  later decisions' action labels, so it fetches the engine's canonical rule rows once.
+  `/decide` selects only its action labels from that in-process cache. The cache key is
+  `(turn, faction_id)`; missing faction attribution or a cache miss degrades rather than
+  issuing a graph query on the game thread or reusing another faction's result.
 - **`quipu_hybrid_search` tactics, k≈3, confidence-gated.** SPARQL filters candidate
   `mem:Tactic` facts by trigger relevance, vector similarity ranks them; take the top
   ~3, and only above a confidence gate so a weakly-held tactic never crowds out a rule.
@@ -178,9 +189,8 @@ plain SPARQL and needs no vectors at all. That is what grounds decisions today.
 The live risk is latency and token cost (see the honesty section below). The rules:
 
 - **Static briefing: cached and paid once.** Never re-fetch or re-inject it per turn.
-- **Per-turn calls: bounded to action-space scope.** The grounding query enumerates
-  only this turn's `action_space`; `quipu_context` gets a bounded situation string;
-  tactics are capped at k≈3.
+- **Per-turn calls: exactly one rulebook fetch.** It is engine-scoped and selected from
+  the dedicated NA dataset. Decisions then filter locally to their action space.
 - **Under budget, drop tactics before rules.** Rules are correctness (a canonical cost
   or prerequisite the model must not get wrong); tactics are optimization. Shed the
   optimization first. This ordering also matches the retrieval **precedence** the
@@ -287,8 +297,6 @@ annotation, keep playing.
 - **Vector search is brute-force** until an embedder installs the LanceDB backend via
   `Store::set_local_vector_backend`; `vector.backend` config is inert in the binaries
   today. Latency must be **measured, not assumed**.
-- **Latency and token cost are the live risk.** Each `/decide` adds Quipu round-trips
-  on top of the Hank ingest/guard round-trips; mitigate with hard static-briefing
-  caching, action-space-bounded fetches, and the drop-tactics-first rule above. This
-  is the number to watch as the integration lands (rollout phases K1–K3 in
-  [knowledge-architecture.md](knowledge-architecture.md)).
+- **Latency and token cost remain live risks, but Quipu latency is paid at `/turn`.**
+  A configured named dataset forbids decision-time fallback queries: a missing prime
+  degrades visibly. Watch the `/turn` prime and keep prompt-size bounds at `/decide`.

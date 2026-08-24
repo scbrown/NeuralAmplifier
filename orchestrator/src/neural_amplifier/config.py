@@ -89,6 +89,7 @@ class Knowledge:
     stalled turn."""
 
     quipu_url: str | None = None
+    quipu_dataset: str | None = None
     engine: str = "thinker"
     token_budget: int = 0
     guard: bool = True
@@ -165,6 +166,7 @@ def load(path: Path | None = None) -> Config:
         ),
         knowledge=Knowledge(
             quipu_url=_text(env("NA_QUIPU_URL"), knowledge.get("quipu_url"), None),
+            quipu_dataset=_text(env("NA_QUIPU_DATASET"), knowledge.get("quipu_dataset"), None),
             engine=_text(env("NA_ENGINE"), knowledge.get("engine"), "thinker") or "thinker",
             token_budget=_number(env("NA_TOKEN_BUDGET"), knowledge.get("token_budget"), 0),
             guard=_flag(env("NA_HANK_GUARD"), knowledge.get("guard"), True),

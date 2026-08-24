@@ -216,6 +216,7 @@ def _build_retriever(config: Config) -> object | None:
             config.knowledge.quipu_url,
             engine=config.knowledge.engine,
             token_budget=config.knowledge.token_budget,
+            dataset=config.knowledge.quipu_dataset,
         )
 
     # Learned memory (K3) wraps whatever grounding there is, including none. A run with no
@@ -898,7 +899,20 @@ def create_app(
         between-turns seam again, so the earlier forecast describes a board that no longer exists.
         """
         count = turn_store.announce(body)
-        return {"turn": body.turn, "expected": count}
+        grounding: dict[str, object] = {"status": "absent", "rows": 0}
+        primer = getattr(resolved_retriever, "prime_turn", None)
+        if callable(primer):
+            try:
+                grounding = {
+                    "status": "primed",
+                    "rows": int(primer(body.turn, body.faction_id)),
+                }
+            except Exception as exc:  # knowledge degrades; it never stalls the turn announcement
+                grounding = {"status": "degraded", "rows": 0, "reason": str(exc)}
+        response: dict[str, object] = {"turn": body.turn, "expected": count}
+        if callable(primer):
+            response["grounding"] = grounding
+        return response
 
     @app.get("/turn")
     def turn_view(turn: int | None = None) -> dict[str, object]:

@@ -562,6 +562,11 @@ class RememberingRetriever:
         """
         self.game_id = game_id
 
+    def prime_turn(self, turn: int, faction_id: int | None) -> int:
+        """Pass the turn-boundary rulebook fetch through the memory wrapper."""
+        primer = getattr(self.inner, "prime_turn", None)
+        return int(primer(turn, faction_id)) if callable(primer) else 0
+
     def _scope_for(self, world_view: WorldView) -> str | None:
         """The deciding faction's graph, or None when we cannot say whose decision this is.
 

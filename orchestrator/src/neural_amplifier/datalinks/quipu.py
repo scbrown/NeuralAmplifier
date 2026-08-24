@@ -35,6 +35,7 @@ afterwards.
 from __future__ import annotations
 
 import json
+import threading
 import urllib.error
 import urllib.request
 from dataclasses import replace
@@ -147,6 +148,28 @@ SELECT ?f ?label ?effect ?role ?tier ?maint ?src WHERE {{
 }}"""
 
 
+def build_turn_query(engine: str) -> str:
+    """Load the rulebook once at the turn boundary for local decision filtering.
+
+    ``/decide`` can be called hundreds of times in one turn.  The action labels are not known
+    when ``/turn`` arrives, so the bounded operation at that boundary is one engine-scoped read
+    of the dedicated NA dataset, followed by in-process label selection for every decision.
+    """
+    engines = [UNIVERSAL_ENGINE] if engine == UNIVERSAL_ENGINE else [UNIVERSAL_ENGINE, engine]
+    return f"""PREFIX smac: <{NAMESPACE}>
+PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
+SELECT ?f ?label ?effect ?role ?tier ?maint ?src WHERE {{
+  {_values("eng", engines)}
+  ?f rdfs:label ?label ;
+     smac:sourcedFrom ?src ;
+     smac:ruleTier ?tier ;
+     smac:appliesToEngine ?eng
+  OPTIONAL {{ ?f smac:effectText ?effect }}
+  OPTIONAL {{ ?f smac:role ?role }}
+  OPTIONAL {{ ?f smac:maintenance ?maint }}
+}}"""
+
+
 def format_row(row: dict[str, Any]) -> str:
     """One fact a model can act on.
 
@@ -208,8 +231,13 @@ class QuipuRetriever:
         timeout: float = 2.0,
         token_budget: int = 0,
         query_labels: int = 64,
+        dataset: str | None = None,
     ) -> None:
         self.base_url = base_url.rstrip("/")
+        # A named dataset is the tenancy boundary.  Omitting it preserves local
+        # single-store development, while the shipped NA config names the
+        # dedicated graph explicitly.
+        self.dataset = dataset
         self.engine = engine
         #: Ceiling on facts KEPT, applied to what the store returned. 0 disables it, which is
         #: now the default: `token_budget` is the bound this layer is designed to have (it
@@ -232,11 +260,28 @@ class QuipuRetriever:
         # Quipu runs on localhost; an ambient HTTPS_PROXY would otherwise send
         # loopback traffic through a proxy that cannot route it.
         self._opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+        self._turn_rows: dict[tuple[int, int], list[dict[str, Any]]] = {}
+        self._turn_lock = threading.Lock()
+
+    def prime_turn(self, turn: int, faction_id: int | None) -> int:
+        """Fetch once for a faction's turn; never create an unscoped fog cache."""
+        if faction_id is None:
+            raise ValueError("faction_id is required to prime Quipu grounding")
+        rows = self.query(build_turn_query(self.engine))
+        with self._turn_lock:
+            self._turn_rows[(turn, faction_id)] = rows
+            # Enough for retries and overlapping boundaries, without retaining a campaign.
+            while len(self._turn_rows) > 8:
+                self._turn_rows.pop(next(iter(self._turn_rows)))
+        return len(rows)
 
     def query(self, sparql: str) -> list[dict[str, Any]]:
         request = urllib.request.Request(
             f"{self.base_url}/query",
-            data=json.dumps({"query": sparql}).encode(),
+            data=json.dumps(
+                # Quipu's `graph` parameter accepts either a graph IRI or a named dataset IRI.
+                {"query": sparql, **({"graph": self.dataset} if self.dataset else {})}
+            ).encode(),
             headers={"content-type": "application/json"},
             method="POST",
         )
@@ -262,7 +307,20 @@ class QuipuRetriever:
         unasked = labels[self.query_labels :]
         if not asked:
             return Grounding()
-        rows = self.query(build_query(asked, self.engine))
+        faction_id = getattr(world_view, "faction_id", None)
+        with self._turn_lock:
+            primed = self._turn_rows.get((world_view.turn, faction_id))
+        if self.dataset:
+            # A configured dataset is the production path.  Missing `/turn` or missing faction
+            # attribution must degrade visibly instead of silently multiplying graph requests
+            # on the game thread or borrowing another faction's cache.
+            if faction_id is None:
+                raise RuntimeError("faction_id is required for cached Quipu grounding")
+            if primed is None:
+                raise RuntimeError("Quipu grounding was not primed for this faction and turn")
+            rows = primed
+        else:
+            rows = primed if primed is not None else self.query(build_query(asked, self.engine))
         # Preserve action-space order so the prompt reads in the order the
         # engine offered the choices, not in whatever order the store returns.
         by_label = {str(r.get("label")): r for r in rows}

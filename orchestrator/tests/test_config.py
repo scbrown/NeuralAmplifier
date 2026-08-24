@@ -42,13 +42,15 @@ def test_the_file_is_read(tmp_path: Path) -> None:
         write(
             tmp_path,
             '[brain]\nkind = "claude"\nmodel = "claude-haiku-4-5"\n'
-            '[knowledge]\nquipu_url = "http://q:3030"\ntoken_budget = 900\nguard = false\n'
+            '[knowledge]\nquipu_url = "http://q:3030"\n'
+            'quipu_dataset = "urn:na:dataset"\ntoken_budget = 900\nguard = false\n'
             '[run]\notel = true\ndecision_log = "d.jsonl"\n',
         )
     )
     assert cfg.brain.kind == "claude"
     assert cfg.brain.model == "claude-haiku-4-5"
     assert cfg.knowledge.quipu_url == "http://q:3030"
+    assert cfg.knowledge.quipu_dataset == "urn:na:dataset"
     assert cfg.knowledge.token_budget == 900
     assert cfg.knowledge.guard is False
     assert cfg.run.otel is True
@@ -60,10 +62,12 @@ def test_environment_beats_the_file(tmp_path: Path, monkeypatch: pytest.MonkeyPa
     path = write(tmp_path, '[brain]\nkind = "scripted"\n[knowledge]\nquipu_url = "http://a"\n')
     monkeypatch.setenv("NA_BRAIN", "claude")
     monkeypatch.setenv("NA_QUIPU_URL", "http://b")
+    monkeypatch.setenv("NA_QUIPU_DATASET", "urn:na:override")
 
     cfg = load(path)
     assert cfg.brain.kind == "claude"
     assert cfg.knowledge.quipu_url == "http://b"
+    assert cfg.knowledge.quipu_dataset == "urn:na:override"
 
 
 def test_a_false_flag_in_the_environment_turns_something_off(

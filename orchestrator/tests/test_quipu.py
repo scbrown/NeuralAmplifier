@@ -25,6 +25,7 @@ from neural_amplifier.datalinks.quipu import (
     NAMESPACE,
     QuipuRetriever,
     build_query,
+    build_turn_query,
     escape,
     format_row,
 )
@@ -46,12 +47,13 @@ def asked_labels(query: str) -> list[str]:
     return re.findall(r'"((?:[^"\\]|\\.)*)"', block.group(1))
 
 
-def view(*actions: str, engine: str = "thinker") -> WorldView:
+def view(*actions: str, engine: str = "thinker", faction_id: int | None = None) -> WorldView:
     return WorldView(
         engine=engine,
         scope="base",
         turn=1,
         faction="GAIANS",
+        faction_id=faction_id,
         surface_id="base.production",
         action_space=[Action(id=f"a{i}", action=a) for i, a in enumerate(actions)],
     )
@@ -97,6 +99,72 @@ def test_the_two_bindings_stay_separate_blocks() -> None:
     query = build_query(["Recycling Tanks", "Energy Bank"], "thinker")
     assert query.count("VALUES") == 2
     assert "VALUES (" not in query  # the multi-variable form, which this deliberately is not
+
+
+def test_a_configured_dataset_is_sent_on_every_query(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The NA graph must constrain the request, not merely exist beside ROOT."""
+    retriever = QuipuRetriever("http://q", dataset="urn:na:dataset")
+    seen: dict[str, object] = {}
+
+    class Response:
+        def __enter__(self):  # type: ignore[no-untyped-def]
+            return self
+
+        def __exit__(self, *_args):  # type: ignore[no-untyped-def]
+            return None
+
+        @staticmethod
+        def read() -> bytes:
+            return b'{"rows": []}'
+
+    def open_request(request, *, timeout):  # type: ignore[no-untyped-def]
+        del timeout
+        seen.update(json.loads(request.data))
+        return Response()
+
+    monkeypatch.setattr(retriever._opener, "open", open_request)
+    assert retriever.query("SELECT * WHERE { ?s ?p ?o }") == []
+    assert seen["graph"] == "urn:na:dataset"
+
+
+def test_turn_grounding_queries_once_then_filters_decisions_locally(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    retriever = QuipuRetriever("http://q", dataset="urn:na:dataset")
+    calls: list[str] = []
+    rows = [
+        {"f": f"{NAMESPACE}facility/recycling", "label": "Recycling Tanks", "tier": "canonical"},
+        {"f": f"{NAMESPACE}facility/energy", "label": "Energy Bank", "tier": "canonical"},
+    ]
+
+    def query(sparql: str) -> list[dict[str, object]]:
+        calls.append(sparql)
+        return rows
+
+    monkeypatch.setattr(retriever, "query", query)
+    assert retriever.prime_turn(42, 1) == 2
+    first = retriever.retrieve(
+        view("Recycling Tanks", faction_id=1).model_copy(update={"turn": 42})
+    )
+    second = retriever.retrieve(view("Energy Bank", faction_id=1).model_copy(update={"turn": 42}))
+    assert first.hits == second.hits == 1
+    assert len(calls) == 1
+    assert "VALUES ?label" not in calls[0]
+
+
+def test_turn_grounding_cache_is_faction_scoped(monkeypatch: pytest.MonkeyPatch) -> None:
+    retriever = QuipuRetriever("http://q", dataset="urn:na:dataset")
+    monkeypatch.setattr(retriever, "query", lambda _sparql: [])
+    retriever.prime_turn(42, 1)
+
+    with pytest.raises(RuntimeError, match="not primed"):
+        retriever.retrieve(view("Recycling Tanks", faction_id=2).model_copy(update={"turn": 42}))
+
+
+def test_turn_query_keeps_the_engine_tenancy_guard() -> None:
+    query = build_turn_query("thinker")
+    assert 'VALUES ?eng { "smac" "thinker" }' in query
+    assert "VALUES ?label" not in query
 
 
 def test_optional_maintenance_does_not_drop_rows() -> None:

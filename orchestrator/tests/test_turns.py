@@ -8,6 +8,7 @@ as success.
 
 from __future__ import annotations
 
+import json
 import logging
 
 import pytest
@@ -15,6 +16,7 @@ from fastapi.testclient import TestClient
 
 from neural_amplifier.agent_brain import AgentBrain
 from neural_amplifier.contract import WorldView
+from neural_amplifier.datalinks.quipu import NAMESPACE, QuipuRetriever
 from neural_amplifier.doorbell import Doorbell
 from neural_amplifier.outcomes import EngineOutcome
 from neural_amplifier.service import create_app
@@ -182,6 +184,47 @@ def test_turn_endpoint_tracks_a_decision_through_its_life() -> None:
     client.post("/outcome", json={"traceparent": TRACE, "event": "applied"})
     view = client.get("/turn").json()
     assert view["counts"]["applied"] == 1
+
+
+def test_turn_primes_once_and_decision_log_reads_grounding_back(
+    tmp_path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The fixture for the game-thread multiplier and Validation.orders field-loss traps."""
+    calls: list[str] = []
+
+    def query(_retriever: QuipuRetriever, sparql: str) -> list[dict[str, object]]:
+        calls.append(sparql)
+        return [
+            {
+                "f": f"{NAMESPACE}unit/scout-patrol",
+                "label": "Scout Patrol",
+                "role": "Explore nearby territory",
+                "tier": "canonical",
+                "src": f"{NAMESPACE}source/alphax",
+            }
+        ]
+
+    monkeypatch.setattr(QuipuRetriever, "query", query)
+    monkeypatch.setenv("NA_QUIPU_URL", "http://q")
+    monkeypatch.setenv("NA_QUIPU_DATASET", "urn:na:dataset")
+    monkeypatch.setenv("NA_DECISION_LOG", str(tmp_path / "decisions.jsonl"))
+    client = TestClient(create_app())
+
+    primed = client.post("/turn", json=announcement(bases=2).model_dump()).json()
+    assert primed["grounding"] == {"status": "primed", "rows": 1}
+    client.post("/decide", json=world_view(base_id=0).model_dump(exclude_none=True))
+    client.post(
+        "/decide",
+        json=world_view(
+            base_id=1,
+            trace="00-0000002a000000010000000207a1c0de-000000010000002c-01",
+        ).model_dump(exclude_none=True),
+    )
+
+    records = [json.loads(line) for line in (tmp_path / "decisions.jsonl").read_text().splitlines()]
+    assert len(calls) == 1
+    assert [record["knowledge"]["quipu_hits"] for record in records] == [1, 1]
+    assert all(record["knowledge"]["quipu_facts"] for record in records)
 
 
 def test_turn_view_is_available_without_an_agent_brain() -> None:
