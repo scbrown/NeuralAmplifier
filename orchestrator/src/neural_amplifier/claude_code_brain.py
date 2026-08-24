@@ -27,6 +27,7 @@ opt-in at the harness (``--brain claude-code``) exactly as ``NA_BRAIN=claude`` g
 from __future__ import annotations
 
 import json
+import os
 import re
 import subprocess
 import time
@@ -113,7 +114,35 @@ TRANSIENT_MARKERS = (
 #: BLOCKED GAME THREAD, and a generous retry count would turn one decision into a ten-minute
 #: stall. One retry converts a 3-minute failure into either a real decision or a 6-minute one,
 #: which is the trade worth making once and not three times.
-TRANSIENT_RETRIES = 1
+#: NAMED IN ATTEMPTS, not in retries, because "retries=2" is ambiguous in the way that costs
+#: money here: it can mean two retries (three attempts) or two attempts (one retry), and at a
+#: measured ~186s per failing attempt that is 558s versus 372s of BLOCKED GAME THREAD for one
+#: decision. A cross-arm ruling that both arms use the same value is only meaningful if both
+#: read the same number the same way, so the unit is in the name and the manifest records it.
+#:
+#: 2 attempts == 1 retry == the behaviour shipped in c3ff10b.
+TRANSIENT_ATTEMPTS_DEFAULT = 2
+
+
+def transient_attempts() -> int:
+    """Total attempts for a transient upstream failure, from `NA_TRANSIENT_ATTEMPTS`.
+
+    Configurable rather than constant so a run's manifest can RECORD what was in force and a
+    reader can check the claim against the environment. A hardcoded constant makes a manifest
+    line unverifiable: it records a number nobody can confirm was actually used.
+
+    Clamped at 1 below and 4 above. Below 1 is not a run; above 4 spends more than ten minutes
+    of blocked game thread on a single decision, which is the regime where retrying makes
+    throughput WORSE rather than better (see na-cp5).
+    """
+    raw = os.environ.get("NA_TRANSIENT_ATTEMPTS")
+    if raw is None:
+        return TRANSIENT_ATTEMPTS_DEFAULT
+    try:
+        value = int(raw)
+    except ValueError:
+        return TRANSIENT_ATTEMPTS_DEFAULT
+    return max(1, min(4, value))
 
 #: Wait between attempts. Short, because 529 clears in seconds when it clears at all, and the
 #: expensive part is the attempt rather than the gap.
@@ -216,7 +245,8 @@ class ClaudeCodeBrain:
             argv += ["--model", self.model]
 
         payload = world_view.model_dump_json()
-        for attempt in range(TRANSIENT_RETRIES + 1):
+        attempts = transient_attempts()
+        for attempt in range(attempts):
             try:
                 done = subprocess.run(
                     argv,
@@ -237,7 +267,7 @@ class ClaudeCodeBrain:
             # A failure the service calls temporary must not become a permanent `safe fallback`
             # in the row's record on the first try. Anything else fails immediately: retrying a
             # bad model or a quota wall spends a blocked game thread on a certain failure.
-            if attempt < TRANSIENT_RETRIES and _is_transient(why):
+            if attempt < attempts - 1 and _is_transient(why):
                 self.transient_retries += 1
                 time.sleep(RETRY_BACKOFF_SECONDS * (attempt + 1))
                 continue

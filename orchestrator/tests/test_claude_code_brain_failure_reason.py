@@ -197,7 +197,7 @@ def test_the_retry_is_BOUNDED(monkeypatch: Any) -> None:
     with pytest.raises(BrainError) as caught:
         brain.decide(_world())
 
-    assert len(calls) == 2, "retried more times than TRANSIENT_RETRIES allows"
+    assert len(calls) == 2, "retried more times than the attempt budget allows"
     assert brain.transient_retries == 1
     assert "529" in str(caught.value), "the surviving error must still name the cause"
 
@@ -227,6 +227,77 @@ def test_a_clean_call_does_not_count_a_retry(monkeypatch: Any) -> None:
     brain = ClaudeCodeBrain()
 
     brain.decide(world)
+
+    assert len(calls) == 1
+    assert brain.transient_retries == 0
+
+
+
+# --------------------------------------------------------------------------------------
+# The attempt budget is CONFIGURABLE and named in ATTEMPTS — sattler's cross-arm ruling
+# requires both arms to use the same value, which only means something if both read the
+# same number the same way. "retries=2" can mean 2 retries (3 attempts) or 2 attempts
+# (1 retry), and at ~186s per failing attempt that is 558s vs 372s of blocked game thread.
+# --------------------------------------------------------------------------------------
+
+from neural_amplifier.claude_code_brain import (  # noqa: E402
+    TRANSIENT_ATTEMPTS_DEFAULT,
+    transient_attempts,
+)
+
+
+def test_the_default_is_two_attempts_which_is_one_retry(monkeypatch: Any) -> None:
+    monkeypatch.delenv("NA_TRANSIENT_ATTEMPTS", raising=False)
+    assert transient_attempts() == 2 == TRANSIENT_ATTEMPTS_DEFAULT
+
+
+def test_the_env_var_is_honoured(monkeypatch: Any) -> None:
+    monkeypatch.setenv("NA_TRANSIENT_ATTEMPTS", "3")
+    assert transient_attempts() == 3
+
+
+def test_it_is_clamped_at_both_ends(monkeypatch: Any) -> None:
+    """Below 1 is not a run; above 4 is the regime where retrying makes throughput worse."""
+    monkeypatch.setenv("NA_TRANSIENT_ATTEMPTS", "0")
+    assert transient_attempts() == 1
+    monkeypatch.setenv("NA_TRANSIENT_ATTEMPTS", "-5")
+    assert transient_attempts() == 1
+    monkeypatch.setenv("NA_TRANSIENT_ATTEMPTS", "99")
+    assert transient_attempts() == 4
+
+
+def test_garbage_falls_back_to_the_default_rather_than_crashing_a_run(monkeypatch: Any) -> None:
+    monkeypatch.setenv("NA_TRANSIENT_ATTEMPTS", "two")
+    assert transient_attempts() == TRANSIENT_ATTEMPTS_DEFAULT
+
+
+def test_the_LOOP_honours_the_configured_budget(monkeypatch: Any) -> None:
+    """The predicate tests above cannot show that the loop reads the setting."""
+    from neural_amplifier import claude_code_brain as mod
+    from neural_amplifier.brain import BrainError
+
+    monkeypatch.setenv("NA_TRANSIENT_ATTEMPTS", "3")
+    calls = _scripted(monkeypatch, mod, [(1, _A_529), (1, _A_529), (1, _A_529)])
+    brain = ClaudeCodeBrain()
+
+    with pytest.raises(BrainError):
+        brain.decide(_world())
+
+    assert len(calls) == 3, "the loop ignored NA_TRANSIENT_ATTEMPTS"
+    assert brain.transient_retries == 2, "3 attempts is 2 retries"
+
+
+def test_one_attempt_means_NO_retry(monkeypatch: Any) -> None:
+    """Anti-vacuity at the floor: the loop must be able to not retry at all."""
+    from neural_amplifier import claude_code_brain as mod
+    from neural_amplifier.brain import BrainError
+
+    monkeypatch.setenv("NA_TRANSIENT_ATTEMPTS", "1")
+    calls = _scripted(monkeypatch, mod, [(1, _A_529)])
+    brain = ClaudeCodeBrain()
+
+    with pytest.raises(BrainError):
+        brain.decide(_world())
 
     assert len(calls) == 1
     assert brain.transient_retries == 0
