@@ -80,6 +80,42 @@ turn — see the section above for when that applies and what makes a plan check
 """
 
 
+
+def _why_it_failed(done: "subprocess.CompletedProcess[str]") -> str:
+    """The diagnosis is on STDOUT, and reporting only stderr throws it away.
+
+    MEASURED 2026-08-24 against the real CLI (`claude -p --output-format json` with a bad
+    model): stdout carried 1265 bytes of parseable JSON including
+    `result: "There's an issue with the selected model ... it may not exist or you may not
+    have access to it"`, while stderr carried 98 bytes of machine tag. This code reported
+    `done.stderr[:300]` and discarded stdout entirely.
+
+    That is not merely lossy. On ladder-attempt4 the failures arrived with an EMPTY stderr, so
+    19 fallback decisions were recorded with `degrade_reason="claude -p exited 1: "` — the cause
+    named as the empty string — while the explanation sat unread in stdout. A degradation whose
+    reason is blank cannot be told apart from a rate limit, a usage cap, a timeout or a crash,
+    which are four different remedies.
+
+    Order matters: `result` first because it is the sentence a human needs, then raw stdout in
+    case the envelope shape changes, then stderr, and finally an explicit statement that BOTH
+    streams were empty — because "no output" is itself a finding and must not render as a
+    trailing colon.
+    """
+    out = (done.stdout or "").strip()
+    err = (done.stderr or "").strip()
+    parts: list[str] = []
+    if out:
+        try:
+            envelope = json.loads(out)
+        except ValueError:
+            parts.append(f"stdout: {out[:300]}")
+        else:
+            result = str(envelope.get("result") or "").strip()
+            parts.append(f"result: {result[:300]}" if result else f"stdout: {out[:300]}")
+    if err:
+        parts.append(f"stderr: {err[:200]}")
+    return " | ".join(parts) if parts else "both stdout and stderr were EMPTY"
+
 class ClaudeCodeBrain:
     """Runs one decision through ``claude -p``, in a fresh process each time."""
 
@@ -142,7 +178,7 @@ class ClaudeCodeBrain:
             raise BrainError(f"could not run claude: {exc}") from exc
 
         if done.returncode != 0:
-            raise BrainError(f"claude -p exited {done.returncode}: {done.stderr[:300]}")
+            raise BrainError(f"claude -p exited {done.returncode}: {_why_it_failed(done)}")
 
         try:
             envelope = json.loads(done.stdout)
