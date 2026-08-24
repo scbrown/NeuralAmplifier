@@ -546,3 +546,22 @@ def test_live_endpoint_carries_the_run_state() -> None:
     client = TestClient(create_app(brain=ScriptedBrain(), log=DecisionLog(Path(os.devnull))))
     body = client.get("/dashboard/api/live").json()
     assert body["run_state"]["state"] in {"no-run", "paused", "live"}
+
+
+def test_the_served_page_uses_no_internal_jargon() -> None:
+    """The glossary test was too narrow and this slipped past it.
+
+    Asserting only that the GLOSSARY is translated says nothing about the page, which still
+    rendered "GUARD", "ADAPTER ABSENT", "// DEGRADED", "ADVISORIES" and "STRIPPED" as headings.
+    The guard has to look at what is actually served.
+    """
+    page = TestClient(create_app(brain=ScriptedBrain())).get("/dashboard").text
+    for jargon in (
+        "// DEGRADED",
+        "ADAPTER ABSENT",
+        "LINK DEGRADED",
+        ">GUARD<",
+        "<b>ADVISORIES</b>",
+        "<b>STRIPPED</b>",
+    ):
+        assert jargon not in page, f"the page still shows internal jargon: {jargon}"
