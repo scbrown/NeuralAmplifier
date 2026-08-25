@@ -46,5 +46,37 @@
       "match_type": "must-match",
       "evidence_source": "?b a smac:BaseState ; smac:garrison_count ?g ; smac:defend_goal ?goal | ?g >= 1"
     }
+  },
+  {
+    "label": "colony-pod-preserves-base-population",
+    "targets": "smac:BaseState",
+    "claim": "A Colony Pod build needs projected population above one at completion or it consumes the base",
+    "boundary": "order",
+    "effect": "warn",
+    "selector": {
+      "selector_lang": "graph-pattern",
+      "evidence_source": "?b a smac:BaseState ; smac:current_item_name ?item | ?item = \"Colony Pod\""
+    },
+    "predicate": {
+      "selector_lang": "graph-pattern",
+      "match_type": "must-match",
+      "evidence_source": "?b a smac:BaseState ; smac:pop_size ?pop | ?pop >= 2"
+    }
+  },
+  {
+    "label": "colony-pod-needs-mineral-surplus",
+    "targets": "smac:BaseState",
+    "claim": "A Colony Pod build needs positive mineral surplus as well as safe projected population",
+    "boundary": "order",
+    "effect": "warn",
+    "selector": {
+      "selector_lang": "graph-pattern",
+      "evidence_source": "?b a smac:BaseState ; smac:current_item_name ?item | ?item = \"Colony Pod\""
+    },
+    "predicate": {
+      "selector_lang": "graph-pattern",
+      "match_type": "must-match",
+      "evidence_source": "?b a smac:BaseState ; smac:mineral_surplus ?m | ?m >= 1"
+    }
   }
 ]

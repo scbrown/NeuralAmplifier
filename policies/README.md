@@ -47,6 +47,13 @@ them. With it off, the base policies report `vacuous` rather than passing silent
 
 ## What is enforceable today, and what only warns
 
+The `colony-pod-*` policies **warn before the production plan bites**. They project the
+`pod-population-constraint` captured by aegis-6czy9 onto fields the Thinker adapter already
+publishes: current build, population, and mineral surplus. They deliberately do not deny. The
+authoritative rule is about projected population at completion, while the board currently holds
+only present population; a warning makes the agent show its growth projection without pretending
+the guard knows the future.
+
 `reserves-stay-solvent` **denies**, and is verified end to end: reserves 40, a hurry costing 81,
 the guard strips the order, the brain is re-asked with the claim, and it takes the legal
 alternative — one decision, `repairs: 1`, not a lost turn.
