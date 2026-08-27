@@ -26,3 +26,16 @@ NA_PLAN_STATE=evals/runs/na-e55/<run-id>/plan-state.json \
 
 Keep the fairness profile identical to the baseline (human slot, Talent, zero structural
 handicaps) and commit the resulting census and decision log before drawing a conclusion.
+
+## v2 bounded checkpoint result
+
+`v2-turn99-result.json` records a bounded turn 99–111 run from the preserved clean save. The
+capacity directive changed every production decision: 58 chose Formers (`unit:1`) and 14 chose
+Recycling Tanks (`facility:3`), with zero Colony Pods; all 72 production decisions reported that
+they followed `terraform-capacity-before-pods`. The transport was clean (145 decisions, zero
+degraded) and cost $10.9909.
+
+The turn-110 census was still **6 bases**, identical to the original compound arm's turn-110
+checkpoint. This falsifies the narrow hypothesis that adding the enabler bends the immediate
+base-count slope. It does establish a large behavioral shift whose later capacity effect needs a
+longer arm; do not report the shift itself as a slope improvement.
