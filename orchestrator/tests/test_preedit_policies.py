@@ -27,10 +27,13 @@ import pytest
 from rdflib import Graph, Namespace, URIRef
 from rdflib.namespace import RDFS
 
+from neural_amplifier.yupana import POLICY_QUERY
+
 AEGIS = Namespace("http://aegis.gastown.local/ontology/")
 
 REPO = Path(__file__).resolve().parents[2]
 TTL = REPO / "policies" / "preedit.ttl"
+BOARD_TTL = REPO / "policies" / "board.ttl"
 TOML = REPO / ".bobbin" / "config.toml"
 
 
@@ -139,17 +142,15 @@ def test_the_governed_effects_are_advisory() -> None:
 
 
 def test_the_namespace_is_the_one_yupana_queries() -> None:
-    """Not the board plane's namespace, and this is not tidiable.
+    """Both policy planes use Quipu's governed namespace.
 
     `orchestrator/src/neural_amplifier/yupana.py` owns the board query and names
-    `https://aegis.local/ontology/`. yupana's own `src/project_queries.rs` names
-    `http://aegis.gastown.local/ontology/` and is not ours to change from here. A file written
-    against the wrong one parses fine, projects zero rows, and reports nothing.
+    `http://aegis.gastown.local/ontology/`. yupana's own `src/project_queries.rs` names the same
+    governed vocabulary. A look-alike namespace parses fine, projects zero rows, and reports
+    nothing.
 
-    Asserted over the PARSED graph, not the file text. The header comment here explains the
-    split and necessarily names both namespaces, so a substring check over the source would
-    fail on its own documentation — and would pass on a file that merely mentioned the right
-    prefix without using it.
+    Asserted over the PARSED graph, not the file text: a substring check would pass on a file
+    that merely mentioned the right prefix without binding or using it.
     """
     g = Graph()
     g.parse(TTL, format="turtle")
@@ -162,3 +163,17 @@ def test_the_namespace_is_the_one_yupana_queries() -> None:
     assert governance, "no governance predicates at all"
     for p in governance:
         assert p.startswith("http://aegis.gastown.local/ontology/"), p
+
+
+def test_board_emitter_uses_the_same_governed_namespace() -> None:
+    """Pin both producer surfaces so the next emit cannot recreate the retired classes."""
+    governed = "http://aegis.gastown.local/ontology/"
+    retired = "https://aegis.local/ontology/"
+
+    board = Graph()
+    board.parse(BOARD_TTL, format="turtle")
+    assert dict(board.namespaces())["aegis"] == URIRef(governed)
+    assert f"PREFIX aegis: <{governed}>" in POLICY_QUERY
+
+    assert retired not in BOARD_TTL.read_text()
+    assert retired not in POLICY_QUERY
