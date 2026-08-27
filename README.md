@@ -402,6 +402,34 @@ so a published fixture remains a fixed point. `NA_SAVE` and `NA_SEED` are mutual
 Wine audio is disabled per isolated prefix by default so unattended boots stay silent;
 `NA_SOUND=1` explicitly opts back in.
 
+To compare configurations from the same starting state, `fixture_arms.sh` runs one fixture under
+several setup commands. Every arm starts from byte-identical save data, so differences belong to
+the configuration rather than a different map:
+
+```bash
+THINKER_DIR=../thinker scripts/fixture_arms.sh council-vote-blocked /path/to/game 8 \
+  'baseline:' 'alternate:build 0 -4'
+```
+
+Unattended runs distinguish a busy command channel from a dead game, reap orchestrators left
+behind by completed runs, and cap themselves on turns that made progress rather than wall-clock
+time. Model calls are bounded too: `NA_TRANSIENT_ATTEMPTS` names the total attempt budget
+(default 2, including the first call), and provider-neutral success/failure outcomes are appended
+to `~/.local/state/model-provider-calls.jsonl` for external telemetry. `/coverage` reports both
+the degraded decision count and the brain's own counters, so a healthy process cannot hide a
+fallback-only row.
+
+A completed decision log can be handed to Shuttle as a signed, windowed workflow run without
+putting export work on the game path:
+
+```bash
+neural-amplifier export-run runs/game-1/decisions.jsonl --agent importer-a --dry-run
+neural-amplifier export-run runs/game-1/decisions.jsonl --agent importer-a
+```
+
+The export records one transition per played turn and a terminal finish. See
+[docs/workflow-export.md](docs/workflow-export.md) for the timestamp and signature boundaries.
+
 The dashboard is a read-only view over a run's append-only evidence:
 
 ```bash
@@ -439,6 +467,7 @@ just dashboard           # Read-only live/eval view at /dashboard
 just eval list           # Behavioural evals: what was measured, and what it found
 just coverage            # Run health: surfaces fired, fallback rate, adherence
 just replay              # Re-run a recorded log against the current code — no game
+neural-amplifier export-run <decisions.jsonl> --agent <name> --dry-run
 just ingest              # Your alphax.txt → the smac: RDF graph + static briefing
 just quipu-load          # Load that graph into a local Quipu store
 just quipu-serve         # Serve it for grounded retrieval (NA_QUIPU_URL)
