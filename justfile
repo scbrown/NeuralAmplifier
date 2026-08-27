@@ -357,7 +357,7 @@ ab-outcomes baseline brain:
     @scripts/ab_outcomes.py "{{baseline}}" "{{brain}}"
 
 # Score engine-emitted strategic outcomes with no game, model or network.
-domain-eval events definitions="evals/domains.json" faction="":
+domain-eval events faction="" definitions="evals/domains.json":
     @uv run --directory orchestrator neural-amplifier domain-eval \
         "{{justfile_directory()}}/{{events}}" \
         --definitions "{{justfile_directory()}}/{{definitions}}" \

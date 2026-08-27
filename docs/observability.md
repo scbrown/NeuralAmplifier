@@ -225,7 +225,7 @@ game says happened*. The adapter emits compact events (`combat.resolved`, `unit.
 `base.lost`) with `turn` and `faction_id`; combat events also name `posture` (`attack` or
 `defense`) and `outcome`, while naval bases name `terrain: "sea"`.
 
-`just domain-eval <events.jsonl> faction=7` reduces that stream in seconds and evaluates the five
+`just domain-eval <events.jsonl> 7` reduces that stream in seconds and evaluates the five
 committed domains in `evals/domains.json`: unit strategy, defense, attack, sea vehicles and sea
 bases. The committed thresholds are **scenario-coverage gates**, not claims of good play. A
 hypothesis tightens or replaces them with its falsifier before a run. Missing files, malformed
