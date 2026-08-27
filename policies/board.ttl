@@ -15,7 +15,7 @@
 # "action" (a dispatched action) and "transition" (a state change); yupana added "order" for the
 # FR-36 pre-apply seam, which is the one a game order sits at.
 
-@prefix aegis: <https://aegis.local/ontology/> .
+@prefix aegis: <http://aegis.gastown.local/ontology/> .
 @prefix rdfs:  <http://www.w3.org/2000/01/rdf-schema#> .
 @prefix na:    <http://neuralamplifier.local/policy/> .
 

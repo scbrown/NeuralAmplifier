@@ -6,18 +6,16 @@
 # edit has provenance, a history and a single owner rather than existing as a file somebody
 # edited. Same move `policies/board.ttl` made for the board plane, and for the same reason.
 #
-# ## Why the namespace differs from board.ttl
+# ## Both planes use the governed namespace
 #
-# board.ttl uses `https://aegis.local/ontology/`; this file uses
-# `http://aegis.gastown.local/ontology/`. That is not an inconsistency to tidy — the two
-# planes are read by two different consumers, and each one's namespace is fixed by the
-# consumer, not by us:
+# board.ttl and this file both use `http://aegis.gastown.local/ontology/`, Quipu's governed
+# vocabulary. The two planes remain distinct by boundary and evidence shape, not by minting
+# look-alike classes in a second namespace:
 #
 #   - the BOARD plane is queried by `orchestrator/src/neural_amplifier/yupana.py`, whose
-#     POLICY_QUERY we own and which names `https://aegis.local/ontology/`.
+#     POLICY_QUERY we own and which names `http://aegis.gastown.local/ontology/`.
 #   - the PRE-EDIT plane is queried by yupana itself (`src/project_queries.rs`
-#     POLICY_QUERY), which names `http://aegis.gastown.local/ontology/` and is not ours to
-#     change from here.
+#     POLICY_QUERY), which names the same governed namespace.
 #
 # Getting this wrong is silent in the worst way: the SPARQL matches nothing, the projection
 # returns zero rows, and a guard with no rules is indistinguishable from a guard with

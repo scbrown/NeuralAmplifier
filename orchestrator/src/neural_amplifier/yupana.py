@@ -395,7 +395,7 @@ class YupanaGuard:
 #:
 #: Dot terminators between the triple blocks are load-bearing: quipu's parser refuses the
 #: semicolon-and-newline form that works inside one subject.
-POLICY_QUERY = """PREFIX aegis: <https://aegis.local/ontology/>
+POLICY_QUERY = """PREFIX aegis: <http://aegis.gastown.local/ontology/>
 PREFIX rdfs: <http://www.w3.org/2000/01/rdf-schema#>
 SELECT ?label ?targets ?claim ?boundary ?effect ?sel_lang ?sel_src ?pred_lang ?pred_match ?pred_src
 WHERE {

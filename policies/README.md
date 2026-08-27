@@ -126,7 +126,7 @@ Three things to get right:
   effect, because denying a move for something it did not cause removes a legal and possibly
   correct option.
 
-## Two planes, two namespaces, two consumers
+## Two planes, one governed namespace, two consumers
 
 `board.ttl` and `preedit.ttl` are both `aegis:Policy` files, and they are **not**
 interchangeable. Copying an idiom from one into the other is the mistake this section exists to
@@ -136,13 +136,14 @@ prevent, because every way of getting it wrong fails as silence rather than as a
 | --- | --- | --- |
 | Guards | game orders, at decision time | source edits, at `hook pre-edit` |
 | Read by | `neural_amplifier/yupana.py` | yupana's own `src/project_queries.rs` |
-| Namespace | `https://aegis.local/ontology/` | `http://aegis.gastown.local/ontology/` |
+| Namespace | `http://aegis.gastown.local/ontology/` | `http://aegis.gastown.local/ontology/` |
 | `aegis:boundary` | `"order"` | `"action"` |
 | Evidence | graph patterns over board state | tree-sitter selector + regex predicate |
 | Also needs | — | `aegis:tier "tree-sitter"`, `aegis:language` |
 
-The namespaces differ because each is fixed by its consumer, not chosen by us: we own the
-board query and yupana owns the pre-edit one. A file written against the wrong namespace parses
+Both consumers query Quipu's governed namespace. The planes differ by boundary and evidence
+shape, not by vocabulary: the board consumes order-time graph patterns, while pre-edit consumes
+tree-sitter selectors and regex predicates. A file written against a look-alike namespace parses
 cleanly, matches nothing, and yields a guard with no rules — which cannot be told apart from a
 guard with nothing to complain about. Same for a missing `tier` or the wrong `boundary`.
 
