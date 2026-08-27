@@ -304,6 +304,24 @@ def test_directives_survive_a_restart(tmp_path: Path) -> None:
     assert live.priority == 7
 
 
+def test_seed_plan_is_immutable_when_state_has_a_separate_path(tmp_path: Path) -> None:
+    """An experiment fixture is input, not the process's scratch file."""
+    seed = tmp_path / "seed.json"
+    state = tmp_path / "run" / "plan-state.json"
+    DirectiveStore(seed).add([saving(id="seed-directive", horizon_turn=45)])
+    original = seed.read_bytes()
+
+    store = DirectiveStore(seed, state_path=state)
+    store.add([saving(id="runtime-directive", horizon_turn=99)])
+    assert [d.id for d in store.in_force(turn=46)] == ["runtime-directive"]
+
+    assert seed.read_bytes() == original
+    assert state.is_file()
+    assert [d.id for d in DirectiveStore(seed, state_path=state).in_force(46)] == [
+        "runtime-directive"
+    ]
+
+
 def test_a_corrupt_plan_file_costs_the_plan_not_the_game(tmp_path: Path) -> None:
     """Losing the plan is bad; refusing to play is worse. A game with no standing directives is
     where every game starts."""

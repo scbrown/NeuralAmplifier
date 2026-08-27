@@ -43,6 +43,17 @@
       "starts_turn": 111,
       "horizon_turn": 140,
       "rationale": "The measured frontier at turn 143 was 43-66 CPU bases versus 12 for the brain. Sixty is a slope target grounded in that census, not a universal game-law claim."
+    },
+    {
+      "id": "terraform-capacity-before-pods",
+      "intent": "Keep each producing base at a positive mineral surplus by prioritizing Formers and tile improvements before another colony pod whenever support or weak tiles have stalled production.",
+      "metric": "mineral_surplus",
+      "comparator": "at_least",
+      "target": 2,
+      "priority": 8,
+      "starts_turn": 1,
+      "horizon_turn": 140,
+      "rationale": "The first compound arm chose Colony Pods in 102 of 107 late base-production decisions while 36 decisions explicitly named zero mineral surplus. Expansion targets need their production enabler in force at equal priority or they suppress it."
     }
   ]
 }

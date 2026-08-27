@@ -101,6 +101,9 @@ class Run:
 
     decision_log: str | None = None
     world_view_store: str | None = None
+    #: Optional mutable companion to the standing-plan seed. When present, ``plan`` is loaded as
+    #: immutable experiment input and all additions/revocations are persisted here instead.
+    plan_state: str | None = None
     plan: str | None = None
     otel: bool = False
     #: The game's own directory — where `na-command` and `na-command-result` live. Required only
@@ -174,6 +177,7 @@ def load(path: Path | None = None) -> Config:
         run=Run(
             decision_log=_text(env("NA_DECISION_LOG"), run.get("decision_log"), None),
             world_view_store=_text(env("NA_WORLD_VIEW_STORE"), run.get("world_view_store"), None),
+            plan_state=_text(env("NA_PLAN_STATE"), run.get("plan_state"), None),
             plan=_text(env("NA_PLAN"), run.get("plan"), None),
             otel=_flag(env("NA_OTEL"), run.get("otel"), False),
             game_dir=_text(env("NA_GAME_DIR"), run.get("game_dir"), None),

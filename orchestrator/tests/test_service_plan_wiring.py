@@ -82,3 +82,48 @@ def test_a_directive_issued_through_the_service_survives_the_decision(
     written = json.loads(plan.read_text())
     assert [d["id"] for d in written["directives"]] == ["bank-for-expansion"]
     assert [d.id for d in store.in_force(46)] == ["bank-for-expansion"]
+
+
+def test_service_keeps_a_seed_plan_immutable_when_state_is_configured(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from neural_amplifier.contract import Directive
+
+    seed = tmp_path / "seed.json"
+    state = tmp_path / "runtime" / "plan.json"
+    payload = {
+        "directives": [
+            Directive(
+                id="expand",
+                intent="Expand without rewriting this experiment fixture.",
+                metric="base_count",
+                comparator="at_least",
+                target=10,
+            ).model_dump(mode="json")
+        ]
+    }
+    seed.write_text(json.dumps(payload, indent=2) + "\n")
+    original = seed.read_bytes()
+    monkeypatch.setenv("NA_PLAN", str(seed))
+    monkeypatch.setenv("NA_PLAN_STATE", str(state))
+
+    app = service.create_app()
+    store = app.state.orchestrator.plan
+    assert store is not None
+    store.add(
+        [
+            Directive(
+                id="runtime",
+                intent="Remember a decision made during this run.",
+                metric="energy_reserves",
+                comparator="at_least",
+                target=100,
+            )
+        ]
+    )
+
+    assert seed.read_bytes() == original
+    assert {d["id"] for d in json.loads(state.read_text())["directives"]} == {
+        "expand",
+        "runtime",
+    }

@@ -463,28 +463,35 @@ def _delta(delta: float) -> str:
 
 
 class DirectiveStore:
-    """Directives in force, optionally persisted.
+    """Directives in force, optionally seeded and persisted.
 
     Keyed by directive id so that re-issuing one replaces it rather than accumulating a second
     copy — a long-horizon decision that fires every few turns will restate a plan it still
     believes in, and two contradictory copies of the same id would be worse than either.
 
-    Persistence is one JSON file rewritten in full. Directives are few and change rarely, so
-    append-and-replay would buy nothing and cost the ability to read the file at a glance.
+    By default ``path`` is both the initial contents and the file rewritten in full, preserving
+    the original API for ordinary mutable plans. Passing ``state_path`` separates those roles:
+    ``path`` becomes immutable seed input and mutations are written only to ``state_path``. This
+    matters for experiments, where rewriting the treatment fixture changes what later runs mean.
+
+    Directives are few and change rarely, so append-and-replay would buy nothing and cost the
+    ability to read the state at a glance.
     """
 
-    def __init__(self, path: Path | None = None) -> None:
-        self.path = path
+    def __init__(self, path: Path | None = None, *, state_path: Path | None = None) -> None:
+        self.seed_path = path
+        self.path = state_path or path
         self._by_id: dict[str, Directive] = {}
         if path is not None:
-            self._load()
+            self._load(path)
+        if state_path is not None:
+            self._load(state_path)
 
-    def _load(self) -> None:
-        assert self.path is not None
-        if not self.path.is_file():
+    def _load(self, path: Path) -> None:
+        if not path.is_file():
             return
         try:
-            payload = json.loads(self.path.read_text(encoding="utf-8"))
+            payload = json.loads(path.read_text(encoding="utf-8"))
             for raw in payload.get("directives", []):
                 directive = Directive.model_validate(raw)
                 self._by_id[directive.id] = directive

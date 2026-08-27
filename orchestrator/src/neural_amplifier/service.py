@@ -451,6 +451,7 @@ def create_app(
     # Absent path stays absent — no `NA_PLAN` means no store, which is a legitimate way to run and
     # is what `plan_absent` is for.
     plan_path = config.run.plan
+    plan_state_path = config.run.plan_state
     # Where a deferred decision waits for the agent to come back to it (na-7bk). Always built:
     # a deferral costs nothing until a brain returns `defer`, and a configuration where the
     # mechanism silently is not there is one where an agent's considered "later" degrades into
@@ -481,7 +482,14 @@ def create_app(
         store=WorldViewStore(store_path) if store_path else None,
         retriever=resolved_retriever,  # type: ignore[arg-type]
         guard=build_guard(resolved_retriever, config),  # type: ignore[arg-type]
-        plan=DirectiveStore(Path(plan_path)) if plan_path else None,
+        plan=(
+            DirectiveStore(
+                Path(plan_path),
+                state_path=Path(plan_state_path) if plan_state_path else None,
+            )
+            if plan_path
+            else None
+        ),
         policy=config.surfaces,
         deferrals=deferrals,
         queue=answer_queue,
