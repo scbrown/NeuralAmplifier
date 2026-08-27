@@ -1,0 +1,15 @@
+{
+  "directives": [
+    {
+      "id": "pod-wave-after-capacity",
+      "intent": "Convert the accumulated Former and terraforming capacity into expansion now: choose a Colony Pod whenever it is a legal production option until base count rises; choose a facility or another Former only when no Colony Pod is available.",
+      "metric": "base_count",
+      "comparator": "at_least",
+      "target": 60,
+      "priority": 9,
+      "starts_turn": 111,
+      "horizon_turn": 140,
+      "rationale": "The v2 arm built 116 Formers but stayed at six bases through turn 140 because its co-equal capacity directive remained active and selected zero Colony Pods. This arm isolates the missing phase handoff from capacity construction to expansion production."
+    }
+  ]
+}

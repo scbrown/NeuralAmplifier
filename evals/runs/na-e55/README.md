@@ -36,6 +36,10 @@ they followed `terraform-capacity-before-pods`. The transport was clean (145 dec
 degraded) and cost $10.9909.
 
 The turn-110 census was still **6 bases**, identical to the original compound arm's turn-110
-checkpoint. This falsifies the narrow hypothesis that adding the enabler bends the immediate
-base-count slope. It does establish a large behavioral shift whose later capacity effect needs a
-longer arm; do not report the shift itself as a slope improvement.
+checkpoint. A continuation from the preserved turn-111 save through turn 140 stayed at **6 bases
+for every saved turn**, versus 7 for v1 at turn 140. Across the complete v2 arm, 246 production
+decisions chose 116 Formers, 119 Recycling Tanks, 11 Children's Creches, and zero Colony Pods;
+493 total decisions were clean, with zero degraded calls, at $41.351788. This falsifies both the
+immediate and delayed versions of the capacity-enabler hypothesis. The next discriminating arm
+must test an explicit handoff from accumulated Former capacity to Colony Pods rather than leave
+the enabler co-equal through the endpoint.
