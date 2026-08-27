@@ -50,3 +50,29 @@ def _never_write_the_real_grounding_cache(tmp_path_factory: pytest.TempPathFacto
         os.environ.pop("HANK_GROUNDING_CACHE_DIR", None)
     else:
         os.environ["HANK_GROUNDING_CACHE_DIR"] = previous
+
+
+@pytest.fixture(autouse=True, scope="session")
+def _never_write_the_real_provider_event_log(tmp_path_factory: pytest.TempPathFactory):
+    """Keep simulated provider outcomes out of the host's production counter journal.
+
+    Claude-brain tests deliberately exercise transient, quota, and successful calls. Without
+    this boundary those deterministic fixtures append to the same default JSONL as real games,
+    making the monitoring rule page on a provider outage that never happened.
+
+    Set both seams: the module constant protects this pytest process (which imports the module
+    during collection), while the environment protects any child process a test launches.
+    """
+    from neural_amplifier import claude_code_brain
+
+    event_log = tmp_path_factory.mktemp("provider-events") / "calls.jsonl"
+    previous_env = os.environ.get("MODEL_PROVIDER_EVENT_LOG")
+    previous_path = claude_code_brain.PROVIDER_EVENT_LOG
+    os.environ["MODEL_PROVIDER_EVENT_LOG"] = str(event_log)
+    claude_code_brain.PROVIDER_EVENT_LOG = event_log
+    yield event_log
+    claude_code_brain.PROVIDER_EVENT_LOG = previous_path
+    if previous_env is None:
+        os.environ.pop("MODEL_PROVIDER_EVENT_LOG", None)
+    else:
+        os.environ["MODEL_PROVIDER_EVENT_LOG"] = previous_env
