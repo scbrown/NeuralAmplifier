@@ -218,6 +218,20 @@ the log. Free ground truth; design for it now.
 
 ## 5. Testing leverage
 
+Strategic outcomes use a separate, engine-emitted JSONL stream with schema
+`na.outcome.v1`. Decision records answer *why the brain chose*; outcome events answer *what the
+game says happened*. The adapter emits compact events (`combat.resolved`, `unit.action`,
+`unit.killed`, `unit.lost`, `naval.production`, `naval.movement`, `naval.action`, `base.founded`,
+`base.lost`) with `turn` and `faction_id`; combat events also name `posture` (`attack` or
+`defense`) and `outcome`, while naval bases name `terrain: "sea"`.
+
+`just domain-eval <events.jsonl> faction=7` reduces that stream in seconds and evaluates the five
+committed domains in `evals/domains.json`: unit strategy, defense, attack, sea vehicles and sea
+bases. The committed thresholds are **scenario-coverage gates**, not claims of good play. A
+hypothesis tightens or replaces them with its falsifier before a run. Missing files, malformed
+events, unknown schemas and a faction with no evidence refuse the verdict; a domain with no
+matching observable fails visibly rather than disappearing from the report.
+
 The strongest argument for building this early: **telemetry is the assertion surface.** Tests
 query the decision stream rather than needing bespoke hooks.
 

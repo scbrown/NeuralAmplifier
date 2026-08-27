@@ -356,6 +356,13 @@ directive-report log="decisions.jsonl":
 ab-outcomes baseline brain:
     @scripts/ab_outcomes.py "{{baseline}}" "{{brain}}"
 
+# Score engine-emitted strategic outcomes with no game, model or network.
+domain-eval events definitions="evals/domains.json" faction="":
+    @uv run --directory orchestrator neural-amplifier domain-eval \
+        "{{justfile_directory()}}/{{events}}" \
+        --definitions "{{justfile_directory()}}/{{definitions}}" \
+        {{ if faction == "" { "" } else { "--faction " + faction } }}
+
 # === Quipu (knowledge graph) ===
 
 # Needs `quipu` built with --features shacl,onnx (scripts/setup-environment.sh).

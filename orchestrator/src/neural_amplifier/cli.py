@@ -91,6 +91,16 @@ def main(argv: list[str] | None = None) -> int:
         help="require identical decisions (scripted-brain runs only)",
     )
 
+    domain = sub.add_parser("domain-eval", help="score engine outcome events in seconds")
+    domain.add_argument("events", type=Path, help="na.outcome.v1 JSONL from the adapter")
+    domain.add_argument(
+        "--definitions",
+        type=Path,
+        default=Path("evals/domains.json"),
+        help="five-domain gate definitions (default evals/domains.json)",
+    )
+    domain.add_argument("--faction", type=int, default=None)
+
     sub.add_parser("surfaces", help="how much of the game surface is instrumented")
 
     exp = sub.add_parser(
@@ -225,6 +235,26 @@ def main(argv: list[str] | None = None) -> int:
                 print(f"  observed only, no apply path yet: {', '.join(observe_only)}")
         print("\nSee docs/game-surface.md §2.5 for the per-surface matrix.")
         return 0
+
+    if args.command == "domain-eval":
+        from .domain_eval import DomainEvalError, evaluate, load_definitions, load_events
+
+        try:
+            results = evaluate(
+                load_events(args.events, faction_id=args.faction),
+                load_definitions(args.definitions),
+            )
+        except DomainEvalError as exc:
+            print(f"FAIL: {exc}", file=sys.stderr)
+            return 2
+        for result in results:
+            print(f"{'PASS' if result.passed else 'FAIL'} {result.domain}")
+            for gate in result.gates:
+                print(
+                    f"  {gate.metric}: {gate.observed:g} {gate.comparator} {gate.target:g} "
+                    f"=> {'PASS' if gate.passed else 'FAIL'}"
+                )
+        return 0 if all(result.passed for result in results) else 1
 
     if args.command == "export-run":
         from .workflow_export import WorkflowExportError, export_run

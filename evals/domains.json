@@ -1,0 +1,19 @@
+{
+  "unit_strategy": [
+    {"metric": "unit_actions", "comparator": "at_least", "target": 1},
+    {"metric": "active_unit_classes", "comparator": "at_least", "target": 1}
+  ],
+  "defense": [
+    {"metric": "defensive_engagements", "comparator": "at_least", "target": 1}
+  ],
+  "attack": [
+    {"metric": "offensive_engagements", "comparator": "at_least", "target": 1}
+  ],
+  "sea_vehicles": [
+    {"metric": "naval_units_produced", "comparator": "at_least", "target": 1},
+    {"metric": "naval_actions", "comparator": "at_least", "target": 1}
+  ],
+  "sea_bases": [
+    {"metric": "sea_bases_founded", "comparator": "at_least", "target": 1}
+  ]
+}
