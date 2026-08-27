@@ -382,7 +382,9 @@ class QuipuRetriever:
             return Grounding()
         faction_id = getattr(world_view, "faction_id", None)
         with self._turn_lock:
-            primed = self._turn_rows.get((world_view.turn, faction_id))
+            primed = (
+                None if faction_id is None else self._turn_rows.get((world_view.turn, faction_id))
+            )
         if self.dataset:
             # A configured dataset is the production path.  Missing `/turn` or missing faction
             # attribution must degrade visibly instead of silently multiplying graph requests

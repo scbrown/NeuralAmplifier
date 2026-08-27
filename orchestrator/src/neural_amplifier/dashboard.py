@@ -104,9 +104,7 @@ def grounding_state(knowledge: dict[str, Any], view: dict[str, Any] | None) -> d
         "latency_ms": knowledge.get("quipu_latency_ms"),
         # A fact counts as cited when its id prefix appears in ``quipu_cited``; the contract
         # says each grounding entry starts with its id (contract.py: "e.g. `unit:colony-pod`").
-        "facts": [
-            {"text": f, "cited": any(f.startswith(c) for c in cited)} for f in facts
-        ],
+        "facts": [{"text": f, "cited": any(f.startswith(c) for c in cited)} for f in facts],
     }
 
 
@@ -118,7 +116,10 @@ def grounding_state(knowledge: dict[str, Any], view: dict[str, Any] | None) -> d
 #: is unit-testable and the HTML cannot drift from it.
 PLAIN_TIER = {
     "llm": ("LLM decided", "The language model chose this action."),
-    "deterministic": ("Engine decided", "The game engine's own logic chose this, with no model involved."),
+    "deterministic": (
+        "Engine decided",
+        "The game engine's own logic chose this, with no model involved.",
+    ),
     "deferred": ("Put off", "The decision was parked to be answered later."),
     "queued": ("Waiting", "The decision is queued and has not been answered yet."),
     "plan": ("From the plan", "A pre-set plan entry supplied this action."),
@@ -141,8 +142,14 @@ PLAIN_DISPOSITION = {
 }
 
 PLAIN_GROUNDING = {
-    "absent": ("No knowledge graph connected", "This run was not given a graph, so nothing was ever looked up."),
-    "degraded": ("Knowledge graph FAILED", "A graph was connected and it did not answer. The model decided without facts it should have had."),
+    "absent": (
+        "No knowledge graph connected",
+        "This run was not given a graph, so nothing was ever looked up.",
+    ),
+    "degraded": (
+        "Knowledge graph FAILED",
+        "A graph was connected and it did not answer. The model decided without facts it should have had.",
+    ),
     "empty": ("Nothing relevant found", "The graph answered and had no fact for this situation."),
     "present": ("Facts retrieved", "These facts were looked up and shown to the model."),
 }
@@ -192,8 +199,10 @@ def run_state(live: dict[str, Any], paused_after: float = 120.0) -> dict[str, An
             "detail": "A run is connected but has never written a decision.",
         }
     minutes = idle / 60.0
-    span = f"{idle:.0f} seconds" if idle < 120 else (
-        f"{minutes:.0f} minutes" if minutes < 120 else f"{minutes / 60:.1f} hours"
+    span = (
+        f"{idle:.0f} seconds"
+        if idle < 120
+        else (f"{minutes:.0f} minutes" if minutes < 120 else f"{minutes / 60:.1f} hours")
     )
     return {
         "state": "paused",
@@ -204,6 +213,7 @@ def run_state(live: dict[str, Any], paused_after: float = 120.0) -> dict[str, An
         ),
         "idle_seconds": idle,
     }
+
 
 def _graph_post(base: str, path: str, payload: dict[str, Any], timeout: float = 8.0) -> Any:
     import urllib.error
@@ -233,7 +243,11 @@ def graph_view(
     rule the grounding badges follow.
     """
     if not base:
-        return {"state": "unconfigured", "detail": "No graph was configured for this run.", "rows": []}
+        return {
+            "state": "unconfigured",
+            "detail": "No graph was configured for this run.",
+            "rows": [],
+        }
     try:
         if entity:
             payload = {
@@ -242,9 +256,7 @@ def graph_view(
                 )
             }
             body = post(base, "/query", payload)
-            rows = [
-                {"predicate": r.get("p"), "object": r.get("o")} for r in body.get("rows") or []
-            ]
+            rows = [{"predicate": r.get("p"), "object": r.get("o")} for r in body.get("rows") or []]
             mode = "entity"
         elif query:
             body = post(base, "/search", {"query": query})
@@ -287,6 +299,7 @@ def graph_view(
         "rows": rows,
         "detail": "" if rows else "The graph answered, and matched nothing.",
     }
+
 
 class DashboardReader:
     """Small, bounded projections over an append-only run."""

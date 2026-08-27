@@ -24,7 +24,9 @@ repos:
     hooks:
       - id: ruff
         args: [--fix]
+        files: ^orchestrator/.*\.py$
       - id: ruff-format
+        files: ^orchestrator/.*\.py$
 
   # The beads tracker is a git-tracked file written by a tool whose auto-export is GATED:
   # a second `bd` write shortly after the first does not export, exits 0, and says nothing

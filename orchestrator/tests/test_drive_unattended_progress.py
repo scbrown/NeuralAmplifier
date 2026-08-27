@@ -30,8 +30,9 @@ import json
 import sys
 import time as real_time
 import types
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 REPO = Path(__file__).resolve().parents[2]
 DRIVER = REPO / "scripts" / "drive-unattended.py"
@@ -138,11 +139,14 @@ def test_a_run_that_stops_advancing_is_stopped(tmp_path: Path) -> None:
     out, _ = _run(tmp_path, lambda _n: {"turn": 5, "halted": 0})
     assert STOPPED in out
     assert "best turn 5" in out
-    assert "not for elapsed time" in out, "the log must say WHY it stopped, or it reads as a timeout"
+    assert "not for elapsed time" in out, (
+        "the log must say WHY it stopped, or it reads as a timeout"
+    )
 
 
 def test_a_run_that_keeps_advancing_is_not_stopped(tmp_path: Path) -> None:
     """The control. Without it every arm above would pass on a cap that fires unconditionally."""
+
     def responder(n: int) -> Any:
         if n > 60:
             return None  # no heartbeat file -> terminal at SILENT_LIMIT, an unrelated exit

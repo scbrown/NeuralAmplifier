@@ -410,7 +410,7 @@ def _brain_counters(brain: object) -> dict[str, object]:
         if isinstance(value, int):
             out[name] = value
     cost = getattr(brain, "cost_usd", None)
-    if isinstance(cost, (int, float)):
+    if isinstance(cost, int | float):
         out["cost_usd"] = round(float(cost), 6)
     return out
 

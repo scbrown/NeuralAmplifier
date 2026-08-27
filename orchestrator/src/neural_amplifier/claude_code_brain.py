@@ -83,7 +83,6 @@ turn — see the section above for when that applies and what makes a plan check
 """
 
 
-
 #: Substrings that identify a failure the upstream service itself calls TEMPORARY.
 #:
 #: MEASURED on ladder-attempt4, 2026-08-24 — and only visible because the reason stopped being
@@ -144,6 +143,7 @@ def transient_attempts() -> int:
     except ValueError:
         return TRANSIENT_ATTEMPTS_DEFAULT
     return max(1, min(4, value))
+
 
 #: Wait between attempts. Short, because 529 clears in seconds when it clears at all, and the
 #: expensive part is the attempt rather than the gap.
@@ -229,6 +229,7 @@ def _why_it_failed(done: subprocess.CompletedProcess[str]) -> str:
     if err:
         parts.append(f"stderr: {err[:200]}")
     return " | ".join(parts) if parts else "both stdout and stderr were EMPTY"
+
 
 class ClaudeCodeBrain:
     """Runs one decision through ``claude -p``, in a fresh process each time."""

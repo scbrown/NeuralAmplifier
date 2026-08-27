@@ -60,7 +60,6 @@ poorer.
 One save, one seed. The tool prints no verdict for that reason; na-clk is the instrument that
 turns a trajectory into a claim.
 
-
 ---
 
 # M2: the same brain with one standing directive

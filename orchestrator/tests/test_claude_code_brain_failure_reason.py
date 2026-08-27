@@ -70,7 +70,7 @@ def test_stderr_alone_is_used_when_stdout_is_empty() -> None:
 
 
 def test_both_streams_empty_says_so_explicitly() -> None:
-    """"No output" is a finding. It must not render as a trailing colon and nothing else."""
+    """ "No output" is a finding. It must not render as a trailing colon and nothing else."""
     why = _why()(_done("", ""))
     assert why == "both stdout and stderr were EMPTY"
     assert not why.endswith(":")
@@ -269,7 +269,6 @@ def test_a_clean_call_does_not_count_a_retry(monkeypatch: Any) -> None:
 
     assert len(calls) == 1
     assert brain.transient_retries == 0
-
 
 
 # --------------------------------------------------------------------------------------

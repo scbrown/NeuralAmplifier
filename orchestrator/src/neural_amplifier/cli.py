@@ -233,14 +233,16 @@ def main(argv: list[str] | None = None) -> int:
             print(f"FAIL: {problem}", file=sys.stderr)
             return 2
         try:
-            report = export_run(args.log, agent=args.agent, out_path=args.out, run=not args.dry_run)
+            export_report = export_run(
+                args.log, agent=args.agent, out_path=args.out, run=not args.dry_run
+            )
         except WorkflowExportError as exc:
             print(f"FAIL: {exc}", file=sys.stderr)
             return 2
         did = "mapped (dry run)" if args.dry_run else "imported into shuttle"
         print(
-            f"game {report.game_id}: {report.turns} turn(s), "
-            f"{report.decisions} decision(s) -> {report.records} record(s) {did}"
+            f"game {export_report.game_id}: {export_report.turns} turn(s), "
+            f"{export_report.decisions} decision(s) -> {export_report.records} record(s) {did}"
         )
         return 0
 
@@ -356,6 +358,8 @@ def main(argv: list[str] | None = None) -> int:
     if problem := missing_input(args.log, "decision log"):
         print(f"FAIL: {problem}", file=sys.stderr)
         return 2
+    from .coverage import report
+
     summary = report(DecisionLog(args.log).read())
     print(json.dumps(summary.summary(), indent=2))
 

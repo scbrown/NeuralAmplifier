@@ -149,7 +149,6 @@ with no crash dump, which is the first time a seeded run has crossed the turn-12
 Seed 1 has still never produced a RESULT — refused once, crashed once — so the third attempt is
 the row, not a rerun for its own sake.
 
-
 ## Attempt 3 — unresolved at turn 143, blocked on a Planetary Council vote
 
 The furthest any seeded run has got, and the first to fail for a reason that is neither a stall

@@ -9,7 +9,6 @@ import tempfile
 from pathlib import Path
 
 import pytest
-
 from fastapi.testclient import TestClient
 
 from neural_amplifier.brain import ScriptedBrain
@@ -315,8 +314,18 @@ def _plan_log(tmp_path: Path) -> DecisionLog:
 
     log = DecisionLog(tmp_path / "decisions.jsonl")
     for turn, plan in (
-        (1, {"in_force": ["expand", "reserve"], "followed": ["expand"], "unsatisfied": ["expand", "reserve"]}),
-        (2, {"in_force": ["expand", "reserve"], "overrode": ["reserve"], "unsatisfied": ["expand"]}),
+        (
+            1,
+            {
+                "in_force": ["expand", "reserve"],
+                "followed": ["expand"],
+                "unsatisfied": ["expand", "reserve"],
+            },
+        ),
+        (
+            2,
+            {"in_force": ["expand", "reserve"], "overrode": ["reserve"], "unsatisfied": ["expand"]},
+        ),
     ):
         log.write(
             DecisionRecord(
@@ -403,7 +412,9 @@ def test_a_plan_file_that_defines_only_some_directives_says_how_many(tmp_path: P
     blank with nothing saying why.
     """
     plan = tmp_path / "plan.json"
-    plan.write_text(json.dumps({"directives": [{"id": "expand", "intent": "grow"}]}), encoding="utf-8")
+    plan.write_text(
+        json.dumps({"directives": [{"id": "expand", "intent": "grow"}]}), encoding="utf-8"
+    )
     got = DashboardReader(_plan_log(tmp_path), None).strategy(plan)
     assert got["definitions_source"] == "plan-file"
     assert got["directive_count"] == 2
@@ -441,7 +452,11 @@ def test_graph_census_search_and_entity_are_three_read_shapes() -> None:
     def fake(base: str, path: str, payload: dict[str, object], timeout: float = 8.0) -> object:
         seen.append((path, payload))
         if path == "/search":
-            return {"results": [{"entity": "http://g/unit/colony-pod", "score": 0.7, "text": "Colony Pod"}]}
+            return {
+                "results": [
+                    {"entity": "http://g/unit/colony-pod", "score": 0.7, "text": "Colony Pod"}
+                ]
+            }
         if "COUNT" in str(payload.get("query")):
             return {"rows": [{"t": "http://g/smac/Unit", "n": 26}]}
         return {"rows": [{"p": "http://g/label", "o": "Colony Pod"}]}
@@ -492,7 +507,9 @@ def test_a_paused_run_says_the_game_stopped_not_that_the_page_is_stale() -> None
     """
     from neural_amplifier.dashboard import run_state
 
-    got = run_state({"configured": True, "active": False, "idle_seconds": 4721.1, "turn": 78, "decisions": 610})
+    got = run_state(
+        {"configured": True, "active": False, "idle_seconds": 4721.1, "turn": 78, "decisions": 610}
+    )
     assert got["state"] == "paused"
     assert "79 MINUTES" in got["headline"]
     assert "not a broken page" in got["detail"]
@@ -511,7 +528,7 @@ def test_run_state_separates_no_run_from_paused_from_live() -> None:
 
 def test_every_internal_term_the_page_shows_has_a_plain_name_and_help() -> None:
     """The audience manages a game, not this service. "degraded" meant nothing to him."""
-    from neural_amplifier.dashboard import PLAIN_DISPOSITION, _DISPOSITIONS, glossary
+    from neural_amplifier.dashboard import _DISPOSITIONS, PLAIN_DISPOSITION, glossary
 
     g = glossary()
     # every disposition the why-panel can render is translated
@@ -529,7 +546,9 @@ def test_the_fallback_wording_never_calls_it_degraded() -> None:
 
     g = glossary()
     shown = " ".join(
-        entry["name"] for group in ("tier", "disposition", "grounding") for entry in g[group].values()
+        entry["name"]
+        for group in ("tier", "disposition", "grounding")
+        for entry in g[group].values()
     )
     shown += " " + g["fallback"]["name"]
     assert "degraded" not in shown.lower()

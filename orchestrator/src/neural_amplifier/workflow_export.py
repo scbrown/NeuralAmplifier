@@ -38,6 +38,7 @@ import subprocess
 import tomllib
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any, cast
 
 from .config import DEFAULT_PATH
 from .decisions import DecisionLog
@@ -73,7 +74,7 @@ def shuttle_bin() -> str:
         except tomllib.TOMLDecodeError:
             table = {}
         if isinstance(table, dict) and isinstance(table.get("bin"), str):
-            return table["bin"]
+            return cast(str, table["bin"])
     return "shuttle"
 
 
@@ -87,7 +88,7 @@ class ExportReport:
     records: int
 
 
-def transitions_records(log_path: Path) -> tuple[list[dict], ExportReport]:
+def transitions_records(log_path: Path) -> tuple[list[dict[str, Any]], ExportReport]:
     """Map a finished decision log to shuttle import-run records.
 
     One ``decide`` transition per PLAYED TURN (not per decision — a turn can
@@ -98,14 +99,14 @@ def transitions_records(log_path: Path) -> tuple[list[dict], ExportReport]:
     records = list(DecisionLog(log_path).read())
     if not records:
         raise WorkflowExportError(f"{log_path} holds no decisions")
-    games = {r.game_id for r in records}
+    games = {r.game_id or "unknown-game" for r in records}
     if len(games) != 1:
         raise WorkflowExportError(
             f"{log_path} spans {len(games)} games ({sorted(games)}); export "
             "one game per run — merging histories would fold two games into "
             "a state machine neither played"
         )
-    game_id = games.pop() or "unknown-game"
+    game_id = games.pop()
     turns = sorted({r.turn for r in records})
 
     base = datetime.datetime.now(datetime.UTC).replace(microsecond=0)
@@ -114,7 +115,7 @@ def transitions_records(log_path: Path) -> tuple[list[dict], ExportReport]:
         return (base + datetime.timedelta(seconds=i)).strftime("%Y-%m-%dT%H:%M:%SZ")
 
     run_id = f"na-{game_id}"
-    out: list[dict] = [dict(DEFINITION, at=at(0))]
+    out: list[dict[str, Any]] = [dict(DEFINITION, at=at(0))]
     out.append(
         {
             "type": "start",
