@@ -103,7 +103,9 @@ def metrics(events: list[dict[str, Any]]) -> dict[str, float]:
         return sum(row.get("outcome") == outcome for row in rows) / len(rows) if rows else 0.0
 
     unit_actions = [event for event in events if event["event"] == "unit.action"]
-    classes = {str(event["unit_class"]) for event in unit_actions if event.get("unit_class")}
+    classes = {
+        str(event["unit_class"]) for event in unit_actions if event.get("unit_class") is not None
+    }
     return {
         "unit_actions": float(len(unit_actions)),
         "active_unit_classes": float(len(classes)),

@@ -44,6 +44,10 @@ def test_a_missing_domain_observable_fails_instead_of_disappearing() -> None:
     assert not results["sea_bases"].passed
 
 
+def test_zero_is_a_valid_engine_unit_class() -> None:
+    assert metrics([event("unit.action", unit_class=0)])["active_unit_classes"] == 1.0
+
+
 def test_filtering_refuses_a_faction_with_no_evidence(tmp_path: Path) -> None:
     path = tmp_path / "events.jsonl"
     path.write_text(json.dumps(event("unit.action")) + "\n", encoding="utf-8")
