@@ -333,12 +333,13 @@ signing-identity key=".quipu/yupana-signing.pk8":
 #
 # `unmeasurable` — the world view did not report the directive's metric — is an ADAPTER GAP, not
 # a directive that failed. It is excluded from the rates and reported separately, because the
-# fix for the two is in different repositories.
+# fix for the two is in different repositories. A declared evaluation can fail loud instead:
+# `just directive-report --min-measurable-fraction 0.95 <log>`.
 #
 # Refuses a log too short for a rate to mean anything. Ten replays of one captured observation
 # show the mechanism works and say nothing about whether directives help.
-directive-report log="decisions.jsonl":
-    @scripts/directive_report.py "{{log}}"
+directive-report +args="decisions.jsonl":
+    @scripts/directive_report.py {{args}}
 
 # Does a decision's reasoning survive the turn that produced it? — aegis-n8zmq's baseline.
 #

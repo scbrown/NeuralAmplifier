@@ -77,6 +77,49 @@ def test_rates_use_only_measurable_decisions(tmp_path) -> None:
     entry = tallies["d"]
     assert entry.measurable == 10
     assert entry.attention == 1.0, "10 followed of 10 checkable, not of 20 in force"
+    assert dr.measurable_fraction(tallies) == 0.5
+
+
+def test_measurability_contract_fails_loud_on_a_misleading_perfect_rate(tmp_path, capsys) -> None:
+    """One visible success plus nineteen adapter gaps must not qualify as 100% evidence."""
+    import sys
+
+    rows = [decision(1, in_force=["d"], followed=["d"])]
+    rows += [decision(t, in_force=["d"], unmeasurable=["d"]) for t in range(2, 21)]
+    path = log(tmp_path / "mostly-blind.jsonl", rows)
+    argv = sys.argv
+    sys.argv = [
+        "directive_report",
+        "--min-measurable-fraction",
+        "0.95",
+        str(path),
+    ]
+    try:
+        assert dr.main() == 2
+    finally:
+        sys.argv = argv
+    output = capsys.readouterr()
+    assert "MEASURABILITY CONTRACT FAIL: observed 0.050; required >= 0.950" in output.err
+
+
+def test_committed_real_run_is_the_positive_measurability_control(capsys) -> None:
+    import sys
+
+    path = REPO / "evals" / "runs" / "na-mmp" / "decisions.jsonl"
+    argv = sys.argv
+    sys.argv = [
+        "directive_report",
+        "--min-measurable-fraction",
+        "1.0",
+        str(path),
+    ]
+    try:
+        assert dr.main() == 0
+    finally:
+        sys.argv = argv
+    assert (
+        "MEASURABILITY CONTRACT PASS: observed 1.000; required >= 1.000" in capsys.readouterr().out
+    )
 
 
 def test_a_short_log_is_refused(tmp_path) -> None:
