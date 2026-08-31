@@ -68,9 +68,33 @@ planning over.** `faction.tech` fires every five to ten turns and its world view
 so setting faction policy is optional extra work with no visible payoff inside the turn.
 
 That is not a prompt change, and it is — arrived at from the opposite direction — the trajectory
-block in §6. Which reorders this document's own build order: §10 step 2 was placed before step 3
-because it was cheap, and the measurement says it is not merely cheap but **the step the other one
-depends on**. Do not re-word and re-run.
+block in §6. So §6 was built and measured too, on the same surface, with a real series derived
+from the same run (`evals/runs/aegis-n8zmq`, arms `bare` and `trajectory`, treatment verified
+present in the bytes):
+
+| arm | runs | issued | stability | choices |
+| --- | --- | --- | --- | --- |
+| `bare` | 10 | **0** | 1.00 | `tech:58` x10 |
+| `trajectory` | 10 | **0** | 0.70 | `tech:58` x7, `tech:2` x3 |
+
+**The horizon does not cause issuing either.** Both of na-j2w's hypotheses are now measured
+insufficient, and the running total is **0 directives in 50 runs across four configurations, two
+lanes and two turns.** The two cheap levers — say it better, show more — are spent.
+
+The block is *read*: a unanimous answer became a 7/3 split when the trajectory was the only thing
+that changed. It simply does not make the decision plan. (Do not read a direction into that split
+— Fisher on 10/10 vs 7/10 is p ~ 0.21 at n=10, and less stable is not self-evidently worse.)
+
+**Which reorders this document's build order a second time, and this time onto §5.** What is left
+is what na-j2w said underneath both hypotheses: setting faction policy is optional extra work with
+no payoff inside the turn. A decision asked to pick a technology *and maybe* set direction will do
+the first. That is neither a prompt defect nor a data defect — it is what happens when planning is
+a side task attached to an errand.
+
+So the load-bearing piece is the **strategic review** (§5): a wake with no action space, whose
+only job is to return a ledger revision, and which therefore *cannot* answer by doing something
+else instead. The trajectory is its input, not its substitute. Step 3 is not merely downstream of
+step 2; both are downstream of step 4, and step 4 should be built next.
 
 **The brain changes its mind two to three times as often as the deterministic tier does, on
 the same board and the same turns.** Consecutive-turn pairs on one base whose answer changed
@@ -512,16 +536,22 @@ Each step is measurable on its own, and the early ones need no game.
    the rest is judged against. **Built — `scripts/carry_report.py`, `just carry-report`**, and
    its output is §1. Trajectory integrals, commitment fidelity and outcome are the remainder of
    §8 and are not built.
-2. **Trajectory block.** Orchestrator-only, no adapter change. Exit: a `base.hurry` world view
-   carries the reserve slope, and the M1 save re-run shows whether the brain's spending changes.
-3. **Directives issued by the agent** — and this is **downstream of step 2, measured, not merely
-   after it**. The `na-j2w` rerun ran for this bead and returned 0 issued in 20 runs across both
-   wordings (§1), so the remaining lever is the horizon step 2 adds, not the prompt. Exit: a run
-   in which `plan.issued` is non-empty and a later decision follows a directive the agent wrote.
-   Prerequisite for anything called a commitment.
-4. **The ledger and the strategic review.** Exit: a commitment opened at turn T, reviewed at
-   T+10 against the board, and a decision at T+11 answered under it — the `>1 turn` carry the
-   bead asks for, demonstrated rather than asserted.
+2. **Trajectory block. BUILT** — `trajectory.py`, `WorldView.trajectory`, a `_SYSTEM` section,
+   16 tests. Orchestrator-only, no adapter change. It is READ (it moved a unanimous answer) and it
+   does NOT produce a plan on its own, so it is now step 4's input rather than a step that pays
+   off alone. Still open: whether it improves the CHOICE, which needs a quality score rather than
+   a stability count, and the `base.hurry` re-run that would show it.
+3. **Directives issued by the agent** — and this is now **downstream of step 4, measured twice**.
+   The `na-j2w` rerun returned 0 issued in 20 runs across both wordings, and the trajectory arm
+   returned 0 in 10 more with a real horizon in the payload (§1). Nothing about the prompt or the
+   world view makes a decision plan on the side. Exit: a run in which `plan.issued` is non-empty
+   and a later decision follows a directive the agent wrote. Prerequisite for anything called a
+   commitment — and reachable only once step 4 gives planning its own occasion.
+4. **The ledger and the strategic review — DO THIS ONE NEXT.** Promoted here by two negative
+   results rather than by argument: it is the only remaining explanation for 0 issued in 50 runs,
+   and it is the one mechanism that cannot be answered by doing something else instead. Exit: a
+   commitment opened at turn T, reviewed at T+10 against the board, and a decision at T+11
+   answered under it — the `>1 turn` carry the bead asks for, demonstrated rather than asserted.
 5. **`unit-turn` measured and defaulted on.** Exit: `move-stats` shows a non-zero unit turn for
    our faction, and the ladder's base count stops flatlining.
 6. **Combat state in the world view** — units, `at_war`, relations. Adapter first.
