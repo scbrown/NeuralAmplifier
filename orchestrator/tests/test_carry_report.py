@@ -186,6 +186,115 @@ def test_agent_issued_directives_are_counted(tmp_path: Path) -> None:
     assert cr.read(log(tmp_path / "issued.jsonl", rows)).issued_by_agent == 1
 
 
+def plan_record(
+    turn: int,
+    *,
+    issued: list[str] | None = None,
+    in_force: list[str] | None = None,
+    followed: list[str] | None = None,
+    overrode: list[str] | None = None,
+    tier: str = "llm",
+    game_id: str = "run-1",
+) -> dict:
+    return {
+        "game_id": game_id,
+        "turn": turn,
+        "surface_id": "faction.strategy_review" if tier == "review" else "base.hurry",
+        "tier": tier,
+        "degraded": False,
+        "plan": {
+            "in_force": in_force or [],
+            "followed": followed or [],
+            "overrode": overrode or [],
+            "issued": issued or [],
+            "rejected": [],
+        },
+    }
+
+
+def test_published_strategic_review_is_the_positive_control() -> None:
+    report = cr.read(REPO / "evals" / "runs" / "aegis-n8zmq" / "carry-reviewed.json")
+    funnel = report.funnel
+    assert report.published_summary is True
+    assert (funnel.reviews_attempted, funnel.reviews_clean) == (2, 2)
+    assert funnel.directives_issued == 5
+    assert funnel.opportunities == 9
+    assert (funnel.followed, funnel.revised, funnel.unreferenced) == (4, 4, 1)
+    assert funnel.opportunity_rate == 8 / 9
+    assert max(funnel.carried_turns) == 11
+    assert funnel.eligibility_errors == []
+    assert report.ages_unknown == 0
+    assert max(report.directive_ages) == 11
+
+
+def test_final_turn_issue_is_no_opportunity_not_zero_carry(tmp_path: Path, capsys) -> None:
+    report = cr.read(log(tmp_path / "final.jsonl", [plan_record(40, issued=["d"], tier="review")]))
+    assert report.funnel.opportunities == 0
+    assert report.funnel.opportunity_rate is None
+    cr.emit(report)
+    assert "UNANSWERABLE — no later eligible decision" in capsys.readouterr().out
+
+
+def test_later_opportunities_distinguish_follow_override_and_silence(tmp_path: Path) -> None:
+    rows = [plan_record(10, issued=["a", "b", "c"], tier="review")]
+    rows.append(plan_record(11, in_force=["a", "b", "c"], followed=["a"], overrode=["b"]))
+    funnel = cr.read(log(tmp_path / "outcomes.jsonl", rows)).funnel
+    assert funnel.opportunities == 3
+    assert (funnel.followed, funnel.overrode, funnel.unreferenced) == (1, 1, 1)
+    assert funnel.opportunity_rate == 1 / 3
+    assert funnel.opportunities == (
+        funnel.followed + funnel.revised + funnel.overrode + funnel.unreferenced
+    )
+
+
+def test_duplicate_ids_do_not_multiply_one_directive_decision_pair(tmp_path: Path) -> None:
+    rows = [plan_record(10, issued=["d"], tier="review")]
+    rows.append(plan_record(11, in_force=["d", "d"], followed=["d", "d"]))
+    funnel = cr.read(log(tmp_path / "duplicates.jsonl", rows)).funnel
+    assert (funnel.opportunities, funnel.followed) == (1, 1)
+    assert funnel.opportunities == (
+        funnel.followed + funnel.revised + funnel.overrode + funnel.unreferenced
+    )
+
+
+def test_review_reissue_is_a_revision_with_original_lineage(tmp_path: Path) -> None:
+    rows = [plan_record(10, issued=["d"], tier="review")]
+    rows.append(plan_record(20, issued=["d"], in_force=["d"], tier="review"))
+    funnel = cr.read(log(tmp_path / "revision.jsonl", rows)).funnel
+    assert funnel.directives_issued == 1
+    assert (funnel.opportunities, funnel.revised) == (1, 1)
+    assert funnel.carried_turns == [10]
+
+
+def test_missing_run_identity_or_applicability_refuses_the_rate(tmp_path: Path) -> None:
+    opening = plan_record(10, issued=["d"], tier="review")
+    opening.pop("game_id")
+    later = plan_record(11)
+    later["plan"].pop("in_force")
+    funnel = cr.read(log(tmp_path / "missing.jsonl", [opening, later])).funnel
+    assert funnel.opportunity_rate is None
+    assert (
+        "run identity missing (need run_id, game_id, or summary run)" in funnel.eligibility_errors
+    )
+    assert "applicability missing (plan.in_force absent)" in funnel.eligibility_errors
+
+
+def test_expiry_is_unanswerable_without_a_retirement_event(tmp_path: Path) -> None:
+    rows = [plan_record(10, issued=["d"], tier="review"), plan_record(11, in_force=["d"])]
+    funnel = cr.read(log(tmp_path / "expiry.jsonl", rows)).funnel
+    assert funnel.expiry_observable is False
+
+
+def test_review_health_fields_are_required_before_calling_it_clean(tmp_path: Path) -> None:
+    row = plan_record(10, issued=["d"], tier="review")
+    row.pop("degraded")
+    row["plan"].pop("rejected")
+    funnel = cr.read(log(tmp_path / "review-health.jsonl", [row])).funnel
+    assert (funnel.reviews_attempted, funnel.reviews_clean) == (1, 0)
+    assert "review degradation status missing" in funnel.eligibility_errors
+    assert "review rejection status missing" in funnel.eligibility_errors
+
+
 def test_the_m1_baseline_still_reads_zero_carry() -> None:
     """The committed run this design was written against, kept as a regression on the claim.
 

@@ -96,6 +96,15 @@ only job is to return a ledger revision, and which therefore *cannot* answer by 
 else instead. The trajectory is its input, not its substitute. Step 3 is not merely downstream of
 step 2; both are downstream of step 4, and step 4 should be built next.
 
+`scripts/carry_report.py` now keeps two carry denominators separate. **Record-tier carry** is the
+share of all decisions answered by queued/deferred reasoning. **Directive-opportunity carry** is
+the share of later, applicable occasions that followed or explicitly revised an agent-issued
+directive. Applicability is executable: the directive must appear in that decision's
+`plan.in_force`. A final-turn issue with no later occasion is UNANSWERABLE, not zero carry; a log
+without run identity, turn, or applicability fields is also UNANSWERABLE. Expiry stays
+UNANSWERABLE because current records carry no retirement event, and disappearance is not evidence.
+The committed `evals/runs/aegis-n8zmq/carry-reviewed.json` is the positive control.
+
 **The brain changes its mind two to three times as often as the deterministic tier does, on
 the same board and the same turns.** Consecutive-turn pairs on one base whose answer changed
 (`scripts/carry_report.py`):

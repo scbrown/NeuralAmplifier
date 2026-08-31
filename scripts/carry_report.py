@@ -8,12 +8,15 @@ run's trajectory beat another's. Neither asks the question Stiwi's redesign turn
 of a game's play is reasoning that outlived the turn it was produced in, and how much is the
 same question re-answered from scratch every turn.**
 
-Two rates, over records that already exist:
+Three views, over records that already exist:
 
-  * **carry rate** — the fraction of decisions answered by reasoning a *previous* turn produced.
+  * **record-tier carry rate** — the fraction of decisions answered by queued/deferred reasoning
+    a *previous* turn produced.
+  * **directive opportunity carry rate** — among later decisions where an agent-issued directive
+    was explicitly in force, the fraction that followed it or explicitly revised it.
   * **rework rate** — how often the same base and surface reversed its answer turn over turn.
 
-Both are computable from committed logs with no game, no model and no network, which is the
+All are computable from committed logs with no game, no model and no network, which is the
 point: the design in `docs/long-horizon-play.md` has to be measured against what we do today,
 not announced against a remembered impression of it.
 
@@ -47,6 +50,11 @@ are not:
                   records do not.
   directive age   needs `issued_turn` on the directive block. A log carrying only the plan
                   block's ids can say a directive was followed and cannot say how old it was.
+  opportunities   need a run identity, turns, and `plan.in_force`. Missing any makes the funnel
+                  UNANSWERABLE rather than turning an instrument gap into zero carry.
+
+The committed strategic-review proof is a published summary rather than JSONL. This reader accepts
+that shape too, because a positive control that the report cannot read is not a control.
 """
 
 from __future__ import annotations
@@ -65,6 +73,41 @@ CARRYING_TIERS: frozenset[str] = frozenset({"queued", "deferred"})
 
 #: Reasoning done in bulk for one turn. Real work, and not carry.
 SAME_TURN_BULK: frozenset[str] = frozenset({"plan"})
+
+
+@dataclass
+class DirectiveFunnel:
+    """Cross-record lineage for agent-issued directives.
+
+    One opportunity is one previously-issued directive explicitly present in a later record's
+    ``plan.in_force``. That field is the applicability decision made by the relevance walk; using
+    every decision as the denominator would count occasions where the directive was never shown.
+    """
+
+    reviews_attempted: int = 0
+    reviews_clean: int = 0
+    directives_issued: int = 0
+    opportunities: int = 0
+    followed: int = 0
+    revised: int = 0
+    overrode: int = 0
+    unreferenced: int = 0
+    carried_turns: list[int] = field(default_factory=list)
+    eligibility_errors: list[str] = field(default_factory=list)
+    expiry_observable: bool = False
+    expired: int = 0
+    issued_at: dict[str, int] = field(default_factory=dict)
+    run_identity: str | None = None
+
+    @property
+    def successes(self) -> int:
+        return self.followed + self.revised
+
+    @property
+    def opportunity_rate(self) -> float | None:
+        if self.eligibility_errors or not self.opportunities:
+            return None
+        return self.successes / self.opportunities
 
 
 @dataclass
@@ -92,6 +135,8 @@ class Report:
     directive_ages: list[int] = field(default_factory=list)
     #: Directive ids followed whose issue turn the log does not state.
     ages_unknown: int = 0
+    funnel: DirectiveFunnel = field(default_factory=DirectiveFunnel)
+    published_summary: bool = False
 
     @property
     def carried(self) -> int:
@@ -129,10 +174,199 @@ def _answer(record: dict[str, object]) -> object:
     return None
 
 
-def read(path: Path) -> Report:
-    report = Report(path=path)
+def _strings(value: object) -> list[str]:
+    return [item for item in value if isinstance(item, str)] if isinstance(value, list) else []
 
-    for line in path.read_text().splitlines():
+
+def _run_identity(record: dict[str, object]) -> str | None:
+    for key in ("run_id", "game_id", "run"):
+        value = record.get(key)
+        if isinstance(value, str) and value:
+            return value
+    return None
+
+
+def _error_once(funnel: DirectiveFunnel, reason: str) -> None:
+    if reason not in funnel.eligibility_errors:
+        funnel.eligibility_errors.append(reason)
+
+
+def _observe_funnel(report: Report, record: dict[str, object]) -> None:
+    """Fold one chronological record into the directive opportunity funnel."""
+
+    funnel = report.funnel
+    plan = record.get("plan")
+    tier = record.get("tier")
+    if tier == "review":
+        funnel.reviews_attempted += 1
+        rejected = plan.get("rejected") if isinstance(plan, dict) else None
+        if "degraded" not in record:
+            _error_once(funnel, "review degradation status missing")
+        if isinstance(plan, dict) and "rejected" not in plan:
+            _error_once(funnel, "review rejection status missing")
+        if record.get("degraded") is False and isinstance(rejected, list) and not rejected:
+            funnel.reviews_clean += 1
+
+    if not isinstance(plan, dict):
+        if tier == "review":
+            _error_once(funnel, "review record has no plan block")
+        return
+
+    issued = _strings(plan.get("issued"))
+    followed = set(_strings(plan.get("followed")))
+    overrode = set(_strings(plan.get("overrode")))
+    turn = record.get("turn")
+    identity = _run_identity(record)
+    relevant = bool(issued or funnel.issued_at)
+
+    if relevant:
+        if identity is None:
+            _error_once(funnel, "run identity missing (need run_id, game_id, or summary run)")
+        elif funnel.run_identity is None:
+            funnel.run_identity = identity
+        elif identity != funnel.run_identity:
+            _error_once(funnel, "more than one run identity appears in one report")
+
+    if funnel.issued_at:
+        if "in_force" not in plan:
+            _error_once(funnel, "applicability missing (plan.in_force absent)")
+        elif not isinstance(turn, int):
+            _error_once(funnel, "decision turn missing for a possible later opportunity")
+        else:
+            # One directive-decision pair is one opportunity. A malformed or legacy record may
+            # repeat an id; letting multiplicity inflate both numerator and denominator would
+            # make a serialization defect look like more strategic play.
+            for directive_id in dict.fromkeys(_strings(plan.get("in_force"))):
+                issued_turn = funnel.issued_at.get(directive_id)
+                if issued_turn is None or turn <= issued_turn:
+                    continue
+                funnel.opportunities += 1
+                age = turn - issued_turn
+                if directive_id in issued:
+                    funnel.revised += 1
+                    funnel.carried_turns.append(age)
+                elif directive_id in followed:
+                    funnel.followed += 1
+                    funnel.carried_turns.append(age)
+                elif directive_id in overrode:
+                    funnel.overrode += 1
+                else:
+                    funnel.unreferenced += 1
+
+    for directive_id in issued:
+        if directive_id in funnel.issued_at:
+            continue
+        if not isinstance(turn, int):
+            _error_once(funnel, f"issued directive {directive_id!r} has no issued turn")
+            continue
+        funnel.issued_at[directive_id] = turn
+        funnel.directives_issued += 1
+
+
+def _summary_records(summary: dict[str, object]) -> list[dict[str, object]] | None:
+    """Project the committed strategic-review summary onto the ordinary record vocabulary."""
+
+    required = {
+        "run",
+        "turns",
+        "surfaces",
+        "tiers",
+        "degraded",
+        "opening_issued",
+        "review_in_force",
+        "review_issued",
+        "later_in_force",
+        "later_followed",
+    }
+    if not required.issubset(summary):
+        return None
+    turns = summary["turns"]
+    surfaces = summary["surfaces"]
+    tiers = summary["tiers"]
+    degraded = summary["degraded"]
+    if not all(
+        isinstance(value, list) and len(value) >= 3
+        for value in (turns, surfaces, tiers, degraded)
+    ):
+        return None
+    rejected = summary.get("rejected")
+    rejected_rows = rejected if isinstance(rejected, list) else [[], [], []]
+    while len(rejected_rows) < 3:
+        rejected_rows.append([])
+    identity = summary["run"]
+    common = {"game_id": identity}
+    issued_at = {directive_id: turns[0] for directive_id in _strings(summary["opening_issued"])}
+    for directive_id in _strings(summary["review_issued"]):
+        issued_at.setdefault(directive_id, turns[1])
+
+    def statuses(ids: object) -> list[dict[str, object]]:
+        return [
+            {"id": directive_id, "issued_turn": issued_at[directive_id]}
+            for directive_id in _strings(ids)
+            if directive_id in issued_at
+        ]
+
+    return [
+        {
+            **common,
+            "turn": turns[0],
+            "surface_id": surfaces[0],
+            "tier": tiers[0],
+            "degraded": degraded[0],
+            "plan": {
+                "in_force": [],
+                "followed": [],
+                "overrode": [],
+                "issued": summary["opening_issued"],
+                "rejected": rejected_rows[0],
+            },
+        },
+        {
+            **common,
+            "turn": turns[1],
+            "surface_id": surfaces[1],
+            "tier": tiers[1],
+            "degraded": degraded[1],
+            "directives": statuses(summary["review_in_force"]),
+            "plan": {
+                "in_force": summary["review_in_force"],
+                "followed": [],
+                "overrode": [],
+                "issued": summary["review_issued"],
+                "rejected": rejected_rows[1],
+            },
+        },
+        {
+            **common,
+            "turn": turns[2],
+            "surface_id": surfaces[2],
+            "tier": tiers[2],
+            "degraded": degraded[2],
+            "directives": statuses(summary["later_in_force"]),
+            "plan": {
+                "in_force": summary["later_in_force"],
+                "followed": summary["later_followed"],
+                "overrode": summary.get("later_overrode", []),
+                "issued": [],
+                "rejected": rejected_rows[2],
+            },
+        },
+    ]
+
+
+def _load(path: Path) -> tuple[list[dict[str, object]], bool]:
+    text = path.read_text()
+    try:
+        whole = json.loads(text)
+    except json.JSONDecodeError:
+        whole = None
+    if isinstance(whole, dict):
+        projected = _summary_records(whole)
+        if projected is not None:
+            return projected, True
+
+    records: list[dict[str, object]] = []
+    for line in text.splitlines():
         line = line.strip()
         if not line:
             continue
@@ -140,7 +374,17 @@ def read(path: Path) -> Report:
             record = json.loads(line)
         except json.JSONDecodeError:
             continue
-        if not isinstance(record, dict) or "surface_id" not in record:
+        if isinstance(record, dict):
+            records.append(record)
+    return records, False
+
+
+def read(path: Path) -> Report:
+    records, published_summary = _load(path)
+    report = Report(path=path, published_summary=published_summary)
+
+    for record in records:
+        if "surface_id" not in record:
             continue
 
         report.decisions += 1
@@ -183,6 +427,8 @@ def read(path: Path) -> Report:
                     report.directive_ages.append(turn - issued_at[did])
                 else:
                     report.ages_unknown += 1
+
+        _observe_funnel(report, record)
 
     return report
 
@@ -232,7 +478,7 @@ def emit(report: Report) -> None:
     carried, bulk = report.carried, report.bulk
     rate = carried / report.decisions
     print()
-    print(f"  CARRY RATE      {carried}/{report.decisions} = {rate:.3f}")
+    print(f"  RECORD-TIER CARRY {carried}/{report.decisions} = {rate:.3f}")
     print(
         "                  answers produced by an EARLIER turn's reasoning "
         f"(tier in {', '.join(sorted(CARRYING_TIERS))})"
@@ -246,8 +492,9 @@ def emit(report: Report) -> None:
     if carried == 0:
         print(
             "                  ZERO, and this is a measurement rather than a missing field: the\n"
-            "                  tier is present on every record above. Every decision in this "
-            "log was\n                  re-derived from scratch on the turn it was asked."
+            "                  tier is present on every record above. No answer came from the\n"
+            "                  queued/deferred carrier; directive carry is measured separately "
+            "below."
         )
 
     print()
@@ -256,7 +503,7 @@ def emit(report: Report) -> None:
             f"  DIRECTIVES      {report.followed_records}/{report.plan_records} decisions "
             "followed a standing directive"
         )
-        print(f"                  issued BY THE AGENT during this run: {report.issued_by_agent}")
+        print(f"                  issue events BY THE AGENT during this run: {report.issued_by_agent}")
         if report.issued_by_agent == 0:
             print(
                 "                  zero — every directive in force here was written before the "
@@ -277,6 +524,41 @@ def emit(report: Report) -> None:
             )
     else:
         print("  DIRECTIVES      UNANSWERABLE — no record in this log carries a plan block.")
+
+    funnel = report.funnel
+    print()
+    print(
+        f"  CARRY FUNNEL    reviews clean {funnel.reviews_clean}/{funnel.reviews_attempted}; "
+        f"agent-issued {funnel.directives_issued}; revisions {funnel.revised}"
+    )
+    if funnel.eligibility_errors:
+        print("  OPPORTUNITY CARRY UNANSWERABLE — " + "; ".join(funnel.eligibility_errors))
+    elif not funnel.opportunities:
+        print(
+            "  OPPORTUNITY CARRY UNANSWERABLE — no later eligible decision carried an "
+            "agent-issued directive"
+        )
+    else:
+        print(
+            f"  OPPORTUNITY CARRY {funnel.successes}/{funnel.opportunities} = "
+            f"{funnel.opportunity_rate:.3f} (followed {funnel.followed}, revised "
+            f"{funnel.revised}, overrode {funnel.overrode}, unreferenced "
+            f"{funnel.unreferenced})"
+        )
+        if funnel.carried_turns:
+            print(
+                f"                  carried turns: n={len(funnel.carried_turns)}, "
+                f"sum={sum(funnel.carried_turns)}, "
+                f"median={statistics.median(funnel.carried_turns):.0f}, "
+                f"max={max(funnel.carried_turns)}"
+            )
+    if funnel.expiry_observable:
+        print(f"                  expired {funnel.expired}")
+    else:
+        print(
+            "                  expiry UNANSWERABLE — records carry no retirement event; "
+            "disappearance is not evidence"
+        )
 
     print()
     if report.has_base_id:
@@ -348,7 +630,7 @@ def main() -> int:
             exit_code = 1
             continue
         report = read(path)
-        if report.decisions and report.decisions < args.min_decisions:
+        if report.decisions and report.decisions < args.min_decisions and not report.published_summary:
             print(
                 f"=== {path} ===\n  refusing: {report.decisions} decision(s), and a rate needs "
                 f"{args.min_decisions}.\n  A handful of replayed observations show the mechanism "
