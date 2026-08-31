@@ -48,9 +48,29 @@ a directive" reads as unbuilt and it is not:
 | `na-j2w` | a real model, invited, issues **zero directives in twenty runs** | closed as *run and reported, not answered* — there was no treatment to measure |
 | `na-1gl` | why: the model-facing schema said *"Empty unless setting direction"*, nine words whose only actionable clause points at empty. Fixed in `25b2a72` to *"Issue when this choice binds later turns; else empty"* | closed, and it says in its own close line that **measuring an actual directive is na-j2w's rerun, which this unblocks** |
 
-That rerun was never done. So the state on 2026-08-30 is a built, verified, prompt-fixed path that
-**nobody has measured since the fix** — which is a much cheaper problem than the one "nothing
-issues a directive" describes, and a more embarrassing one to leave sitting.
+That rerun was never done, so it was run for this bead — **and the answer is that the wording is
+not the blocker.** `evals/runs/aegis-n8zmq`, pre-registered before either arm was read:
+
+| arm | runs | degraded | directives issued |
+| --- | --- | --- | --- |
+| the wording as it ships (suppressor first) | 10 | 0 | **0** |
+| na-1gl's ordering (trigger first) | 10 | 2 | **0** |
+
+With na-j2w's twenty that is **0 directives in 40 runs of `faction.tech` across three prompt
+configurations and two lanes.** The hypothesis was a good one — na-1gl fixed the structured-output
+schema in `response.py`, and `claude -p` has no structured-output mode, so
+`claude_code_brain._JSON_INSTRUCTION` states the shape in words and still leads with *"`directives`
+is usually `[]`"*. One lane fixed, and the lane the game actually uses not. Reordering the clauses
+changed nothing.
+
+What survives is na-j2w's *other* hypothesis: **the world view does not show a horizon worth
+planning over.** `faction.tech` fires every five to ten turns and its world view is one turn deep,
+so setting faction policy is optional extra work with no visible payoff inside the turn.
+
+That is not a prompt change, and it is — arrived at from the opposite direction — the trajectory
+block in §6. Which reorders this document's own build order: §10 step 2 was placed before step 3
+because it was cheap, and the measurement says it is not merely cheap but **the step the other one
+depends on**. Do not re-word and re-run.
 
 **The brain changes its mind two to three times as often as the deterministic tier does, on
 the same board and the same turns.** Consecutive-turn pairs on one base whose answer changed
@@ -494,10 +514,11 @@ Each step is measurable on its own, and the early ones need no game.
    §8 and are not built.
 2. **Trajectory block.** Orchestrator-only, no adapter change. Exit: a `base.hurry` world view
    carries the reserve slope, and the M1 save re-run shows whether the brain's spending changes.
-3. **Directives issued by the agent** — the `na-j2w` rerun that `na-1gl` unblocked on 2026-08-03
-   and nobody ran. Exit: a run in which `plan.issued` is non-empty and a later decision follows a
-   directive the agent wrote. **This is the smallest change with the largest evidence behind it**
-   (§1), and it is a prerequisite for anything called a commitment.
+3. **Directives issued by the agent** — and this is **downstream of step 2, measured, not merely
+   after it**. The `na-j2w` rerun ran for this bead and returned 0 issued in 20 runs across both
+   wordings (§1), so the remaining lever is the horizon step 2 adds, not the prompt. Exit: a run
+   in which `plan.issued` is non-empty and a later decision follows a directive the agent wrote.
+   Prerequisite for anything called a commitment.
 4. **The ledger and the strategic review.** Exit: a commitment opened at turn T, reviewed at
    T+10 against the board, and a decision at T+11 answered under it — the `>1 turn` carry the
    bead asks for, demonstrated rather than asserted.
