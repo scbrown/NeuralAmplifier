@@ -142,7 +142,7 @@ def derive(
         if not isinstance(observed_turn, int):
             continue
         for name, value in (metrics or {}).items():
-            if isinstance(value, bool) or not isinstance(value, (int, float)):
+            if isinstance(value, bool) or not isinstance(value, int | float):
                 continue
             if scope is not None:
                 metric = VOCABULARY.get(name)

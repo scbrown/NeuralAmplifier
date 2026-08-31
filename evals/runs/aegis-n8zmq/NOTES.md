@@ -110,7 +110,6 @@ it **is** the one the measurement points at, and issuing is downstream of it.
 So the build order changes. Not "make issuing attractive with better words, then measure", but
 "give the decision a horizon it can see, then ask again whether it plans".
 
-
 ---
 
 # Round 2 — does a HORIZON make a model set direction?
