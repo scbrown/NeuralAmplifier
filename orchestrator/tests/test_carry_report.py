@@ -225,6 +225,28 @@ def test_published_strategic_review_is_the_positive_control() -> None:
     assert funnel.eligibility_errors == []
     assert report.ages_unknown == 0
     assert max(report.directive_ages) == 11
+    assert cr.carry_contract_errors(report, "claude-code") == []
+
+
+def test_carry_contract_fails_loud_when_identity_chain_is_missing(tmp_path: Path) -> None:
+    report = cr.read(log(tmp_path / "fallback.jsonl", [observation(1, 1, "hurry:none")]))
+    errors = cr.carry_contract_errors(report, "claude-code")
+    assert "one run identity is required" in errors
+    assert "requested brain 'claude-code' not proven (observed: none)" in errors
+    assert "positive non-degraded LLM participation is required" in errors
+    assert "at least one clean strategic review is required" in errors
+    assert "a later decision must explicitly follow an issued directive" in errors
+
+
+def test_revision_alone_does_not_satisfy_explicit_application(tmp_path: Path) -> None:
+    rows = [plan_record(10, issued=["d"], tier="review")]
+    rows[0]["brain"] = "claude-code"
+    rows.append(plan_record(11, issued=["d"], in_force=["d"], tier="llm"))
+    rows[1]["brain"] = "claude-code"
+    errors = cr.carry_contract_errors(
+        cr.read(log(tmp_path / "revision-only.jsonl", rows)), "claude-code"
+    )
+    assert "a later decision must explicitly follow an issued directive" in errors
 
 
 def test_final_turn_issue_is_no_opportunity_not_zero_carry(tmp_path: Path, capsys) -> None:

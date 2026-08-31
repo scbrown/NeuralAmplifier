@@ -544,7 +544,11 @@ Each step is measurable on its own, and the early ones need no game.
 1. **Carry / rework over committed logs.** No game, no model, no network. Produces the baseline
    the rest is judged against. **Built — `scripts/carry_report.py`, `just carry-report`**, and
    its output is §1. Trajectory integrals, commitment fidelity and outcome are the remainder of
-   §8 and are not built.
+   §8 and are not built. A run declared as a carry experiment uses
+   `just carry-report --require-carry claude-code <log>`: it exits nonzero unless one run
+   identity proves the requested brain, a non-degraded LLM decision, a clean strategic review,
+   an agent-issued directive, and a later decision explicitly following that directive. Missing
+   evidence is a failed contract, never a successful zero.
 2. **Trajectory block. BUILT** — `trajectory.py`, `WorldView.trajectory`, a `_SYSTEM` section,
    16 tests. Orchestrator-only, no adapter change. It is READ (it moved a unanimous answer) and it
    does NOT produce a plan on its own, so it is now step 4's input rather than a step that pays

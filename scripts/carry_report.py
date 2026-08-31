@@ -137,6 +137,8 @@ class Report:
     ages_unknown: int = 0
     funnel: DirectiveFunnel = field(default_factory=DirectiveFunnel)
     published_summary: bool = False
+    brains: set[str] = field(default_factory=set)
+    clean_llm_decisions: int = 0
 
     @property
     def carried(self) -> int:
@@ -294,7 +296,7 @@ def _summary_records(summary: dict[str, object]) -> list[dict[str, object]] | No
     while len(rejected_rows) < 3:
         rejected_rows.append([])
     identity = summary["run"]
-    common = {"game_id": identity}
+    common = {"game_id": identity, "brain": summary.get("brain")}
     issued_at = {directive_id: turns[0] for directive_id in _strings(summary["opening_issued"])}
     for directive_id in _strings(summary["review_issued"]):
         issued_at.setdefault(directive_id, turns[1])
@@ -391,6 +393,12 @@ def read(path: Path) -> Report:
         report.tiers[str(record.get("tier"))] += 1
         report.surfaces[str(record.get("surface_id"))] += 1
 
+        brain = record.get("brain")
+        if isinstance(brain, str) and brain:
+            report.brains.add(brain)
+        if record.get("tier") == "llm" and record.get("degraded") is False:
+            report.clean_llm_decisions += 1
+
         turn = record.get("turn")
         if isinstance(turn, int):
             report.turns.append(turn)
@@ -431,6 +439,29 @@ def read(path: Path) -> Report:
         _observe_funnel(report, record)
 
     return report
+
+
+def carry_contract_errors(report: Report, required_brain: str) -> list[str]:
+    """Return every missing link in a declared carry experiment's evidence chain."""
+
+    funnel = report.funnel
+    errors = list(funnel.eligibility_errors)
+    if funnel.run_identity is None:
+        errors.append("one run identity is required")
+    if report.brains != {required_brain}:
+        observed = ", ".join(sorted(report.brains)) or "none"
+        errors.append(f"requested brain {required_brain!r} not proven (observed: {observed})")
+    if report.clean_llm_decisions < 1:
+        errors.append("positive non-degraded LLM participation is required")
+    if funnel.reviews_clean < 1:
+        errors.append("at least one clean strategic review is required")
+    if funnel.directives_issued < 1:
+        errors.append("the agent must issue at least one directive")
+    if funnel.opportunities < 1:
+        errors.append("a later eligible decision is required")
+    if funnel.followed < 1:
+        errors.append("a later decision must explicitly follow an issued directive")
+    return list(dict.fromkeys(errors))
 
 
 def rework(report: Report) -> dict[tuple[str, str], tuple[int, int]]:
@@ -620,6 +651,14 @@ def main() -> int:
         default=30,
         help="refuse a log too short for a rate to mean anything",
     )
+    ap.add_argument(
+        "--require-carry",
+        metavar="BRAIN",
+        help=(
+            "declare a carry experiment and fail unless one run proves this brain, positive "
+            "LLM participation, clean review, and later explicit directive application"
+        ),
+    )
     args = ap.parse_args()
 
     exit_code = 0
@@ -640,6 +679,19 @@ def main() -> int:
             exit_code = 1
             continue
         emit(report)
+        if args.require_carry:
+            errors = carry_contract_errors(report, args.require_carry)
+            if errors:
+                print(
+                    f"  CARRY CONTRACT FAIL ({args.require_carry}): " + "; ".join(errors),
+                    file=sys.stderr,
+                )
+                exit_code = 2
+            else:
+                print(
+                    f"  CARRY CONTRACT PASS ({args.require_carry}): run={report.funnel.run_identity}; "
+                    f"clean_llm={report.clean_llm_decisions}; followed={report.funnel.followed}"
+                )
 
     return exit_code
 
