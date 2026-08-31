@@ -365,6 +365,21 @@ class WorldView(_Model):
     #: (invariant 2).
     metrics: dict[str, float] | None = None
 
+    #: What those metrics have been DOING — `{name: {"now", "t-5", "t-10", "t-20",
+    #: "slope_per_turn"}}`, built by :mod:`.trajectory`. See that module for why an absent
+    #: offset is absent rather than null or zero.
+    #:
+    #: **Orchestrator-supplied, not adapter-supplied, and the exception is deliberate.** Every
+    #: other block here comes from the engine because the orchestrator must not learn where an
+    #: engine files its economy (invariant 2). This one is a rearrangement of `metrics` blocks
+    #: the adapter already sent, so it introduces no engine knowledge — and asking every adapter
+    #: to keep its own history would be asking each of them to reimplement the same buffer.
+    #:
+    #: A typed field rather than a passthrough extra, for the reason `decision_deadline_ms`
+    #: records (na-wzw): a name the orchestrator reads that is not on the contract is silently
+    #: dropped by the model parser — it never arrives, and nothing reports that it did not.
+    trajectory: dict[str, dict[str, float | None]] | None = None
+
     #: Standing directives with their current measured values. Orchestrator-injected like
     #: ``grounding`` — an adapter never sets these.
     directives: list[DirectiveStatus] | None = None

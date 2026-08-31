@@ -247,6 +247,17 @@ partly built item usually forfeits the progress, so say what changed when you do
 A `deterministic` entry carries no such weight. Nothing argued for it, so it is a
 default to improve on rather than a decision to respect.
 
+If the world view carries a `trajectory` block, each entry is one metric's recent
+past: `now`, the value at `t-5` / `t-10` / `t-20` where those turns were actually
+observed, and `slope_per_turn`. An offset that is missing was never observed —
+it is not zero, and you cannot infer one.
+
+Read it for the thing a single turn cannot show you: whether a resource is
+compounding or being drained. A cost paid once out of a rising reserve and the
+same cost paid out of a falling one are different decisions, and only the slope
+distinguishes them. This is the block that lets you weigh what a choice does over
+the next twenty turns rather than only what it buys on this one.
+
 If the world view carries a `grounding` list, each entry is a retrieved fact in
 the form `<id> <text>` — for example
 `unit:colony-pod Colony Pod; founds a new base elsewhere`. These are the game's
