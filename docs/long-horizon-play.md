@@ -27,12 +27,12 @@ on an earlier turn.** Across all three M1 arms — 3,563 adapter records, turns 
 record is `tier` `llm` or `deterministic`. Not one is `plan`, `queued` or `deferred`, the three
 tiers that exist precisely to mark an answer a previous turn decided.
 
-```
+```text
 evals/runs/na-6db/baseline.faction7.jsonl          720 records   deterministic 720
 evals/runs/na-6db/brain.faction7.jsonl            1400 records   llm 700 · deterministic 700
 evals/runs/na-6db/brain-directive.faction7.jsonl  1443 records   llm 723 · deterministic 720
                                                                  plan/queued/deferred: 0
-```
+```text
 
 **The agent has never issued a directive in a measured game.** `evals/runs/na-mmp/decisions.jsonl`,
 723 orchestrator records from the brain-directive arm: `plan.issued` is empty on every one, and
@@ -156,7 +156,7 @@ own write-up flags the limit: *"Snapshots, not integrals."* Nothing scores a gam
 
 ## 3. The architecture: four cadences, and the slower one is the faster one's input
 
-```
+```text
 DOCTRINE   once per game, + on discontinuity      whole game     posture + war aims
    |
 CAMPAIGN   every ~10 turns, + on trigger          10-40 turns    commitments
@@ -345,7 +345,7 @@ difficulty handicaps that make an outcome uninterpretable). The engine invokes i
 passes for AI factions only. From `neural.cpp`, which calls this "the third instance of one
 pattern, and the largest":
 
-```
+```text
 mod_bases_reset        never called for a human faction -> no production is chosen
 mod_enemy_move         never called for a player unit   -> nothing moves our units
 move_upkeep(UM_Player) reachable only from inside mod_enemy_move's plr_unit branch,

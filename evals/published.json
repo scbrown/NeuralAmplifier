@@ -84,6 +84,12 @@
       "tables": [],
       "derives": [],
       "retained": "the compound-expansion plan and its exact checkpoint rationale. No outcome table is published until the seed-1 A/B arm has run; README.md states the slope acceptance and fairness profile."
+    },
+    {
+      "id": "aegis-n8zmq",
+      "tables": [],
+      "derives": [],
+      "retained": "the current and trigger arm results, plus the current arm's per-run trail and the scripts that generated and inspect them. The pre-registered reading and measured result are recorded in NOTES.md; no numeric table is published."
     }
   ]
 }
