@@ -77,6 +77,12 @@ def measurable_fraction(tallies: dict[str, Tally]) -> float | None:
     return sum(max(0, t.measurable) for t in tallies.values()) / in_force
 
 
+def directive_measurable_fraction(tally: Tally) -> float | None:
+    """Measurability for one directive, the report's actual unit of analysis."""
+
+    return max(0, tally.measurable) / tally.in_force if tally.in_force else None
+
+
 def tally(path: Path) -> tuple[dict[str, Tally], int]:
     tallies: dict[str, Tally] = defaultdict(Tally)
     decisions = 0
@@ -201,18 +207,28 @@ def main() -> int:
             "change in the adapter repository, not in the plan."
         )
     if args.min_measurable_fraction is not None:
-        observed = measurable_fraction(tallies)
-        if observed is None or observed < args.min_measurable_fraction:
-            rendered = "unanswerable" if observed is None else f"{observed:.3f}"
+        failing = [
+            (directive_id, directive_measurable_fraction(t))
+            for directive_id, t in sorted(tallies.items())
+            if directive_measurable_fraction(t) is None
+            or directive_measurable_fraction(t) < args.min_measurable_fraction
+        ]
+        if failing:
+            rendered = ", ".join(
+                f"{directive_id}={'unanswerable' if observed is None else f'{observed:.3f}'}"
+                for directive_id, observed in failing
+            )
             print(
-                f"\nMEASURABILITY CONTRACT FAIL: observed {rendered}; required "
+                f"\nMEASURABILITY CONTRACT FAIL: {rendered}; every directive requires "
                 f">= {args.min_measurable_fraction:.3f}.",
                 file=sys.stderr,
             )
             return 2
+        observed = measurable_fraction(tallies)
+        assert observed is not None
         print(
-            f"\nMEASURABILITY CONTRACT PASS: observed {observed:.3f}; required "
-            f">= {args.min_measurable_fraction:.3f}."
+            f"\nMEASURABILITY CONTRACT PASS: all {len(tallies)} directive(s) >= "
+            f"{args.min_measurable_fraction:.3f}; aggregate {observed:.3f}."
         )
     return 0
 

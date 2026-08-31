@@ -334,7 +334,8 @@ signing-identity key=".quipu/yupana-signing.pk8":
 # `unmeasurable` — the world view did not report the directive's metric — is an ADAPTER GAP, not
 # a directive that failed. It is excluded from the rates and reported separately, because the
 # fix for the two is in different repositories. A declared evaluation can fail loud instead:
-# `just directive-report --min-measurable-fraction 0.95 <log>`.
+# `just directive-report --min-measurable-fraction 0.95 <log>` requires EVERY directive to meet
+# the threshold, so a high-volume healthy directive cannot hide a blind one.
 #
 # Refuses a log too short for a rate to mean anything. Ten replays of one captured observation
 # show the mechanism works and say nothing about whether directives help.
