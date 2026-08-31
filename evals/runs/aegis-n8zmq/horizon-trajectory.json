@@ -1,0 +1,70 @@
+{
+  "arm": "trajectory",
+  "choices": {
+    "tech:2": 3,
+    "tech:58": 7
+  },
+  "degraded": 0,
+  "issued": [],
+  "issued_count": 0,
+  "runs": 10,
+  "stability": 0.7,
+  "surface": "faction.tech",
+  "trajectory": {
+    "base_count": {
+      "now": 18.0,
+      "slope_per_turn": 0.0,
+      "t-10": 18.0,
+      "t-5": 18.0
+    },
+    "drone_total": {
+      "now": 27.0,
+      "slope_per_turn": 1.1,
+      "t-10": 16.0,
+      "t-5": 21.0
+    },
+    "energy_income": {
+      "now": 49.0,
+      "slope_per_turn": 0.5,
+      "t-10": 44.0,
+      "t-5": 46.0
+    },
+    "energy_reserves": {
+      "now": 189.0,
+      "slope_per_turn": -0.6,
+      "t-10": 195.0,
+      "t-5": 68.0
+    },
+    "factions_at_war": {
+      "now": 1.0,
+      "slope_per_turn": 0.0,
+      "t-10": 1.0,
+      "t-5": 1.0
+    },
+    "labs_output": {
+      "now": 30.0,
+      "slope_per_turn": 0.3,
+      "t-10": 27.0,
+      "t-5": 29.0
+    },
+    "military_units": {
+      "now": 44.0,
+      "slope_per_turn": 1.2,
+      "t-10": 32.0,
+      "t-5": 41.0
+    },
+    "pop_total": {
+      "now": 71.0,
+      "slope_per_turn": 1.3,
+      "t-10": 58.0,
+      "t-5": 64.0
+    },
+    "units_in_foreign_territory": {
+      "now": 0.0,
+      "slope_per_turn": 0.0,
+      "t-10": 0.0,
+      "t-5": 0.0
+    }
+  },
+  "turn": 115
+}

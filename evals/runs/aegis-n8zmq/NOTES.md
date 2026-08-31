@@ -109,3 +109,71 @@ it **is** the one the measurement points at, and issuing is downstream of it.
 
 So the build order changes. Not "make issuing attractive with better words, then measure", but
 "give the decision a horizon it can see, then ask again whether it plans".
+
+
+---
+
+# Round 2 — does a HORIZON make a model set direction?
+
+Pre-registered the same way, before either arm was read.
+
+na-j2w offered two explanations for a model that never issues a directive. Round 1 killed the
+first (the prompt does not ask properly). This tests the second: *"the world view may simply not
+show a horizon worth planning over."*
+
+The treatment is `WorldView.trajectory` — per metric, `now`, the value at `t-5`/`t-10`/`t-20`
+where those turns were observed, and `slope_per_turn`. Nine faction-scope metrics.
+
+**Both arms use a real decision and a real series.** The `faction.tech` world view recorded at
+turn 115 of the na-6db brain arm; the trajectory derived from that same arm's own per-turn
+`metrics`, turns 101-115. Nothing synthesised. The brain arm rather than brain-directive because
+that arm had a hand-written directive in force on every decision, and measuring whether a model
+ISSUES one while being shown one confounds issuing with following.
+
+**The treatment was verified present in the bytes**, which is the check na-j2w's post-mortem
+exists to demand: 2,831-byte payload with the block against 2,173 without, a 658-byte delta, and
+`slope_per_turn` present in one and absent from the other. The system prompt explains the block.
+So a zero here is a real zero and not two identical arms.
+
+## Results
+
+| arm | runs | degraded | **issued** | stability | choices |
+| --- | --- | --- | --- | --- | --- |
+| `bare` | 10 | 0 | **0** | **1.00** | `tech:58` x10 |
+| `trajectory` | 10 | 0 | **0** | **0.70** | `tech:58` x7, `tech:2` x3 |
+
+## What this settles
+
+**The horizon does not cause issuing either.** Both of na-j2w's hypotheses are now measured
+insufficient. The running total is **0 directives in 50 runs, across four prompt/world-view
+configurations, two lanes and two turns.**
+
+Stop looking for a cheaper answer. The two obvious levers — say it better, show more — are spent,
+and each cost an hour of wall clock to rule out. What is left is the thing na-j2w actually said
+underneath both hypotheses: *setting faction policy is optional extra work with no payoff inside
+the turn.* A decision asked to pick a technology AND maybe set direction will do the first. That
+is not a prompt defect or a data defect; it is what happens when planning is a side task attached
+to an errand.
+
+**So the fix is a separate reasoning occasion** — `docs/long-horizon-play.md` §5's strategic
+review: a wake with no action space, whose only job is to return a ledger revision, and which
+therefore cannot answer by doing something else instead. The design put the review at step 4 and
+the trajectory at step 2 on cost grounds. Two measurements have now reordered that on evidence:
+the review is the load-bearing piece, and the trajectory is its input rather than its substitute.
+
+## What this does NOT settle, and one thing worth watching
+
+**The block is not ignored.** A unanimous 10/10 became a 7/3 split — the model's answer moved when
+the only thing that changed was the trajectory. That is worth recording precisely because the
+issuing result is negative: the field reaches the model and is read, it simply does not make it
+plan.
+
+**But do not read a direction into 10/10 vs 7/10.** Fisher's exact on that pair is p ~ 0.21, so it
+does not exclude chance at n=10 — the same caution na-j2w's post-mortem gives about this exact
+surface and sample size. And *less* stable is not self-evidently worse or better: na-qu8 already
+recorded a case that was "perfectly stable and perfectly unaligned". Whether a horizon improves
+the CHOICE is a different question from whether it produces a plan, it needs a quality score
+rather than a stability count, and this run does not answer it.
+
+**One save, one turn, one surface.** `faction.tech` at turn 115 is the only faction-scope decision
+with a usable series in the only real game we have.
