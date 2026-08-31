@@ -259,6 +259,102 @@ class Orchestrator:
         # legitimate way to run as an absent queue.
         self.turn_plan = turn_plan
 
+    def review(self, world_view: WorldView) -> Result:
+        """Reconsider faction strategy without pretending a review is a game action.
+
+        A review has no action space: its output is a revision of the standing directives.  It
+        deliberately shares the brain and directive compiler with ordinary decisions, while
+        bypassing action validation because there is no engine action to validate.  This is the
+        second reason to wake described in ``docs/long-horizon-play.md``.
+
+        The caller supplies the turn-boundary world view (including trajectory).  Every current
+        directive is shown: relevance filtering is for a concrete decision, while the subject of
+        a strategic review is the plan itself.
+        """
+        started = time.monotonic()
+        if world_view.action_space:
+            raise ValueError("a strategic review has no action space")
+        if world_view.scope != "turn":
+            raise ValueError("a strategic review is faction-scoped (scope='turn')")
+
+        current = self.plan.in_force(world_view.turn) if self.plan is not None else []
+        world_view = world_view.model_copy(
+            update={
+                "surface_id": "faction.strategy_review",
+                "directives": evaluate(current, world_view) or None,
+                "advisories": [
+                    *(world_view.advisories or []),
+                    "STRATEGIC REVIEW: there is no game action to choose. Return choices=[] and "
+                    "use directives to open, keep, or revise measurable commitments for future "
+                    "turns. Re-issue a commitment with the same id to record an explicit keep. "
+                    "Every directive must set horizon_turn later than this review turn; a plan "
+                    "without a future checkpoint cannot fail and will be refused.",
+                ],
+            }
+        )
+        if self.store is not None:
+            self.store.put(world_view)
+
+        degrade_reason: str | None = None
+        try:
+            answer = self.brain.decide(world_view)
+        except BrainError as exc:
+            degrade_reason = str(exc) or "brain error"
+            answer = Orders(degraded=True)
+        except Exception as exc:
+            degrade_reason = f"{type(exc).__name__}: {exc}"
+            answer = Orders(degraded=True)
+
+        # Choices on a no-action occasion are neither applied nor silently reinterpreted.
+        rejected = []
+        if answer.choices:
+            rejected.append(
+                f"{len(answer.choices)} action choice(s) ignored: strategic review has no action space"
+            )
+        candidates = [
+            directive
+            for directive in answer.directives
+            if directive.horizon_turn is not None and directive.horizon_turn > world_view.turn
+        ]
+        for directive in answer.directives:
+            if directive not in candidates:
+                rejected.append(
+                    f"directive {directive.id!r} rejected: a strategic commitment needs "
+                    f"horizon_turn later than review turn {world_view.turn}"
+                )
+        issued, refused = self._issue(candidates, world_view, degrade_reason)
+        rejected.extend(refused)
+        final = answer.model_copy(
+            update={
+                "choices": [],
+                "directives": candidates,
+                "degraded": degrade_reason is not None,
+            }
+        )
+        record = self._record(
+            world_view=world_view,
+            orders=final,
+            degrade_reason=degrade_reason,
+            latency_ms=int((time.monotonic() - started) * 1000),
+            unknown=0,
+            fog=Redaction(world_view=world_view, removed=0, enforced=True),
+            knowledge=Knowledge(
+                quipu_absent=self.retriever is None,
+                hank_absent=self.guard is None,
+            ),
+            plan=self._plan_block(
+                world_view,
+                final,
+                issued=issued,
+                rejected=rejected,
+                configured=self.plan is not None,
+                dropped=[],
+            ),
+            tier="review",
+        )
+        self.telemetry.emit(record)
+        return Result(orders=final, record=record)
+
     def decide(self, world_view: WorldView) -> Result:
         started = time.monotonic()
         degrade_reason: str | None = None

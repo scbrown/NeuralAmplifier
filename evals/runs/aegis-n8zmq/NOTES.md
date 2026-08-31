@@ -176,3 +176,32 @@ rather than a stability count, and this run does not answer it.
 
 **One save, one turn, one surface.** `faction.tech` at turn 115 is the only faction-scope decision
 with a usable series in the only real game we have.
+
+---
+
+# Round 3 — the strategic-review occasion carries a plan across turns
+
+The two negative rounds said the same thing from opposite directions: planning attached to an
+errand stays optional extra work. This round removes the errand. `Orchestrator.review()` has no
+action space and records `tier=review`; its only applicable output is a compiled revision of the
+standing directives. A review commitment without a future `horizon_turn` is refused, because a
+plan with no checkpoint cannot fail.
+
+The real `claude-code` run uses three captured turns from the same na-6db game:
+
+| turn | occasion | result |
+| --- | --- | --- |
+| 115 | strategic review | opened four measurable commitments |
+| 125 | strategic review | all four present; explicitly re-issued all four and added one |
+| 126 | `base.hurry` | all five present; explicitly followed four |
+
+All three calls were clean (`degraded=false`), no directive was rejected, and none was
+unmeasurable at T+11. The T+10 review changed the plan against the trajectory rather than merely
+repeating it: the energy target moved from 400 by T140 to 300 by T155 because the observed
+148→175 slope made the original checkpoint impossible, and army growth (45→54 while bases stayed
+18) produced a new cap so production could return to expansion and unrest control.
+
+The committed evidence is `carry-reviewed.json`; the executable proof is
+`carry_across_turns.py`. It refuses a pre-existing store and any sequence other than T/T+10/T+11.
+Result: **carried=true, followed=true, 11 turns carried.** This is the >1-turn rationale chain the
+bead's close condition asks for.

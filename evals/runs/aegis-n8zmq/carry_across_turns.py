@@ -1,29 +1,10 @@
 #!/usr/bin/env python3
-"""One decision's reasoning, reaching a later turn's decision — aegis-n8zmq's acceptance.
+"""Prove one commitment opens, is reviewed, and steers a later turn — aegis-n8zmq.
 
-The bead asks for "a run that demonstrably carries a decision's rationale across >1 turn". This
-is that run, reduced to what it actually needs: **no game**. The orchestrator is the thing under
-test, a captured world view is a legitimate input to it, and the directive store is a file — so
-the whole chain is reproducible on a fresh clone by anyone who doubts the result.
-
-Three steps, and the middle one is the claim:
-
-  1. a `faction.tech` decision at turn T is asked, with a directive store pointed at a path that
-     DOES NOT EXIST — so any plan can only have been created by the issue itself. This is na-43h's
-     own control and it is kept for the same reason.
-  2. a `base.hurry` decision at turn T+n is asked through the SAME store.
-  3. the second record is inspected: was the directive `in_force`, and was it `followed`.
-
-`carry_report.py` then reads the log the two decisions wrote, which is what makes this a movement
-of the project's own baseline rather than a bespoke demonstration.
-
-**What would make this prove nothing**, both guarded:
-
-  * a directive that was hand-written rather than issued. The store path is asserted absent
-    first, and the run refuses if step 1 issues nothing rather than continuing to a step 2 that
-    would report a satisfying `in_force` for somebody else's plan.
-  * a second decision on the SAME turn. That is bulk work, not carry, and `carry_report.py`
-    excludes tier `plan` for the same reason. The turns are asserted to differ.
+The three records are deliberately T/T+10/T+11: a strategic review opens a measurable
+commitment, another review explicitly keeps or revises that same id against a later board, and a
+tactical decision is then answered with the reviewed commitment in force. The store must not
+exist before the run, so a hand-written plan cannot satisfy the proof accidentally.
 """
 
 from __future__ import annotations
@@ -52,93 +33,131 @@ def build(brain_kind: str, plan_path: Path):
     )
 
 
+def observation_at(path: Path, surface: str, turn: int) -> dict:
+    """The last captured decision for one exact surface and turn."""
+    found = None
+    for line in path.read_text(encoding="utf-8").splitlines():
+        try:
+            row = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if row.get("surface_id") == surface and row.get("turn") == turn and row.get("action_space"):
+            found = row
+    if found is None:
+        raise SystemExit(f"no {surface} observation at turn {turn} in {path}")
+    return found
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
-    ap.add_argument("--issuing", type=Path, required=True, help="observations with faction.tech")
-    ap.add_argument("--later", type=Path, required=True, help="observations with the later surface")
+    ap.add_argument("--opening", type=Path, required=True, help="observations for review turn T")
+    ap.add_argument("--review", type=Path, required=True, help="observations for review turn T+10")
+    ap.add_argument("--later", type=Path, required=True, help="observations for decision T+11")
+    ap.add_argument("--opening-surface", default="faction.tech")
+    ap.add_argument("--review-surface", default="base.hurry")
     ap.add_argument("--later-surface", default="base.hurry")
+    ap.add_argument("--opening-turn", type=int, required=True)
+    ap.add_argument("--review-turn", type=int, required=True)
+    ap.add_argument("--later-turn", type=int, required=True)
     ap.add_argument("--plan", type=Path, required=True, help="store path; MUST NOT EXIST")
     ap.add_argument("--brain", default="claude-code")
-    ap.add_argument("--log", type=Path, help="write both decision records here, for carry_report")
-    ap.add_argument(
-        "--attempts",
-        type=int,
-        default=1,
-        help="ask the issuing surface up to this many times; a model that issues on some runs "
-        "and not others still demonstrates carry, and pretending otherwise would need a "
-        "guaranteed-issuing brain, which is the scripted driver na-j2w says proves nothing",
-    )
+    ap.add_argument("--log", type=Path, help="write the three records here")
+    ap.add_argument("--attempts", type=int, default=1, help="opening-review attempts")
     args = ap.parse_args()
 
     if args.plan.exists():
         raise SystemExit(
-            f"refusing: {args.plan} already exists. The control this run depends on is that any\n"
-            "directive found later could only have been created by the issue itself."
+            f"refusing: {args.plan} already exists; an old hand-written plan could fake carry"
         )
 
-    from decision_stability import load_observation, to_world_view  # noqa: PLC0415
+    from decision_stability import to_world_view  # noqa: PLC0415
 
-    issuing_view = to_world_view(load_observation(args.issuing, "faction.tech"))
-    later_view = to_world_view(load_observation(args.later, args.later_surface))
-    if issuing_view.turn == later_view.turn:
+    opening_source = to_world_view(
+        observation_at(args.opening, args.opening_surface, args.opening_turn)
+    )
+    review_source = to_world_view(
+        observation_at(args.review, args.review_surface, args.review_turn)
+    )
+    later_view = to_world_view(observation_at(args.later, args.later_surface, args.later_turn))
+    opening_view = opening_source.model_copy(update={"scope": "turn", "action_space": []})
+    review_view = review_source.model_copy(update={"scope": "turn", "action_space": []})
+    if not (
+        review_view.turn == opening_view.turn + 10
+        and later_view.turn == review_view.turn + 1
+    ):
         raise SystemExit(
-            f"refusing: both world views are turn {issuing_view.turn}. Two decisions on one turn\n"
-            "is bulk work, not carry — the whole claim is that the turns differ."
+            f"refusing: expected T/T+10/T+11, got {opening_view.turn}/{review_view.turn}/"
+            f"{later_view.turn}; this must measure review across time, not bulk work"
         )
 
     orchestrator = build(args.brain, args.plan)
-
     issued: list[dict] = []
     attempts = 0
+    first = None
     while attempts < args.attempts and not issued:
         attempts += 1
-        first = orchestrator.decide(issuing_view)
+        first = orchestrator.review(opening_view)
         issued = [
             d if isinstance(d, dict) else d.model_dump(mode="json")
             for d in (first.orders.directives or [])
         ]
-
-    if not issued:
+    if first is None or not issued:
         print(
             json.dumps(
                 {
                     "carried": False,
-                    "why": "the issuing surface issued no directive",
+                    "why": "the opening strategic review issued no directive",
                     "attempts": attempts,
-                    "issuing_turn": issuing_view.turn,
+                    "opening_turn": opening_view.turn,
                 },
                 indent=2,
             )
         )
         return 2
 
-    second = orchestrator.decide(later_view)
-    plan_block = second.record.plan
-    in_force = list(getattr(plan_block, "in_force", []) or [])
-    followed = list(getattr(plan_block, "followed", []) or [])
-    ids = {d.get("id") for d in issued}
+    second = orchestrator.review(review_view)
+    opened_ids = {str(d.get("id")) for d in issued if d.get("id")}
+    reviewed_ids = set(second.record.plan.issued)
+    ids = opened_ids & reviewed_ids
+    if not ids:
+        print(
+            json.dumps(
+                {
+                    "carried": False,
+                    "why": "T+10 review did not explicitly keep or revise the opened commitment",
+                    "opened": sorted(opened_ids),
+                    "reviewed": sorted(reviewed_ids),
+                },
+                indent=2,
+            )
+        )
+        return 3
 
+    third = orchestrator.decide(later_view)
+    plan_block = third.record.plan
+    in_force = list(plan_block.in_force)
+    followed = list(plan_block.followed)
     result = {
         "carried": bool(ids & set(in_force)),
         "followed": bool(ids & set(followed)),
-        "issuing_turn": issuing_view.turn,
+        "opening_turn": opening_view.turn,
+        "review_turn": review_view.turn,
         "later_turn": later_view.turn,
-        "turns_carried": later_view.turn - issuing_view.turn,
+        "turns_carried": later_view.turn - opening_view.turn,
         "attempts": attempts,
         "issued": issued,
+        "reviewed": sorted(reviewed_ids),
         "later_in_force": in_force,
         "later_followed": followed,
-        "later_unmeasurable": list(getattr(plan_block, "unmeasurable", []) or []),
+        "later_unmeasurable": list(plan_block.unmeasurable),
         "plan_file_bytes": args.plan.stat().st_size if args.plan.exists() else 0,
     }
     print(json.dumps(result, indent=2, sort_keys=True))
 
     if args.log:
         with args.log.open("w", encoding="utf-8") as handle:
-            for record in (first.record, second.record):
-                payload = record.model_dump(mode="json") if hasattr(record, "model_dump") else {}
-                handle.write(json.dumps(payload) + "\n")
-
+            for record in (first.record, second.record, third.record):
+                handle.write(json.dumps(record.model_dump(mode="json")) + "\n")
     return 0 if result["carried"] else 1
 
 

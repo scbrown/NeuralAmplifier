@@ -33,7 +33,7 @@ from pydantic import BaseModel, ConfigDict, Field
 #: exactly this turn. Not `queued` — nothing conditional is standing, the table dies with its
 #: turn — and the bead requires the distinction explicitly, so replay can tell strategy-driven
 #: answers from agent-driven ones.
-Tier = Literal["deterministic", "llm", "deferred", "queued", "plan"]
+Tier = Literal["deterministic", "llm", "deferred", "queued", "plan", "review"]
 
 
 def world_view_hash(payload: dict[str, Any]) -> str:

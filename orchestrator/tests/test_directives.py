@@ -67,7 +67,79 @@ def saving(**overrides: object) -> Directive:
     return Directive(**base)  # type: ignore[arg-type]
 
 
+def strategic_view(turn: int, reserves: float) -> WorldView:
+    """A turn-boundary occasion, not a game decision: deliberately no actions."""
+    return WorldView(
+        engine="thinker",
+        scope="turn",
+        turn=turn,
+        faction="University",
+        metrics={"energy_reserves": reserves},
+        trajectory={
+            "energy_reserves": {"now": reserves, "t-10": reserves - 50, "slope_per_turn": 5.0}
+        },
+    )
+
+
 # --- measurability ---------------------------------------------------------
+
+
+def test_strategic_review_opens_keeps_and_carries_a_commitment(tmp_path: Path) -> None:
+    """T opens it, T+10 reviews it, T+11 makes a tactical choice under it."""
+    plan = DirectiveStore(tmp_path / "campaign.json")
+    commitment = saving(horizon_turn=60)
+    brain = ScriptedBrain(
+        responses=[
+            Orders(directives=[commitment]),
+            Orders(directives=[commitment]),
+            Orders(choices=[Choice(action_id="wait")], followed=[commitment.id]),
+        ]
+    )
+    orchestrator = Orchestrator(brain=brain, plan=plan)
+
+    opened = orchestrator.review(strategic_view(40, 100))
+    kept = orchestrator.review(strategic_view(50, 150))
+    later = orchestrator.decide(
+        view(
+            turn=51,
+            metrics={"energy_reserves": 150},
+            actions=[
+                Action(id="wait", action="Do not hurry", effects={"energy_reserves": 0}),
+                Action(id="hurry", action="Hurry", effects={"energy_reserves": -50}),
+            ],
+        )
+    )
+
+    assert opened.record.tier == kept.record.tier == "review"
+    assert opened.record.action_space_size == kept.record.action_space_size == 0
+    assert opened.record.plan.issued == [commitment.id]
+    assert kept.record.plan.in_force == [commitment.id]
+    assert kept.record.plan.issued == [commitment.id]
+    assert later.record.turn == 51
+    assert later.record.plan.in_force == [commitment.id]
+    assert later.record.plan.followed == [commitment.id]
+    assert [call.turn for call in brain.calls] == [40, 50, 51]
+    assert brain.calls[0].surface_id == brain.calls[1].surface_id == "faction.strategy_review"
+
+
+def test_strategic_review_refuses_an_action_space() -> None:
+    review = strategic_view(40, 100).model_copy(
+        update={"action_space": [Action(id="not-a-review", action="move")]}
+    )
+    with pytest.raises(ValueError, match="no action space"):
+        Orchestrator(ScriptedBrain()).review(review)
+
+
+def test_strategic_review_refuses_a_commitment_without_a_future_horizon(tmp_path: Path) -> None:
+    plan = DirectiveStore(tmp_path / "campaign.json")
+    result = Orchestrator(
+        ScriptedBrain([Orders(directives=[saving(horizon_turn=None)])]), plan=plan
+    ).review(strategic_view(40, 100))
+
+    assert result.record.plan.issued == []
+    assert "needs horizon_turn later" in result.record.plan.rejected[0]
+    assert result.orders.directives == []
+    assert len(plan) == 0
 
 
 def test_a_directive_naming_an_unknown_metric_is_refused() -> None:

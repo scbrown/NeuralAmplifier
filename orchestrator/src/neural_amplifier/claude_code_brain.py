@@ -70,7 +70,8 @@ Return ONLY a JSON object and nothing else — no prose before or after, no mark
       "comparator": "at_least | at_most | increase | decrease | hold",
       "target": <number, required for at_least/at_most, omit for the others>,
       "priority": <1-10>,
-      "entities": ["<datalinks ids this plan is about>"]
+      "entities": ["<datalinks ids this plan is about>"],
+      "horizon_turn": <future turn when this commitment is checked>
     }
   ]
 }

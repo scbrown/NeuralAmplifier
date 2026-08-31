@@ -339,3 +339,10 @@ def test_one_attempt_means_NO_retry(monkeypatch: Any) -> None:
 
     assert len(calls) == 1
     assert brain.transient_retries == 0
+
+
+def test_the_plain_json_contract_names_the_commitment_horizon() -> None:
+    """A field absent from this example stays absent however often prose asks for it."""
+    system = ClaudeCodeBrain()._system()
+
+    assert '"horizon_turn": <future turn' in system
