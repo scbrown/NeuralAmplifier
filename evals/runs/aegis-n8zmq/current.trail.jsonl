@@ -1,0 +1,10 @@
+{"arm": "current", "run": 1, "choice": "tech:81", "issued": [], "degraded": false, "degrade_reason": null}
+{"arm": "current", "run": 2, "choice": "tech:12", "issued": [], "degraded": false, "degrade_reason": null}
+{"arm": "current", "run": 3, "choice": "tech:59", "issued": [], "degraded": false, "degrade_reason": null}
+{"arm": "current", "run": 4, "choice": "tech:12", "issued": [], "degraded": false, "degrade_reason": null}
+{"arm": "current", "run": 5, "choice": "tech:12", "issued": [], "degraded": false, "degrade_reason": null}
+{"arm": "current", "run": 6, "choice": "tech:81", "issued": [], "degraded": false, "degrade_reason": null}
+{"arm": "current", "run": 7, "choice": "tech:12", "issued": [], "degraded": false, "degrade_reason": null}
+{"arm": "current", "run": 8, "choice": "tech:12", "issued": [], "degraded": false, "degrade_reason": null}
+{"arm": "current", "run": 9, "choice": "tech:59", "issued": [], "degraded": false, "degrade_reason": null}
+{"arm": "current", "run": 10, "choice": "tech:12", "issued": [], "degraded": false, "degrade_reason": null}
