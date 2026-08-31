@@ -34,11 +34,23 @@ evals/runs/na-6db/brain-directive.faction7.jsonl  1443 records   llm 723 · dete
                                                                  plan/queued/deferred: 0
 ```
 
-**The agent has never issued a directive.** `evals/runs/na-mmp/decisions.jsonl`, 723 orchestrator
-records from the brain-directive arm: `plan.issued` is empty on every one, and `plan.rejected` is
-too, so this is not a validator turning them away. The only directive that ever existed in a real
-game was hand-written before the run. This is `na-43h`, still open, and it is the single most
-consequential open gap in the project.
+**The agent has never issued a directive in a measured game.** `evals/runs/na-mmp/decisions.jsonl`,
+723 orchestrator records from the brain-directive arm: `plan.issued` is empty on every one, and
+`plan.rejected` is too, so this is not a validator turning them away. The only directive that ever
+existed in a real game was hand-written before the run.
+
+**And the mechanism is not the reason** — that is worth stating precisely, because "nothing issues
+a directive" reads as unbuilt and it is not:
+
+| bead | what it established | state |
+| --- | --- | --- |
+| `na-43h` | the path works end to end in a live game — issued on `faction.tech` at turn 135, shown on a later `base.production`, `plan.json` created by the issue | closed, acceptance met |
+| `na-j2w` | a real model, invited, issues **zero directives in twenty runs** | closed as *run and reported, not answered* — there was no treatment to measure |
+| `na-1gl` | why: the model-facing schema said *"Empty unless setting direction"*, nine words whose only actionable clause points at empty. Fixed in `25b2a72` to *"Issue when this choice binds later turns; else empty"* | closed, and it says in its own close line that **measuring an actual directive is na-j2w's rerun, which this unblocks** |
+
+That rerun was never done. So the state on 2026-08-30 is a built, verified, prompt-fixed path that
+**nobody has measured since the fix** — which is a much cheaper problem than the one "nothing
+issues a directive" describes, and a more embarrassing one to leave sitting.
 
 **The brain changes its mind two to three times as often as the deterministic tier does, on
 the same board and the same turns.** Consecutive-turn pairs on one base whose answer changed
@@ -482,10 +494,10 @@ Each step is measurable on its own, and the early ones need no game.
    §8 and are not built.
 2. **Trajectory block.** Orchestrator-only, no adapter change. Exit: a `base.hurry` world view
    carries the reserve slope, and the M1 save re-run shows whether the brain's spending changes.
-3. **Directives issued by the agent** — `na-43h`, open since the mechanism shipped. Exit: a run
-   in which `plan.issued` is non-empty and a later decision follows a directive the agent wrote.
-   **This is the smallest change with the largest evidence behind it** (§1), and it is a
-   prerequisite for anything called a commitment.
+3. **Directives issued by the agent** — the `na-j2w` rerun that `na-1gl` unblocked on 2026-08-03
+   and nobody ran. Exit: a run in which `plan.issued` is non-empty and a later decision follows a
+   directive the agent wrote. **This is the smallest change with the largest evidence behind it**
+   (§1), and it is a prerequisite for anything called a commitment.
 4. **The ledger and the strategic review.** Exit: a commitment opened at turn T, reviewed at
    T+10 against the board, and a decision at T+11 answered under it — the `>1 turn` carry the
    bead asks for, demonstrated rather than asserted.
