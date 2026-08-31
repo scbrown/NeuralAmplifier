@@ -22,6 +22,7 @@ other document is describing one side of.
 | What an AI player must cover, or adding a decision hook | [The Game Surface](game-surface.md) |
 | Moving a surface to the LLM tier, or a poor decision | [Decision Inputs](decision-inputs.md) |
 | How one decision steers a later one | [Directives](directives.md) |
+| Reasoning across a whole game, or tactical combat | [Long-horizon Play](long-horizon-play.md) |
 | Tests, CI lanes, or fixtures | [Building & Testing](building-and-testing.md) |
 | Logging, metrics, tracing, coverage | [Observability](observability.md) |
 | A GLSMAC mod or the GSE builtin | [GLSMAC Integration Notes](glsmac-integration-notes.md) |

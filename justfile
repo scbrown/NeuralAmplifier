@@ -340,6 +340,21 @@ signing-identity key=".quipu/yupana-signing.pk8":
 directive-report log="decisions.jsonl":
     @scripts/directive_report.py "{{log}}"
 
+# Does a decision's reasoning survive the turn that produced it? — aegis-n8zmq's baseline.
+#
+# Two rates over logs that already exist, with no game, model or network: CARRY (answers produced
+# by an earlier turn's reasoning) and REWORK (how often one base's answer reversed turn over
+# turn). `plan` tier is deliberately NOT counted as carry — a plan table is valid for exactly the
+# turn it names, so counting it would let bulk-turn mode read as long-horizon reasoning.
+#
+# Reports what each log can actually answer and names the rest UNANSWERABLE rather than printing
+# a zero: rework needs `base_id` (adapter observation logs have it, orchestrator records do not)
+# and directive age needs `issued_turn`.
+#
+#   just carry-report evals/runs/na-6db/brain.faction7.jsonl
+carry-report +logs="decisions.jsonl":
+    @scripts/carry_report.py {{logs}}
+
 # Compare two runs' trajectories — the A/B half of na-6db that needs no game.
 #
 # Producing the two logs needs a running game; reading them does not, which is why this exists

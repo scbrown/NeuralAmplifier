@@ -8,6 +8,7 @@
 - [The Game Surface](game-surface.md)
 - [Decision Inputs](decision-inputs.md)
 - [Directives](directives.md)
+- [Long-horizon Play](long-horizon-play.md)
 
 # Knowledge & Guardrails
 
