@@ -65,9 +65,14 @@ class RecordingStore(MemoryStore):
 
 
 def fake_adapter(game_dir: Path, ok: bool = True, detail: str = "done") -> threading.Thread:
+    """Serve one order; the deadline detects a hang rather than defining fixture lifetime."""
+    ready = threading.Event()
+
     def run() -> None:
         cmd = game_dir / "na-command"
-        for _ in range(400):
+        ready.set()
+        deadline = time.monotonic() + 30.0
+        while time.monotonic() < deadline:
             if cmd.exists():
                 line = cmd.read_text(encoding="utf-8").strip()
                 cmd.unlink()
@@ -88,6 +93,7 @@ def fake_adapter(game_dir: Path, ok: bool = True, detail: str = "done") -> threa
 
     t = threading.Thread(target=run, daemon=True)
     t.start()
+    assert ready.wait(timeout=5.0), "fake adapter thread did not start"
     return t
 
 
@@ -187,11 +193,14 @@ def test_a_bad_intent_is_refused_before_the_order_is_issued(
 
 
 def batch_adapter(game_dir: Path, oks: list[bool], dropped: int = 0) -> None:
-    """Stand in for na_order_batch: one envelope, one entry per order it ran, in order."""
+    """Stand in for na_order_batch; its deadline detects a hang, not expected latency."""
+    ready = threading.Event()
 
     def run() -> None:
         cmd = game_dir / "na-command"
-        for _ in range(400):
+        ready.set()
+        deadline = time.monotonic() + 30.0
+        while time.monotonic() < deadline:
             if cmd.exists():
                 lines = cmd.read_text(encoding="utf-8").strip().splitlines()
                 cmd.unlink()
@@ -217,6 +226,7 @@ def batch_adapter(game_dir: Path, oks: list[bool], dropped: int = 0) -> None:
             time.sleep(0.01)
 
     threading.Thread(target=run, daemon=True).start()
+    assert ready.wait(timeout=5.0), "batch adapter thread did not start"
 
 
 def test_each_confirmed_order_in_a_batch_records_its_own_intent(

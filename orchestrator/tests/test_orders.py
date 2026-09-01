@@ -79,17 +79,21 @@ def test_consumed_but_unanswered_is_still_unknown(tmp_path: Path) -> None:
     Treating consumption as success would turn a crash into a reported order.
     """
     channel = OrderChannel(tmp_path)
+    ready = threading.Event()
 
     def eat() -> None:
         cmd = tmp_path / "na-command"
-        for _ in range(200):
+        ready.set()
+        deadline = time.monotonic() + 30.0
+        while time.monotonic() < deadline:
             if cmd.exists():
                 cmd.unlink()
                 return
             time.sleep(0.01)
 
     threading.Thread(target=eat, daemon=True).start()
-    result = channel.issue("skip 3", timeout_s=0.5)
+    assert ready.wait(timeout=5.0), "fake adapter thread did not start"
+    result = channel.issue("skip 3", timeout_s=5.0)
     assert result.status == "unknown"
     assert "consumed" in result.detail
 
