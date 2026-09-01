@@ -122,10 +122,12 @@ changing the module — most of these look like ordinary plumbing and are not.
 | `replay.py` | World-view store + diffing | A log alone can't be replayed — something must keep the bytes |
 | `datalinks/` | SMAC's own rules → Quipu | Provenance on every fact, and **filtered on read** or the tag is decoration |
 | `brain.py` | Claude / scripted brains | CI never makes a paid call |
+| `claude_code_brain.py` | Claude Code execution, bounded transient attempts, provider-call outcomes | An attempt budget includes the first call; telemetry never changes a decision outcome |
 | `agent_brain.py` | The brain that *is* an attached agent | An agent is not a privileged client — its orders take the same path a model's do |
 | `pending.py` | Decisions waiting for an answer | One decision is answered once, by one agent, or explicitly abandoned |
 | `doorbell.py` | The optional tmux nudge | Never load-bearing: asking (`next_decision`) always works, and no game data rides on a command line |
 | `mcp_server.py` | The tool surface an agent plays through | A rejection is addressed to the *model* — refusals carry the legal set |
+| `workflow_export.py` | Finished decision logs → Shuttle workflow runs | Export stays off the game path; signatures attest the mapping, not the original play |
 
 The one that surprises people: `telemetry.Emitter` takes an *already-built* record and hands the
 same instance to every sink. Assembling it twice is how a dashboard and a log drift apart.

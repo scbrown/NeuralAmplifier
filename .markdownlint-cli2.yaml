@@ -8,6 +8,7 @@ config:
   MD041: false          # First line heading not required
   MD040: true           # Fenced code blocks must specify language
   MD004: { style: "dash" }  # List marker style: dash
+  MD060: false          # Existing evaluation tables intentionally mix compact/aligned styles
 
 globs:
   - "**/*.md"

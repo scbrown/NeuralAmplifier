@@ -76,3 +76,8 @@ surface_default = false
 # order, which is not the same as it being a good one.
 "base.hurry" = true
 "council.vote" = true
+
+[shuttle]
+# The workflow-export seam (docs/workflow-export.md): where `neural-amplifier
+# export-run` finds the shuttle CLI. Override: NA_SHUTTLE_BIN.
+# bin = "shuttle"

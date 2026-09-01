@@ -44,8 +44,14 @@ def save_bytes(bases: list[tuple[str, int]], lead: int = 64) -> bytes:
     return bytes(out)
 
 
-def make_run(root: Path, arm: str, counts: dict[int, int], *, started: float = 1000,
-             manifest_extra: dict | None = None) -> Path:
+def make_run(
+    root: Path,
+    arm: str,
+    counts: dict[int, int],
+    *,
+    started: float = 1000,
+    manifest_extra: dict | None = None,
+) -> Path:
     """A run directory whose faction-7 base count at turn T is counts[T]."""
     auto = root / "play" / "saves" / "auto"
     auto.mkdir(parents=True)
@@ -55,8 +61,14 @@ def make_run(root: Path, arm: str, counts: dict[int, int], *, started: float = 1
         path = auto / f"Autosave_{2100 + turn}.sav"
         path.write_bytes(save_bytes(bases))
         os.utime(path, (started + 1, started + 1))
-    manifest = {"seed": 1, "arm": arm, "faction": 7, "fairness": FAIRNESS,
-                "census_turns": sorted(counts), "run_started_epoch": started}
+    manifest = {
+        "seed": 1,
+        "arm": arm,
+        "faction": 7,
+        "fairness": FAIRNESS,
+        "census_turns": sorted(counts),
+        "run_started_epoch": started,
+    }
     manifest.update(manifest_extra or {})
     (root / "manifest.json").write_text(json.dumps(manifest))
     return root
@@ -65,7 +77,8 @@ def make_run(root: Path, arm: str, counts: dict[int, int], *, started: float = 1
 def run_row(root: Path, *extra: str) -> subprocess.CompletedProcess:
     return subprocess.run(
         [sys.executable, str(SCRIPTS / "census_row.py"), str(root), *extra],
-        capture_output=True, text=True,
+        capture_output=True,
+        text=True,
     )
 
 
@@ -128,10 +141,23 @@ def test_the_row_scores_end_to_end(tmp_path):
             assert done.returncode == 0, done.stderr
             fh.write(done.stdout)
     scored = subprocess.run(
-        [sys.executable, str(SCRIPTS / "expansion_slope.py"), str(results), "--seed", "1",
-         "--baseline", "control", "--compound", "compound", "--faction", "7",
-         "--checkpoints", "50,55,80"],
-        capture_output=True, text=True,
+        [
+            sys.executable,
+            str(SCRIPTS / "expansion_slope.py"),
+            str(results),
+            "--seed",
+            "1",
+            "--baseline",
+            "control",
+            "--compound",
+            "compound",
+            "--faction",
+            "7",
+            "--checkpoints",
+            "50,55,80",
+        ],
+        capture_output=True,
+        text=True,
     )
     assert scored.returncode == 0, scored.stderr
     assert "control" in scored.stdout and "compound" in scored.stdout

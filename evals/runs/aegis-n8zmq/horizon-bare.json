@@ -1,0 +1,14 @@
+{
+  "arm": "bare",
+  "choices": {
+    "tech:58": 10
+  },
+  "degraded": 0,
+  "issued": [],
+  "issued_count": 0,
+  "runs": 10,
+  "stability": 1.0,
+  "surface": "faction.tech",
+  "trajectory": null,
+  "turn": 115
+}

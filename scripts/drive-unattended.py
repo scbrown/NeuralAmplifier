@@ -30,7 +30,31 @@ from win_ladder import VIABLE_BY_TURN, parse_state, viability  # noqa: E402
 
 G = sys.argv[1]
 OUT = sys.argv[2]
-DEADLINE = time.time() + float(sys.argv[3] if len(sys.argv) > 3 else 5400)
+#: The WALL-CLOCK cap. `0` means "no wall-clock cap" — see NO_PROGRESS_LIMIT below for why
+#: that is now a reasonable thing to ask for, and why it is not the same as "unbounded".
+_wall = float(sys.argv[3] if len(sys.argv) > 3 else 5400)
+DEADLINE = (time.time() + _wall) if _wall > 0 else None
+
+#: Seconds since the TURN LAST ADVANCED after which the run is stopped for lack of progress.
+#:
+#: This exists because a wall-clock cap answers the wrong question. It stops a run for being
+#: LONG, and length is not the failure — a row playing 250 turns at a measured 2.4 min/turn
+#: needs ~10h and is healthy the whole way. MEASURED on ladder-attempt4: a 21600s cap killed
+#: the row at 04:36 while it was advancing normally, ~18 minutes short of its own target, and
+#: the wall clock could not tell that from a row that had died at turn 3.
+#:
+#: THE NUMBER IS SET BY A MEASUREMENT, and by the one that argues AGAINST a tight cap. On the
+#: same row, turn 78 spent **107.5 minutes** without advancing — a provider outage — and then
+#: recovered and played on to turn 155+ clean. Across that window the driver logged 43 BUSY
+#: classifications, zero STALLED and zero "game is gone": the game was provably alive the whole
+#: time. So any no-progress window at or below ~108 minutes would have destroyed a row that
+#: fully recovered, which is the *same* mistake as the wall-clock cap wearing a better name.
+#: 3 hours is that worst observed recoverable stall plus ~65% headroom.
+#:
+#: Deliberately NOT keyed on the heartbeat. Heartbeat separates "busy" from "gone" while a poll
+#: goes unanswered, and it is the right instrument for that — but it advances whenever the game
+#: is ticking, including when it is ticking and getting nowhere. Liveness is not progress.
+NO_PROGRESS_LIMIT = float(os.environ.get("NA_NO_PROGRESS_LIMIT", 10800))
 
 #: Turn the viability checkpoint off for a DIAGNOSTIC run (`--no-viability`).
 #:
@@ -150,6 +174,12 @@ def main():
     log.write("driver start %s\n" % time.strftime("%H:%M:%S"))
     last_turn = None
     stuck = 0
+    #: Wall-clock progress, tracked separately from `stuck` on purpose. `stuck` counts CYCLES
+    #: and only advances on a cycle that got an answer, so it never sees an outage at all — the
+    #: no-result branch `continue`s before it is touched. Through the 107-minute turn-78 stall
+    #: `stuck` stayed where it was while nearly two hours passed.
+    best_turn = None
+    last_progress_at = time.time()
     started_playing = False
     last_dialog = None
     tries = 0
@@ -160,7 +190,19 @@ def main():
     #: this classification exists to stop the driver saying about a live game.
     last_ticks = heartbeat()[0]
     checked_viability = False
-    while time.time() < DEADLINE:
+    while DEADLINE is None or time.time() < DEADLINE:
+        # Checked HERE, before the poll, so an outage counts. The no-result branch below
+        # `continue`s, so a check placed after it would be skipped for exactly the silences
+        # that make a run stop progressing — it would only ever fire on a run still answering.
+        idle = time.time() - last_progress_at
+        if idle >= NO_PROGRESS_LIMIT:
+            log.write(
+                "%s no turn advance for %.0f min (limit %.0f min, best turn %s) — stopping for "
+                "lack of PROGRESS, not for elapsed time. The game may still be alive; alive and "
+                "getting nowhere is its own failure and this is the line that says so.\n"
+                % (time.strftime("%H:%M:%S"), idle / 60.0, NO_PROGRESS_LIMIT / 60.0, best_turn)
+            )
+            break
         r = cmd("shot")
         if r is None:
             # THREE causes, and the message used to name two — then ran them together anyway.
@@ -216,6 +258,11 @@ def main():
             last_ticks = ticks
         turn = r.get("turn")
         halted = r.get("halted")
+        # ADVANCE, not change. A turn that goes backwards is a reload, not progress, and
+        # treating it as progress would hand a reload loop an unlimited budget.
+        if turn is not None and (best_turn is None or turn > best_turn):
+            best_turn = turn
+            last_progress_at = time.time()
 
         # THE CHECKPOINT. `win_ladder.viability` existed before this line did, and nothing ever
         # called it during a run — it was written to score a results file after the fact. So on

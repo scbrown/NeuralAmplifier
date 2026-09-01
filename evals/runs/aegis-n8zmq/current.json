@@ -1,0 +1,15 @@
+{
+  "arm": "current",
+  "choices": {
+    "tech:12": 6,
+    "tech:59": 2,
+    "tech:81": 2
+  },
+  "degraded": 0,
+  "issued": [],
+  "issued_count": 0,
+  "prompt_chars": 1130,
+  "runs": 10,
+  "stability": 0.6,
+  "surface": "faction.tech"
+}

@@ -7,7 +7,6 @@ import json
 import sys
 from pathlib import Path
 
-from .coverage import report
 from .decisions import DecisionLog
 
 
@@ -92,7 +91,34 @@ def main(argv: list[str] | None = None) -> int:
         help="require identical decisions (scripted-brain runs only)",
     )
 
+    domain = sub.add_parser("domain-eval", help="score engine outcome events in seconds")
+    domain.add_argument("events", type=Path, help="na.outcome.v1 JSONL from the adapter")
+    domain.add_argument(
+        "--definitions",
+        type=Path,
+        default=Path("evals/domains.json"),
+        help="five-domain gate definitions (default evals/domains.json)",
+    )
+    domain.add_argument("--faction", type=int, default=None)
+
     sub.add_parser("surfaces", help="how much of the game surface is instrumented")
+
+    exp = sub.add_parser(
+        "export-run",
+        help="map a finished game's decision log to a shuttle workflow run",
+    )
+    exp.add_argument("log", type=Path)
+    exp.add_argument(
+        "--agent",
+        required=True,
+        help="the importing agent whose key signs the mapped transitions",
+    )
+    exp.add_argument("--out", type=Path, help="write the transitions JSONL here")
+    exp.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="write the JSONL and stop; do not invoke shuttle",
+    )
 
     ing = sub.add_parser("ingest", help="parse alphax.txt into the smac: datalinks graph")
     ing.add_argument("alphax", type=Path, help="path to alphax.txt in your SMAC install")
@@ -210,6 +236,46 @@ def main(argv: list[str] | None = None) -> int:
         print("\nSee docs/game-surface.md §2.5 for the per-surface matrix.")
         return 0
 
+    if args.command == "domain-eval":
+        from .domain_eval import DomainEvalError, evaluate, load_definitions, load_events
+
+        try:
+            results = evaluate(
+                load_events(args.events, faction_id=args.faction),
+                load_definitions(args.definitions),
+            )
+        except DomainEvalError as exc:
+            print(f"FAIL: {exc}", file=sys.stderr)
+            return 2
+        for result in results:
+            print(f"{'PASS' if result.passed else 'FAIL'} {result.domain}")
+            for gate in result.gates:
+                print(
+                    f"  {gate.metric}: {gate.observed:g} {gate.comparator} {gate.target:g} "
+                    f"=> {'PASS' if gate.passed else 'FAIL'}"
+                )
+        return 0 if all(result.passed for result in results) else 1
+
+    if args.command == "export-run":
+        from .workflow_export import WorkflowExportError, export_run
+
+        if problem := missing_input(args.log, "decision log"):
+            print(f"FAIL: {problem}", file=sys.stderr)
+            return 2
+        try:
+            export_report = export_run(
+                args.log, agent=args.agent, out_path=args.out, run=not args.dry_run
+            )
+        except WorkflowExportError as exc:
+            print(f"FAIL: {exc}", file=sys.stderr)
+            return 2
+        did = "mapped (dry run)" if args.dry_run else "imported into shuttle"
+        print(
+            f"game {export_report.game_id}: {export_report.turns} turn(s), "
+            f"{export_report.decisions} decision(s) -> {export_report.records} record(s) {did}"
+        )
+        return 0
+
     if args.command == "ingest":
         from .datalinks import Provenance, briefing, looks_modded, parse_file, turtle
         from .datalinks.parse import overlay_source
@@ -322,6 +388,8 @@ def main(argv: list[str] | None = None) -> int:
     if problem := missing_input(args.log, "decision log"):
         print(f"FAIL: {problem}", file=sys.stderr)
         return 2
+    from .coverage import report
+
     summary = report(DecisionLog(args.log).read())
     print(json.dumps(summary.summary(), indent=2))
 

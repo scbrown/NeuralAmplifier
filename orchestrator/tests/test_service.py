@@ -8,9 +8,9 @@ from pathlib import Path
 from fastapi.testclient import TestClient
 
 from neural_amplifier.brain import BrainError, ScriptedBrain
+from neural_amplifier.config import Brain, Config, Knowledge, Run
 from neural_amplifier.contract import Choice, Orders
 from neural_amplifier.decisions import DecisionLog
-from neural_amplifier.config import Brain, Config, Knowledge, Run
 from neural_amplifier.service import build_brain, create_app
 
 FIXTURES = Path(__file__).parent / "fixtures"

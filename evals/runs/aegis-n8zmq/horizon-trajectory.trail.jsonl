@@ -1,0 +1,10 @@
+{"arm": "trajectory", "run": 1, "choice": "tech:58", "issued": [], "degraded": false}
+{"arm": "trajectory", "run": 2, "choice": "tech:2", "issued": [], "degraded": false}
+{"arm": "trajectory", "run": 3, "choice": "tech:58", "issued": [], "degraded": false}
+{"arm": "trajectory", "run": 4, "choice": "tech:58", "issued": [], "degraded": false}
+{"arm": "trajectory", "run": 5, "choice": "tech:2", "issued": [], "degraded": false}
+{"arm": "trajectory", "run": 6, "choice": "tech:2", "issued": [], "degraded": false}
+{"arm": "trajectory", "run": 7, "choice": "tech:58", "issued": [], "degraded": false}
+{"arm": "trajectory", "run": 8, "choice": "tech:58", "issued": [], "degraded": false}
+{"arm": "trajectory", "run": 9, "choice": "tech:58", "issued": [], "degraded": false}
+{"arm": "trajectory", "run": 10, "choice": "tech:58", "issued": [], "degraded": false}

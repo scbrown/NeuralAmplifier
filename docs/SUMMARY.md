@@ -8,11 +8,13 @@
 - [The Game Surface](game-surface.md)
 - [Decision Inputs](decision-inputs.md)
 - [Directives](directives.md)
+- [Long-horizon Play](long-horizon-play.md)
 
 # Knowledge & Guardrails
 
 - [Architecture](knowledge-architecture.md)
 - [Quipu Integration](quipu-integration.md)
+- [Workflow Export](workflow-export.md)
 - [Hank Integration](hank-integration.md)
 - [Gameplay Policy Harness](policy-harness.md)
 - [Strategy Knowledge](strategy-knowledge.md)

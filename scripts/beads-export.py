@@ -43,6 +43,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -185,6 +186,13 @@ def main() -> int:
         help="report whether the tracked JSONL is stale; write nothing, exit 1 if it is",
     )
     args = parser.parse_args()
+
+    if shutil.which("bd") is None:
+        if args.check:
+            print("beads export check skipped: bd is not installed")
+            return 0
+        print("bd is required to refresh the beads export", file=sys.stderr)
+        return 1
 
     with tempfile.NamedTemporaryFile("w+", suffix=".jsonl", delete=False) as handle:
         fresh_path = Path(handle.name)

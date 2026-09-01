@@ -333,12 +333,29 @@ signing-identity key=".quipu/yupana-signing.pk8":
 #
 # `unmeasurable` — the world view did not report the directive's metric — is an ADAPTER GAP, not
 # a directive that failed. It is excluded from the rates and reported separately, because the
-# fix for the two is in different repositories.
+# fix for the two is in different repositories. A declared evaluation can fail loud instead:
+# `just directive-report --min-measurable-fraction 0.95 <log>` requires EVERY directive to meet
+# the threshold, so a high-volume healthy directive cannot hide a blind one.
 #
 # Refuses a log too short for a rate to mean anything. Ten replays of one captured observation
 # show the mechanism works and say nothing about whether directives help.
-directive-report log="decisions.jsonl":
-    @scripts/directive_report.py "{{log}}"
+directive-report +args="decisions.jsonl":
+    @scripts/directive_report.py {{args}}
+
+# Does a decision's reasoning survive the turn that produced it? — aegis-n8zmq's baseline.
+#
+# Two rates over logs that already exist, with no game, model or network: CARRY (answers produced
+# by an earlier turn's reasoning) and REWORK (how often one base's answer reversed turn over
+# turn). `plan` tier is deliberately NOT counted as carry — a plan table is valid for exactly the
+# turn it names, so counting it would let bulk-turn mode read as long-horizon reasoning.
+#
+# Reports what each log can actually answer and names the rest UNANSWERABLE rather than printing
+# a zero: rework needs `base_id` (adapter observation logs have it, orchestrator records do not)
+# and directive age needs `issued_turn`.
+#
+#   just carry-report evals/runs/na-6db/brain.faction7.jsonl
+carry-report +logs="decisions.jsonl":
+    @scripts/carry_report.py {{logs}}
 
 # Compare two runs' trajectories — the A/B half of na-6db that needs no game.
 #
@@ -355,6 +372,13 @@ directive-report log="decisions.jsonl":
 # It reports no verdict. One save's trajectory is evidence, not a result.
 ab-outcomes baseline brain:
     @scripts/ab_outcomes.py "{{baseline}}" "{{brain}}"
+
+# Score engine-emitted strategic outcomes with no game, model or network.
+domain-eval events faction="" definitions="evals/domains.json":
+    @uv run --directory orchestrator neural-amplifier domain-eval \
+        "{{justfile_directory()}}/{{events}}" \
+        --definitions "{{justfile_directory()}}/{{definitions}}" \
+        {{ if faction == "" { "" } else { "--faction " + faction } }}
 
 # === Quipu (knowledge graph) ===
 

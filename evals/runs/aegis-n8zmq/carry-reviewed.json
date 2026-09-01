@@ -1,0 +1,54 @@
+{
+  "run": "strategic-review-carry-v1",
+  "brain": "claude-code",
+  "source": "evals/runs/na-6db/brain.faction7.jsonl",
+  "turns": [115, 125, 126],
+  "surfaces": ["faction.strategy_review", "faction.strategy_review", "base.hurry"],
+  "tiers": ["review", "review", "llm"],
+  "degraded": [false, false, false],
+  "latency_ms": [18212, 29181, 13701],
+  "opening_issued": [
+    "pk-expand-to-22-bases",
+    "pk-drone-control",
+    "pk-no-second-front",
+    "pk-build-energy-reserve"
+  ],
+  "review_in_force": [
+    "pk-build-energy-reserve",
+    "pk-drone-control",
+    "pk-expand-to-22-bases",
+    "pk-no-second-front"
+  ],
+  "review_issued": [
+    "pk-build-energy-reserve",
+    "pk-drone-control",
+    "pk-expand-to-22-bases",
+    "pk-no-second-front",
+    "pk-cap-standing-army"
+  ],
+  "later_in_force": [
+    "pk-build-energy-reserve",
+    "pk-no-second-front",
+    "pk-expand-to-22-bases",
+    "pk-drone-control",
+    "pk-cap-standing-army"
+  ],
+  "later_followed": [
+    "pk-build-energy-reserve",
+    "pk-expand-to-22-bases",
+    "pk-drone-control",
+    "pk-cap-standing-army"
+  ],
+  "reviewed_commitments": [
+    {"id": "pk-expand-to-22-bases", "metric": "base_count", "target": 22, "horizon_turn": 155},
+    {"id": "pk-drone-control", "metric": "drone_total", "target": 22, "horizon_turn": 150},
+    {"id": "pk-no-second-front", "metric": "factions_at_war", "target": 1, "horizon_turn": 155},
+    {"id": "pk-build-energy-reserve", "metric": "energy_reserves", "target": 300, "horizon_turn": 155},
+    {"id": "pk-cap-standing-army", "metric": "military_units", "target": 58, "horizon_turn": 150}
+  ],
+  "rejected": [[], [], []],
+  "unmeasurable_at_later_turn": [],
+  "carried": true,
+  "followed": true,
+  "turns_carried": 11
+}

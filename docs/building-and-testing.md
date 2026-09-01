@@ -117,7 +117,7 @@ thing for one run without editing the tree, which is what CI and the cloud setup
 | --- | --- |
 | `NA_BRAIN`, `NA_BRAIN_MODEL`, `NA_BRAIN_EFFORT` | `[brain] kind`, `model`, `effort` |
 | `NA_QUIPU_URL`, `NA_ENGINE`, `NA_TOKEN_BUDGET`, `NA_HANK_GUARD` | `[knowledge]` |
-| `NA_DECISION_LOG`, `NA_WORLD_VIEW_STORE`, `NA_PLAN`, `NA_OTEL` | `[run]` |
+| `NA_DECISION_LOG`, `NA_WORLD_VIEW_STORE`, `NA_PLAN`, `NA_PLAN_STATE`, `NA_OTEL` | `[run]` |
 | — | `[surfaces]` + `surface_default` — which surfaces the LLM tier decides |
 
 A malformed file refuses to start the service rather than failing one turn at a time in a

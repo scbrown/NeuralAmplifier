@@ -36,12 +36,14 @@ from __future__ import annotations
 
 import json
 import threading
+import time
 import urllib.error
 import urllib.request
 from dataclasses import replace
 from typing import Any, Final
 
 from ..contract import WorldView
+from ..grounding_evidence import DEFAULT_GRAPH, Consultation
 from ..knowledge import Grounding
 from .budget import Fact, apply_budget
 
@@ -261,19 +263,90 @@ class QuipuRetriever:
         # loopback traffic through a proxy that cannot route it.
         self._opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
         self._turn_rows: dict[tuple[int, int], list[dict[str, Any]]] = {}
+        #: The same fetch, kept as *evidence* rather than as data: what was asked, of which
+        #: graph, and what came back. Yupana advises on whether a decision was grounded and it
+        #: cannot see this call, so a consultation nobody recorded is indistinguishable from one
+        #: that never happened (``grounding_evidence.py``). Keyed identically to ``_turn_rows``
+        #: so the evidence and the facts it describes can never drift apart.
+        self._turn_consultations: dict[tuple[int, int], Consultation] = {}
         self._turn_lock = threading.Lock()
 
     def prime_turn(self, turn: int, faction_id: int | None) -> int:
-        """Fetch once for a faction's turn; never create an unscoped fog cache."""
+        """Fetch once for a faction's turn; never create an unscoped fog cache.
+
+        Also records the consultation as evidence. A failed fetch is recorded too, and that
+        is the point of doing it here rather than at the call site: the caller turns the
+        exception into a degraded turn announcement, so by the time anything else can look,
+        "the graph was unreachable" and "the graph was never asked" have collapsed into the
+        same silence. Yupana distinguishes them (``transport-error`` vs ``missing``) only if
+        the producer keeps them distinct at the one moment it still knows which happened.
+        """
         if faction_id is None:
             raise ValueError("faction_id is required to prime Quipu grounding")
-        rows = self.query(build_turn_query(self.engine))
+        query = build_turn_query(self.engine)
+        try:
+            rows = self.query(query)
+        except Exception:
+            self._remember(turn, faction_id, None, query)
+            raise
+        self._remember(turn, faction_id, rows, query)
         with self._turn_lock:
             self._turn_rows[(turn, faction_id)] = rows
             # Enough for retries and overlapping boundaries, without retaining a campaign.
             while len(self._turn_rows) > 8:
                 self._turn_rows.pop(next(iter(self._turn_rows)))
         return len(rows)
+
+    def _remember(
+        self,
+        turn: int,
+        faction_id: int,
+        rows: list[dict[str, Any]] | None,
+        query: str,
+    ) -> None:
+        """Store what this consultation was, in the three states Yupana can tell apart.
+
+        ``rows is None`` means the query never completed — deliberately not the same as an
+        empty result. A boolean here would report a store that was down and a store that has
+        no rules for this engine as the same fact, and they have opposite fixes.
+
+        The entities are the fact IRIs (``?f``), which is what makes "consulted and got
+        nothing" auditable: a reader can re-run ``query`` against ``graph`` and compare.
+        """
+        if rows is None:
+            outcome: str = "transport-error"
+            entities: tuple[str, ...] = ()
+        else:
+            entities = tuple(str(row["f"]) for row in rows if row.get("f"))
+            outcome = "used" if entities else "empty"
+        consultation = Consultation(
+            graph=self.dataset or DEFAULT_GRAPH,
+            query=query,
+            entities=entities,
+            turn=turn,
+            outcome=outcome,  # type: ignore[arg-type]
+            # Yupana compares this against the reference as a string. Normalising here rather
+            # than at each use is what stops one caller binding "1" and another binding 1 —
+            # a mismatch Yupana reports as `unresolved`, which reads as corrupt evidence.
+            faction_id=str(faction_id),
+            captured_at=int(time.time()),
+        )
+        with self._turn_lock:
+            self._turn_consultations[(turn, faction_id)] = consultation
+            while len(self._turn_consultations) > 8:
+                self._turn_consultations.pop(next(iter(self._turn_consultations)))
+
+    def consultation_for(self, turn: int, faction_id: int | None) -> Consultation | None:
+        """The evidence for this faction's turn, or ``None`` if it was never primed.
+
+        Fog-scoped like every other read here: an unscoped lookup would hand one faction the
+        evidence of another's consultation, and the resulting record would look entirely
+        normal (``turns.view`` is fail-closed for the same reason).
+        """
+        if faction_id is None:
+            return None
+        with self._turn_lock:
+            return self._turn_consultations.get((turn, faction_id))
 
     def query(self, sparql: str) -> list[dict[str, Any]]:
         request = urllib.request.Request(
@@ -309,7 +382,9 @@ class QuipuRetriever:
             return Grounding()
         faction_id = getattr(world_view, "faction_id", None)
         with self._turn_lock:
-            primed = self._turn_rows.get((world_view.turn, faction_id))
+            primed = (
+                None if faction_id is None else self._turn_rows.get((world_view.turn, faction_id))
+            )
         if self.dataset:
             # A configured dataset is the production path.  Missing `/turn` or missing faction
             # attribution must degrade visibly instead of silently multiplying graph requests

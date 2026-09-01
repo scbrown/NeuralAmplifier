@@ -68,6 +68,21 @@ class Tally:
         return self.overrode / self.measurable if self.measurable else None
 
 
+def measurable_fraction(tallies: dict[str, Tally]) -> float | None:
+    """Fraction of in-force directive opportunities whose metric was observable."""
+
+    in_force = sum(t.in_force for t in tallies.values())
+    if not in_force:
+        return None
+    return sum(max(0, t.measurable) for t in tallies.values()) / in_force
+
+
+def directive_measurable_fraction(tally: Tally) -> float | None:
+    """Measurability for one directive, the report's actual unit of analysis."""
+
+    return max(0, tally.measurable) / tally.in_force if tally.in_force else None
+
+
 def tally(path: Path) -> tuple[dict[str, Tally], int]:
     tallies: dict[str, Tally] = defaultdict(Tally)
     decisions = 0
@@ -112,7 +127,18 @@ def main() -> int:
         default=20,
         help="refuse a log too short for a rate to mean anything",
     )
+    ap.add_argument(
+        "--min-measurable-fraction",
+        type=float,
+        metavar="FRACTION",
+        help=(
+            "fail unless at least this fraction of in-force directive opportunities had an "
+            "observable metric (0.0 through 1.0)"
+        ),
+    )
     args = ap.parse_args()
+    if args.min_measurable_fraction is not None and not 0 <= args.min_measurable_fraction <= 1:
+        ap.error("--min-measurable-fraction must be between 0.0 and 1.0")
 
     path = Path(args.log)
     if not path.is_file():
@@ -179,6 +205,30 @@ def main() -> int:
             "world view did not report the metric. That is a missing field in the adapter, NOT\n"
             "a directive that failed, and it is excluded from the rates above. Fixing it is a\n"
             "change in the adapter repository, not in the plan."
+        )
+    if args.min_measurable_fraction is not None:
+        failing = [
+            (directive_id, directive_measurable_fraction(t))
+            for directive_id, t in sorted(tallies.items())
+            if directive_measurable_fraction(t) is None
+            or directive_measurable_fraction(t) < args.min_measurable_fraction
+        ]
+        if failing:
+            rendered = ", ".join(
+                f"{directive_id}={'unanswerable' if observed is None else f'{observed:.3f}'}"
+                for directive_id, observed in failing
+            )
+            print(
+                f"\nMEASURABILITY CONTRACT FAIL: {rendered}; every directive requires "
+                f">= {args.min_measurable_fraction:.3f}.",
+                file=sys.stderr,
+            )
+            return 2
+        observed = measurable_fraction(tallies)
+        assert observed is not None
+        print(
+            f"\nMEASURABILITY CONTRACT PASS: all {len(tallies)} directive(s) >= "
+            f"{args.min_measurable_fraction:.3f}; aggregate {observed:.3f}."
         )
     return 0
 

@@ -28,6 +28,7 @@ from .coverage import report
 from .decisions import DecisionLog
 from .deferrals import DeferralSet
 from .directives import DirectiveStore, accept
+from .grounding_evidence import Cache as GroundingCache
 from .intents import IntentError, UnitIntent
 from .intents import validate as validate_intent
 from .memory import memory_scope
@@ -388,7 +389,6 @@ def _accepted_status(pending: Pending) -> str:
     return "accepted — returned to the engine to apply"
 
 
-
 def _brain_counters(brain: object) -> dict[str, object]:
     """The brain's own counters, which reached no output at all until now.
 
@@ -410,9 +410,10 @@ def _brain_counters(brain: object) -> dict[str, object]:
         if isinstance(value, int):
             out[name] = value
     cost = getattr(brain, "cost_usd", None)
-    if isinstance(cost, (int, float)):
+    if isinstance(cost, int | float):
         out["cost_usd"] = round(float(cost), 6)
     return out
+
 
 def create_app(
     brain: Brain | None = None,
@@ -450,6 +451,7 @@ def create_app(
     # Absent path stays absent — no `NA_PLAN` means no store, which is a legitimate way to run and
     # is what `plan_absent` is for.
     plan_path = config.run.plan
+    plan_state_path = config.run.plan_state
     # Where a deferred decision waits for the agent to come back to it (na-7bk). Always built:
     # a deferral costs nothing until a brain returns `defer`, and a configuration where the
     # mechanism silently is not there is one where an agent's considered "later" degrades into
@@ -480,11 +482,22 @@ def create_app(
         store=WorldViewStore(store_path) if store_path else None,
         retriever=resolved_retriever,  # type: ignore[arg-type]
         guard=build_guard(resolved_retriever, config),  # type: ignore[arg-type]
-        plan=DirectiveStore(Path(plan_path)) if plan_path else None,
+        plan=(
+            DirectiveStore(
+                Path(plan_path),
+                state_path=Path(plan_state_path) if plan_state_path else None,
+            )
+            if plan_path
+            else None
+        ),
         policy=config.surfaces,
         deferrals=deferrals,
         queue=answer_queue,
         turn_plan=turn_plan,
+        # A real run publishes its grounding evidence where Yupana reads it. This is the layer
+        # that knows the run is real — the Orchestrator default writes nothing precisely so a
+        # test cannot manufacture evidence for a live agent (``grounding_evidence.py``).
+        grounding_cache=GroundingCache(),
     )
     app.state.orchestrator = orchestrator
 
@@ -513,7 +526,13 @@ def create_app(
 
     @app.get("/dashboard/api/live")
     def dashboard_live() -> dict[str, object]:
-        return dashboard.live()
+        return dashboard.live_with_state()
+
+    @app.get("/dashboard/api/glossary")
+    def dashboard_glossary() -> dict[str, object]:
+        from .dashboard import glossary
+
+        return glossary()
 
     @app.get("/dashboard/api/decisions")
     def dashboard_decisions(limit: int = 100) -> list[dict[str, object]]:
@@ -525,6 +544,22 @@ def create_app(
         if item is None:
             raise HTTPException(404, f"no decision at position {position}")
         return item
+
+    @app.get("/dashboard/api/strategy")
+    def dashboard_strategy() -> dict[str, object]:
+        #: NA_DASHBOARD_PLAN is optional on purpose. Without it the panel reports its
+        #: definitions as unavailable rather than pretending a bare id is the directive.
+        raw = os.environ.get("NA_DASHBOARD_PLAN")
+        return dashboard.strategy(Path(raw) if raw else None)
+
+    @app.get("/dashboard/api/graph")
+    def dashboard_graph(q: str | None = None, entity: str | None = None) -> dict[str, object]:
+        from .dashboard import graph_view
+
+        #: The dashboard's graph is whatever the RUN was pointed at, so the browser sees the
+        #: same knowledge the brain saw. NA_DASHBOARD_QUIPU overrides for a read-only viewer.
+        base = os.environ.get("NA_DASHBOARD_QUIPU") or os.environ.get("NA_QUIPU_URL")
+        return graph_view(base, query=q, entity=entity)
 
     @app.get("/dashboard/api/evals")
     def dashboard_evals() -> dict[str, object]:

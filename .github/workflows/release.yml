@@ -1,0 +1,75 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing version tag to release (for example, v0.1.0)"
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+env:
+  RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
+
+jobs:
+  release:
+    name: Build and publish ${{ inputs.tag || github.ref_name }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout release tag
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.RELEASE_TAG }}
+
+      - uses: astral-sh/setup-uv@v5
+
+      - name: Verify version matches tag
+        working-directory: orchestrator
+        shell: bash
+        run: |
+          set -euo pipefail
+          package_version=$(uv version --short)
+          test "v${package_version}" = "${RELEASE_TAG}" || {
+            echo "pyproject version v${package_version} does not match ${RELEASE_TAG}" >&2
+            exit 1
+          }
+
+      - name: Reject internal identifiers
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Hex escapes keep the guard's own denylist from becoming a match.
+          if git grep -nPI '(\x2e(?:lan|svc)\b|192\x2e168\x2e|10(?:\x2e[0-9]{1,3}){3}|172\x2e(?:1[6-9]|2[0-9]|3[01])(?:\x2e[0-9]{1,3}){2}|/home/\x62raino\b|\b(?:\x6bota|\x67oldblum)\b)' -- ':!.beads/**'; then
+            echo "Release refused: tracked files contain internal identifiers." >&2
+            exit 1
+          fi
+
+      - name: Build wheel and source distribution
+        working-directory: orchestrator
+        run: uv build --out-dir ../dist
+
+      - name: Verify distributions
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(find dist -maxdepth 1 -type f -name '*.whl' | wc -l)" -eq 1
+          test "$(find dist -maxdepth 1 -type f -name '*.tar.gz' | wc -l)" -eq 1
+          (cd dist && sha256sum * > SHA256SUMS.txt)
+          cat dist/SHA256SUMS.txt
+
+      - name: Publish GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ env.RELEASE_TAG }}
+          body_path: release-notes/${{ env.RELEASE_TAG }}.md
+          files: |
+            dist/*.whl
+            dist/*.tar.gz
+            dist/SHA256SUMS.txt
+          fail_on_unmatched_files: true

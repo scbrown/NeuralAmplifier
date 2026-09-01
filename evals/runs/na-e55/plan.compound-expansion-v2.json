@@ -1,0 +1,59 @@
+{
+  "directives": [
+    {
+      "id": "expand-10-by-50",
+      "intent": "Reach 10 bases by turn 50; prefer colony pods and the formers that accelerate the next pod unless an immediate threat makes expansion unsafe.",
+      "metric": "base_count",
+      "comparator": "at_least",
+      "target": 10,
+      "priority": 8,
+      "starts_turn": 1,
+      "horizon_turn": 50,
+      "rationale": "The seed-1 baseline was already below the CPU expansion slope by turn 55. This first checkpoint matches the provisional gate in docs/game-knowledge.md."
+    },
+    {
+      "id": "expand-20-by-80",
+      "intent": "Double to 20 bases by turn 80; reinvest new-base production into colony pods and formers so expansion creates the capacity for the next expansion wave.",
+      "metric": "base_count",
+      "comparator": "at_least",
+      "target": 20,
+      "priority": 8,
+      "starts_turn": 51,
+      "horizon_turn": 80,
+      "rationale": "A second absolute checkpoint after a bounded interval measures the slope, not merely the eventual endpoint."
+    },
+    {
+      "id": "expand-40-by-110",
+      "intent": "Double to 40 bases by turn 110; keep mature bases producing expansion capacity while new bases establish growth and terraforming support.",
+      "metric": "base_count",
+      "comparator": "at_least",
+      "target": 40,
+      "priority": 8,
+      "starts_turn": 81,
+      "horizon_turn": 110,
+      "rationale": "Seed-1 CPU factions reached 30-39 bases by turn 91 while the brain held 10; this checkpoint demands the same compounding regime."
+    },
+    {
+      "id": "expand-60-by-140",
+      "intent": "Reach 60 bases by turn 140; sustain the reinvestment loop until the faction is expanding at the CPU frontier rather than linearly.",
+      "metric": "base_count",
+      "comparator": "at_least",
+      "target": 60,
+      "priority": 8,
+      "starts_turn": 111,
+      "horizon_turn": 140,
+      "rationale": "The measured frontier at turn 143 was 43-66 CPU bases versus 12 for the brain. Sixty is a slope target grounded in that census, not a universal game-law claim."
+    },
+    {
+      "id": "terraform-capacity-before-pods",
+      "intent": "Keep each producing base at a positive mineral surplus by prioritizing Formers and tile improvements before another colony pod whenever support or weak tiles have stalled production.",
+      "metric": "mineral_surplus",
+      "comparator": "at_least",
+      "target": 2,
+      "priority": 8,
+      "starts_turn": 1,
+      "horizon_turn": 140,
+      "rationale": "The first compound arm chose Colony Pods in 102 of 107 late base-production decisions while 36 decisions explicitly named zero mineral surplus. Expansion targets need their production enabler in force at equal priority or they suppress it."
+    }
+  ]
+}

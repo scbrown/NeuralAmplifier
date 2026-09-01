@@ -25,11 +25,17 @@ def fake_adapter(game_dir: Path, ok: bool = True, detail: str = "done", delay: f
 
     Consumes BEFORE writing the result, exactly as the adapter does — that ordering is what makes
     the "consumed but unanswered" case reachable at all.
+
+    The deadline is a hang detector, not the fixture's expected lifetime.  This used to poll a
+    fixed 400 times at 10ms, so the fake adapter stopped serving after about four seconds while
+    the production channel legitimately waits five.  Under full-suite load the request could
+    reach the command file after its adapter had silently gone away.
     """
 
     def run() -> None:
         cmd = game_dir / "na-command"
-        for _ in range(400):
+        deadline = time.monotonic() + 30.0
+        while time.monotonic() < deadline:
             if cmd.exists():
                 line = cmd.read_text(encoding="utf-8").strip()
                 cmd.unlink()
@@ -73,17 +79,21 @@ def test_consumed_but_unanswered_is_still_unknown(tmp_path: Path) -> None:
     Treating consumption as success would turn a crash into a reported order.
     """
     channel = OrderChannel(tmp_path)
+    ready = threading.Event()
 
     def eat() -> None:
         cmd = tmp_path / "na-command"
-        for _ in range(200):
+        ready.set()
+        deadline = time.monotonic() + 30.0
+        while time.monotonic() < deadline:
             if cmd.exists():
                 cmd.unlink()
                 return
             time.sleep(0.01)
 
     threading.Thread(target=eat, daemon=True).start()
-    result = channel.issue("skip 3", timeout_s=0.5)
+    assert ready.wait(timeout=5.0), "fake adapter thread did not start"
+    result = channel.issue("skip 3", timeout_s=5.0)
     assert result.status == "unknown"
     assert "consumed" in result.detail
 
@@ -245,11 +255,16 @@ def test_bad_arity_is_422_addressed_to_the_caller(
 
 
 def batch_adapter(game_dir: Path, results: list[dict[str, object]], dropped: int = 0):
-    """Stand in for na_order_batch: one envelope carrying every order's outcome."""
+    """Stand in for na_order_batch: one envelope carrying every order's outcome.
+
+    As in ``fake_adapter``, the deadline only prevents a broken test from hanging forever.  It
+    must outlive the channel deadline so CPU scheduling cannot decide whether a fixture exists.
+    """
 
     def run() -> None:
         cmd = game_dir / "na-command"
-        for _ in range(400):
+        deadline = time.monotonic() + 30.0
+        while time.monotonic() < deadline:
             if cmd.exists():
                 cmd.read_text(encoding="utf-8")
                 cmd.unlink()
@@ -278,7 +293,8 @@ def test_a_batch_goes_as_one_round_trip(tmp_path: Path) -> None:
 
     def adapter() -> None:
         cmd = tmp_path / "na-command"
-        for _ in range(400):
+        deadline = time.monotonic() + 30.0
+        while time.monotonic() < deadline:
             if cmd.exists():
                 seen.append(cmd.read_text(encoding="utf-8"))
                 cmd.unlink()

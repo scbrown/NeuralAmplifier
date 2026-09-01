@@ -31,6 +31,7 @@ import os
 import re
 import subprocess
 import time
+from pathlib import Path
 
 from .brain import _SYSTEM, DEFAULT_MODEL, BrainError
 from .contract import Orders, WorldView
@@ -69,7 +70,8 @@ Return ONLY a JSON object and nothing else — no prose before or after, no mark
       "comparator": "at_least | at_most | increase | decrease | hold",
       "target": <number, required for at_least/at_most, omit for the others>,
       "priority": <1-10>,
-      "entities": ["<datalinks ids this plan is about>"]
+      "entities": ["<datalinks ids this plan is about>"],
+      "horizon_turn": <future turn when this commitment is checked>
     }
   ]
 }
@@ -80,7 +82,6 @@ asking for several. Every `action_id` must appear verbatim in `action_space`.
 `directives` is usually `[]`. Issue one only on a decision whose reasoning should outlive the
 turn — see the section above for when that applies and what makes a plan checkable.
 """
-
 
 
 #: Substrings that identify a failure the upstream service itself calls TEMPORARY.
@@ -144,9 +145,47 @@ def transient_attempts() -> int:
         return TRANSIENT_ATTEMPTS_DEFAULT
     return max(1, min(4, value))
 
+
 #: Wait between attempts. Short, because 529 clears in seconds when it clears at all, and the
 #: expensive part is the attempt rather than the gap.
 RETRY_BACKOFF_SECONDS = 2.0
+
+PROVIDER_EVENT_LOG = Path(
+    os.environ.get(
+        "MODEL_PROVIDER_EVENT_LOG",
+        "~/.local/state/model-provider-calls.jsonl",
+    )
+).expanduser()
+
+
+def _record_provider_call(outcome: str, reason: str = "none") -> None:
+    """Append one provider-call outcome for the host telemetry collector.
+
+    This intentionally has no network dependency: losing monitoring must never
+    make a model call fail.  The JSONL seam is provider-neutral so other CLI
+    callers can emit the same three fields without importing this package.
+    """
+    event = {
+        "timestamp": time.time(),
+        "provider": "anthropic",
+        "outcome": outcome,
+        "reason": reason,
+    }
+    try:
+        PROVIDER_EVENT_LOG.parent.mkdir(parents=True, exist_ok=True)
+        with PROVIDER_EVENT_LOG.open("a", encoding="utf-8") as stream:
+            stream.write(json.dumps(event, separators=(",", ":")) + "\n")
+    except OSError:
+        pass
+
+
+def _failure_class(reason: str) -> str:
+    low = reason.lower()
+    if any(marker in low for marker in ("spend limit", "usage limit", "quota", "billing")):
+        return "quota"
+    if _is_transient(reason):
+        return "transient"
+    return "other"
 
 
 def _is_transient(reason: str) -> bool:
@@ -191,6 +230,7 @@ def _why_it_failed(done: subprocess.CompletedProcess[str]) -> str:
     if err:
         parts.append(f"stderr: {err[:200]}")
     return " | ".join(parts) if parts else "both stdout and stderr were EMPTY"
+
 
 class ClaudeCodeBrain:
     """Runs one decision through ``claude -p``, in a fresh process each time."""
@@ -256,8 +296,10 @@ class ClaudeCodeBrain:
                     timeout=self.timeout,
                 )
             except subprocess.TimeoutExpired as exc:
+                _record_provider_call("failure", "timeout")
                 raise BrainError(f"claude -p timed out after {self.timeout}s") from exc
             except OSError as exc:
+                _record_provider_call("failure", "exec")
                 raise BrainError(f"could not run claude: {exc}") from exc
 
             if done.returncode == 0:
@@ -268,9 +310,11 @@ class ClaudeCodeBrain:
             # in the row's record on the first try. Anything else fails immediately: retrying a
             # bad model or a quota wall spends a blocked game thread on a certain failure.
             if attempt < attempts - 1 and _is_transient(why):
+                _record_provider_call("failure", _failure_class(why))
                 self.transient_retries += 1
                 time.sleep(RETRY_BACKOFF_SECONDS * (attempt + 1))
                 continue
+            _record_provider_call("failure", _failure_class(why))
             raise BrainError(f"claude -p exited {done.returncode}: {why}")
 
         try:
@@ -278,8 +322,10 @@ class ClaudeCodeBrain:
         except ValueError as exc:
             raise BrainError(f"claude -p did not return JSON: {done.stdout[:200]}") from exc
         if envelope.get("is_error"):
+            _record_provider_call("failure", _failure_class(str(envelope.get("result") or "")))
             raise BrainError(f"claude -p reported an error: {envelope.get('result')!r:.200}")
 
+        _record_provider_call("success")
         self.cost_usd += float(envelope.get("total_cost_usd") or 0.0)
         orders = _parse_orders(str(envelope.get("result") or ""))
         if orders is None:

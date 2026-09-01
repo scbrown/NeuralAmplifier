@@ -77,6 +77,69 @@ def test_rates_use_only_measurable_decisions(tmp_path) -> None:
     entry = tallies["d"]
     assert entry.measurable == 10
     assert entry.attention == 1.0, "10 followed of 10 checkable, not of 20 in force"
+    assert dr.measurable_fraction(tallies) == 0.5
+
+
+def test_measurability_contract_fails_loud_on_a_misleading_perfect_rate(tmp_path, capsys) -> None:
+    """One visible success plus nineteen adapter gaps must not qualify as 100% evidence."""
+    import sys
+
+    rows = [decision(1, in_force=["d"], followed=["d"])]
+    rows += [decision(t, in_force=["d"], unmeasurable=["d"]) for t in range(2, 21)]
+    path = log(tmp_path / "mostly-blind.jsonl", rows)
+    argv = sys.argv
+    sys.argv = [
+        "directive_report",
+        "--min-measurable-fraction",
+        "0.95",
+        str(path),
+    ]
+    try:
+        assert dr.main() == 2
+    finally:
+        sys.argv = argv
+    output = capsys.readouterr()
+    assert "MEASURABILITY CONTRACT FAIL: d=0.050; every directive requires >= 0.950" in output.err
+
+
+def test_high_volume_healthy_directive_cannot_mask_one_blind_directive(tmp_path, capsys) -> None:
+    """The report's unit is one directive, so the eligibility gate must use the same unit."""
+    import sys
+
+    rows = [decision(t, in_force=["healthy"], followed=["healthy"]) for t in range(1, 101)]
+    rows.append(decision(101, in_force=["blind"], unmeasurable=["blind"]))
+    path = log(tmp_path / "masked.jsonl", rows)
+    tallies, _ = dr.tally(path)
+    assert dr.measurable_fraction(tallies) == 100 / 101
+
+    argv = sys.argv
+    sys.argv = ["directive_report", "--min-measurable-fraction", "0.95", str(path)]
+    try:
+        assert dr.main() == 2
+    finally:
+        sys.argv = argv
+    assert "blind=0.000" in capsys.readouterr().err
+
+
+def test_committed_real_run_is_the_positive_measurability_control(capsys) -> None:
+    import sys
+
+    path = REPO / "evals" / "runs" / "na-mmp" / "decisions.jsonl"
+    argv = sys.argv
+    sys.argv = [
+        "directive_report",
+        "--min-measurable-fraction",
+        "1.0",
+        str(path),
+    ]
+    try:
+        assert dr.main() == 0
+    finally:
+        sys.argv = argv
+    assert (
+        "MEASURABILITY CONTRACT PASS: all 1 directive(s) >= 1.000; aggregate 1.000"
+        in capsys.readouterr().out
+    )
 
 
 def test_a_short_log_is_refused(tmp_path) -> None:

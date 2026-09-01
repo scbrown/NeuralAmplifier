@@ -525,6 +525,38 @@ def test_the_starter_policies_select_on_fields_the_adapter_publishes() -> None:
                 assert name in published, f"{policy['label']}.{half} selects on unpublished {name}"
 
 
+def test_proactive_colony_pod_constraints_reach_yupana_at_design_time() -> None:
+    """aegis-6czy9 is complete only when a production decision consumes a mined constraint,
+    not when Quipu merely stores it. Both executable halves of the pod rule must ride the same
+    per-call policy path as the older board rules, using only adapter-published facts."""
+    import json as _json
+
+    policies = _json.loads((REPO / "policies" / "board.example.json").read_text())
+    pod = [p for p in policies if p["label"].startswith("colony-pod-")]
+    assert {p["label"] for p in pod} == {
+        "colony-pod-preserves-base-population",
+        "colony-pod-needs-mineral-surplus",
+    }
+
+    client = FakeClient()
+    view = hurry_view(
+        bases=[
+            {**ADAPTER_BASE, "pop_size": 1, "mineral_surplus": 0, "current_item_name": "Colony Pod"}
+        ],
+    ).model_copy(update={"surface_id": "base.production"})
+    YupanaGuard(client=client, policies=pod).rule(
+        Orders(choices=[Choice(action_id="hurry:none")]), view
+    )
+
+    guard_call = dict(client.calls)["yupana_guard"]
+    assert guard_call["policies"] == pod
+    asserted = dict(client.calls)["yupana_ingest"]["entities"]
+    base = next(entity for entity in asserted if entity["name"] == "base:1")
+    assert base["attrs"][f"{VOCAB}pop_size"] == 1
+    assert base["attrs"][f"{VOCAB}mineral_surplus"] == 0
+    assert base["attrs"][f"{VOCAB}current_item_name"] == "Colony Pod"
+
+
 # --- what-if (Hank role e) --------------------------------------------------
 
 

@@ -1,0 +1,45 @@
+{
+  "arm": "compound-expansion-v2-turn99",
+  "base_count": {
+    "110": 6,
+    "111": 6,
+    "120": 6,
+    "130": 6,
+    "140": 6
+  },
+  "census": {
+    "110": {"1": 39, "2": 42, "3": 27, "4": 28, "5": 26, "6": 30, "7": 6},
+    "111": {"1": 41, "2": 42, "3": 28, "4": 28, "5": 26, "6": 30, "7": 6}
+  },
+  "checkpoint_save_sha256": {
+    "110": "7b5fcd43ae4638c030d66ef114b6bcb1d97d447e3abae5b1c6045022e7e52435",
+    "111": "7b02211863cb57013fc3720bd57d620052ec3c8db22c1db62132a06ccd667549",
+    "120": "1c8767c615060e8e4bad041ae1e4ed1609c3a3b5674fb551b66b8765861338f7",
+    "130": "d0bea3ee3d2fbe48373c118b22538443cf4b224e27bf8bb619cb99fbe3e84679",
+    "140": "b8bebcbc4750e6f99104944d457d2c2693e47994b9e2512524e663af4d4409a3"
+  },
+  "decisions": 493,
+  "degraded": 0,
+  "directive_followed_on_production": {
+    "terraform-capacity-before-pods": 246
+  },
+  "fairness": {
+    "difficulty": "talent",
+    "manage_player_bases": 1,
+    "manage_player_units": 1,
+    "slot": "human",
+    "structural_handicaps": 0
+  },
+  "game_ids": ["game-42678500", "game-887b4782"],
+  "plan": "plan.compound-expansion-v2.json",
+  "production_choices": {
+    "facility:3": 119,
+    "facility:69": 11,
+    "unit:1": 116
+  },
+  "repo_commit": "4c9a4579e52c80bf1a0c430ac321881bd3b3ae06",
+  "source_save": "ladder-attempt4/clean-boundary-turn99/Autosave_2199.sav",
+  "turns": [99, 140],
+  "usd": 41.351788,
+  "verdict": "behavior changed, but base count stayed at 6 through turn 140 versus v1's 7"
+}

@@ -92,7 +92,7 @@ def test_refuses_a_save_with_no_base_table(tmp_path):
 
 def test_older_saves_are_refused_not_censused(tmp_path, capsys):
     """The whole point of --since. saves/auto is keyed by game YEAR, not by run."""
-    write(tmp_path, "Autosave_2150.sav", save_bytes(ONE_EACH), 500)   # an earlier run
+    write(tmp_path, "Autosave_2150.sav", save_bytes(ONE_EACH), 500)  # an earlier run
     write(tmp_path, "Autosave_2101.sav", save_bytes(ONE_EACH), 1500)  # this run
     argv = [sys.argv[0], str(tmp_path), "--since", "1000"]
     monkey = pytest.MonkeyPatch()

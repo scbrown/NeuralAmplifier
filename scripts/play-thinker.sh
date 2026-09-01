@@ -277,6 +277,67 @@ if [ -f "$INI" ] && ! grep -q '^llm_factions' "$INI"; then
     log "added llm_factions=254 to thinker.ini"
 fi
 
+# ── The DLL's feature flags must move WITH the DLL (na-4lr / aegis-9fvnb) ───
+#
+# This is the modmenu.txt bug again, in a different file, and it cost two deep ladder
+# rows before anyone read the ini.
+#
+# Every `na_*` feature in src/na_config.h DEFAULTS TO 0. So installing a DLL that gained
+# `na_dialog_route` while leaving the play directory's ini alone ships the feature
+# DISARMED — the code is present, the flag is absent, and the engine silently uses 0.
+# On 2026-08-24 that wedged a 250-turn row at the Planetary Council: the popup was never
+# intercepted, `council.vote` never raised a decision, and the run burned ~20 minutes
+# looking perfectly healthy — heartbeat fresh, orchestrators 200, game answering
+# `halted=0` — while a correctly-placed click returned `ok:true` and changed nothing.
+# Synthetic input cannot drive that modal; in-process interception is the only door, and
+# it was switched off by omission.
+#
+# Measured on the wedged run: 21 `na_` keys in the template, ONE in the play ini, and an
+# ini five hours OLDER than the DLL beside it.
+#
+# Missing keys are added from the template the DLL was built from. An existing value is
+# LEFT ALONE — same rule as llm_factions above: the operator's choice wins.
+TEMPLATE_INI="$THINKER_DIR/docs/thinker.ini"
+if [ -f "$INI" ] && [ -f "$TEMPLATE_INI" ]; then
+    _added=0
+    while IFS= read -r _line; do
+        _key="${_line%%=*}"
+        case "$_key" in na_*) ;; *) continue ;; esac
+        if ! grep -q "^${_key}=" "$INI"; then
+            if [ "$_added" -eq 0 ]; then
+                printf '\n; ****** Neural Amplifier: feature flags staged from the build ******\n' >> "$INI"
+                printf '; Every na_* default is 0, so an absent key silently DISABLES the feature.\n' >> "$INI"
+            fi
+            printf '%s\n' "$_line" >> "$INI"
+            _added=$((_added + 1))
+        fi
+    done < <(grep -E '^na_[a-z_]+=' "$TEMPLATE_INI")
+    [ "$_added" -gt 0 ] && log "staged $_added na_* flag(s) into thinker.ini from $TEMPLATE_INI"
+fi
+
+# Then CHECK THE ARTIFACT, not the staging — the same rule as assert_flag_in_dll.
+#
+# Refuses only on ABSENCE, never on an explicit 0. That distinction is the whole point:
+# `na_dialog_route=0` is a decision somebody made and can defend, while a missing key is
+# silence being read as "off" by a default nobody chose. Silence must not flatter.
+assert_ini_flag_armed() {
+    local key="$1" why="$2"
+    grep -q "^${key}=" "$INI" && return 0
+    command -v strings >/dev/null || return 0
+    # Only a DLL that actually knows the key can be disarmed by its absence.
+    [ "$(strings "$PLAY_DIR/thinker.dll" 2>/dev/null | grep -cxF -- "$key" || true)" -gt 0 ] || return 0
+    die "$(printf '%s\n' \
+        "'$key' is ABSENT from $INI, but the installed thinker.dll implements it." \
+        "  Every na_* flag defaults to 0, so the feature is DISARMED and silent." \
+        "  needed for: $why" \
+        "  template:   $TEMPLATE_INI" \
+        "  fix:        add '$key=1' to the ini, or '$key=0' to say you meant off." \
+        "This is a refusal, not a warning: the run would look healthy and advance nothing" \
+        "— exactly how aegis-9fvnb wedged two deep rows at the Planetary Council.")"
+}
+assert_ini_flag_armed na_dialog_route "routing an intercepted dialog to the brain"
+assert_ini_flag_armed na_dialog_entry_hook "hooking Popup_start's entry point (na-4lr)"
+
 # ── The adapter's half of invariant 9's agent exception (na-t3h) ────────────
 #
 # AGENTS.md invariant 9 carves out ONE exception: with NA_BRAIN=agent the game

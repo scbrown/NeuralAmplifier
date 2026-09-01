@@ -9,10 +9,10 @@ import tempfile
 from pathlib import Path
 
 import pytest
-
 from fastapi.testclient import TestClient
 
 from neural_amplifier.brain import ScriptedBrain
+from neural_amplifier.dashboard import DashboardReader
 from neural_amplifier.decisions import DecisionLog
 from neural_amplifier.service import create_app
 
@@ -72,10 +72,16 @@ def test_dashboard_page_recreates_the_datalinks_look_without_assets() -> None:
     assert "<article class=faction" in response.text
     assert "<div id=factions class=factions>" in response.text
     assert "OFFERED ACTION SPACE" in response.text
-    assert "PLAN DIRECTIVES" in response.text
+    assert "DIRECTIVES IN FORCE" in response.text
+    # renamed in the plain-language pass: "grounding" is our word, not the reader's.
+    assert "FACTS THE MODEL WAS GIVEN" in response.text
+    assert "GROUNDING_NOTE" in response.text
     assert "DISAGREEMENT" in response.text
     assert "setTimeout(refresh,delay)" in response.text
-    assert "IDLE SINCE" in response.text
+    # "IDLE SINCE <timestamp>" was replaced by a plain-language run banner: on a row
+    # stopped 79 minutes ago the old wording read as a page that had failed to load.
+    assert "id=banner" in response.text
+    assert "loadGlossary" in response.text
     assert "SPEND USD" in response.text
     assert "function renderEvals" in response.text
     assert "Baseline<th>Arm<th>Delta" in response.text
@@ -190,3 +196,391 @@ def test_quiet_log_is_reported_as_idle(tmp_path: Path) -> None:
     live = client.get("/dashboard/api/live").json()
     assert live["active"] is False
     assert live["idle_seconds"] > 15
+
+
+# ---------------------------------------------------------------------------
+# na-cjv slice 1: the why-view. These assert the two distinctions the panel
+# exists to preserve, because both failures are silent — an ambiguous panel
+# renders perfectly and simply answers a different question than the reader asked.
+# ---------------------------------------------------------------------------
+
+
+def test_an_in_force_directive_carries_what_became_of_it() -> None:
+    """`in_force` minus `followed` must not read as "the model ignored it".
+
+    MEASURED on ladder-attempt4: `unsatisfied` is populated on 609 of 610 decisions and the
+    panel rendered it on none, so four directives in force with two followed left the other
+    two unexplained.
+    """
+    from neural_amplifier.dashboard import directive_dispositions
+
+    rows = directive_dispositions(
+        {
+            "in_force": ["expand-20-by-80", "hq-formers-before-pods", "arbitration-court"],
+            "followed": ["expand-20-by-80"],
+            "unsatisfied": ["hq-formers-before-pods"],
+            "overrode": ["arbitration-court"],
+        }
+    )
+    got = {r["id"]: r["dispositions"] for r in rows}
+    assert got["expand-20-by-80"] == ["followed"]
+    assert got["hq-formers-before-pods"] == ["unsatisfied"]
+    assert got["arbitration-court"] == ["overrode"]
+
+
+def test_a_directive_with_no_recorded_disposition_is_labelled_not_dropped() -> None:
+    from neural_amplifier.dashboard import directive_dispositions
+
+    rows = directive_dispositions({"in_force": ["lonely-directive"], "followed": []})
+    assert rows == [{"id": "lonely-directive", "dispositions": [], "in_force": True}]
+
+
+def test_the_three_kinds_of_no_grounding_are_distinguishable() -> None:
+    """absent / degraded / empty must never collapse into one blank.
+
+    The degraded case is a FAULT. If it renders the same as "the graph had nothing to say",
+    a failed retrieval is reported as a quiet healthy nothing — the exact class this panel
+    is built to make visible.
+    """
+    from neural_amplifier.dashboard import grounding_state
+
+    absent = grounding_state({"quipu_absent": True, "quipu_facts": []}, None)
+    degraded = grounding_state({"quipu_degraded": True, "quipu_facts": []}, None)
+    empty = grounding_state({"quipu_hits": 0, "quipu_facts": []}, None)
+
+    assert absent["state"] == "absent"
+    assert degraded["state"] == "degraded"
+    assert empty["state"] == "empty"
+    # the labels a reader actually sees must differ too, not just the enum
+    assert len({absent["label"], degraded["label"], empty["label"]}) == 3
+
+
+def test_grounding_marks_which_facts_were_actually_cited() -> None:
+    from neural_amplifier.dashboard import grounding_state
+
+    got = grounding_state(
+        {
+            "quipu_hits": 2,
+            "quipu_facts": ["unit:colony-pod expands the base count", "tech:centauri unrelated"],
+            "quipu_cited": ["unit:colony-pod"],
+        },
+        None,
+    )
+    assert got["state"] == "present"
+    assert [f["cited"] for f in got["facts"]] == [True, False]
+
+
+def test_grounding_falls_back_to_the_world_view_list() -> None:
+    """The retriever writes facts into the world view; the knowledge block is a summary."""
+    from neural_amplifier.dashboard import grounding_state
+
+    got = grounding_state({"quipu_hits": 1}, {"grounding": ["base:hq holds 3 minerals"]})
+    assert [f["text"] for f in got["facts"]] == ["base:hq holds 3 minerals"]
+
+
+def test_the_decision_endpoint_carries_the_why_block(tmp_path: Path, monkeypatch) -> None:
+    """End to end: the API a browser calls must actually ship the block."""
+    from neural_amplifier.decisions import DecisionRecord
+
+    log = DecisionLog(tmp_path / "decisions.jsonl")
+    log.write(
+        DecisionRecord(
+            turn=7,
+            faction="Peacekeepers",
+            engine="thinker",
+            scope="base",
+            surface_id="base.production",
+            tier="llm",
+            world_view_hash="h",
+            action_space_size=2,
+            chosen=[{"action_id": "unit:0", "reason": "expansion is the binding lever"}],
+            reason="expansion is the binding lever",
+            plan={"in_force": ["expand-20-by-80"], "unsatisfied": ["expand-20-by-80"]},
+            knowledge={"quipu_absent": True, "quipu_facts": [], "hank_verdict": "allow"},
+        )
+    )
+    client = TestClient(create_app(brain=ScriptedBrain(), log=log))
+    body = client.get("/dashboard/api/decisions/0").json()
+    why = body["why"]
+    assert why["directives"] == [
+        {"id": "expand-20-by-80", "dispositions": ["unsatisfied"], "in_force": True}
+    ]
+    assert why["grounding"]["state"] == "absent"
+    assert why["guard"]["verdict"] == "allow"
+
+
+def _plan_log(tmp_path: Path) -> DecisionLog:
+    from neural_amplifier.decisions import DecisionRecord
+
+    log = DecisionLog(tmp_path / "decisions.jsonl")
+    for turn, plan in (
+        (
+            1,
+            {
+                "in_force": ["expand", "reserve"],
+                "followed": ["expand"],
+                "unsatisfied": ["expand", "reserve"],
+            },
+        ),
+        (
+            2,
+            {"in_force": ["expand", "reserve"], "overrode": ["reserve"], "unsatisfied": ["expand"]},
+        ),
+    ):
+        log.write(
+            DecisionRecord(
+                turn=turn,
+                faction="Peacekeepers",
+                engine="thinker",
+                scope="base",
+                tier="llm",
+                world_view_hash="h",
+                action_space_size=1,
+                chosen=[{"action_id": "unit:0"}],
+                plan=plan,
+            )
+        )
+    return log
+
+
+def test_strategy_reports_each_directive_per_turn_with_its_dispositions(tmp_path: Path) -> None:
+    reader = DashboardReader(_plan_log(tmp_path), None)
+    got = reader.strategy()
+    assert [t["turn"] for t in got["turns"]] == [1, 2]
+    totals = {t["id"]: t for t in got["totals"]}
+    assert totals["expand"]["in_force"] == 2
+    assert totals["expand"]["followed"] == 1
+    assert totals["expand"]["unsatisfied"] == 2
+    assert totals["reserve"]["overrode"] == 1
+
+
+def test_followed_share_is_over_turns_in_force_not_over_followed_plus_unsatisfied(
+    tmp_path: Path,
+) -> None:
+    """`followed` and `unsatisfied` co-occur, so the naive denominator exceeds the population.
+
+    MEASURED: followed+unsatisfied happens 568 times in ladder-attempt4. Dividing by their sum
+    would report a directive that was followed every single turn as roughly half-followed.
+    """
+    reader = DashboardReader(_plan_log(tmp_path), None)
+    totals = {t["id"]: t for t in reader.strategy()["totals"]}
+    # expand: in force twice, followed once -> 0.5, NOT 1/(1+2)=0.333
+    assert totals["expand"]["followed_share"] == 0.5
+
+
+def test_missing_plan_file_is_named_not_silently_rendered_as_bare_ids(tmp_path: Path) -> None:
+    reader = DashboardReader(_plan_log(tmp_path), None)
+    got = reader.strategy(None)
+    assert got["definitions_source"] == "unavailable"
+    assert got["definitions"] == {}
+    # the dispositions are still complete — only the TEXT is missing
+    assert got["totals"]
+
+
+def test_a_plan_file_supplies_the_directive_text(tmp_path: Path) -> None:
+    plan = tmp_path / "plan.json"
+    plan.write_text(
+        json.dumps(
+            {"directives": [{"id": "expand", "intent": "grow to 20 bases", "metric": "base_count"}]}
+        ),
+        encoding="utf-8",
+    )
+    reader = DashboardReader(_plan_log(tmp_path), None)
+    got = reader.strategy(plan)
+    assert got["definitions_source"] == "plan-file"
+    assert got["definitions"]["expand"]["intent"] == "grow to 20 bases"
+
+
+def test_an_unreadable_plan_file_is_distinguished_from_an_absent_one(tmp_path: Path) -> None:
+    plan = tmp_path / "broken.json"
+    plan.write_text("{ not json", encoding="utf-8")
+    reader = DashboardReader(_plan_log(tmp_path), None)
+    assert reader.strategy(plan)["definitions_source"] == "unreadable"
+
+
+def test_the_strategy_endpoint_is_served(tmp_path: Path) -> None:
+    client = TestClient(create_app(brain=ScriptedBrain(), log=_plan_log(tmp_path)))
+    body = client.get("/dashboard/api/strategy").json()
+    assert {t["id"] for t in body["totals"]} == {"expand", "reserve"}
+
+
+def test_a_plan_file_that_defines_only_some_directives_says_how_many(tmp_path: Path) -> None:
+    """`source == "plan-file"` is not the claim that every directive has text.
+
+    MEASURED on ladder-attempt4: the plan file defines 1 directive while 8 appear in the log,
+    because the rest were issued at runtime. Reporting only the source would leave seven rows
+    blank with nothing saying why.
+    """
+    plan = tmp_path / "plan.json"
+    plan.write_text(
+        json.dumps({"directives": [{"id": "expand", "intent": "grow"}]}), encoding="utf-8"
+    )
+    got = DashboardReader(_plan_log(tmp_path), None).strategy(plan)
+    assert got["definitions_source"] == "plan-file"
+    assert got["directive_count"] == 2
+    assert got["definitions_covered"] == 1
+    assert got["definitions_missing"] == ["reserve"]
+
+
+def test_graph_names_which_kind_of_nothing_it_found() -> None:
+    """unconfigured / unreachable / empty are three different facts, not one blank list.
+
+    The first two are the operator's problem and the third is the graph's; collapsing them
+    would hide a broken link behind "no results".
+    """
+    from neural_amplifier.dashboard import graph_view
+
+    def boom(*args: object, **kwargs: object) -> object:
+        raise OSError("connection refused")
+
+    unconfigured = graph_view(None)
+    unreachable = graph_view("http://127.0.0.1:1", post=boom)
+    empty = graph_view("http://g", post=lambda *a, **k: {"rows": []})
+
+    assert unconfigured["state"] == "unconfigured"
+    assert unreachable["state"] == "unreachable"
+    assert "connection refused" in unreachable["detail"]
+    assert empty["state"] == "empty"
+    assert len({unconfigured["detail"], unreachable["detail"], empty["detail"]}) == 3
+
+
+def test_graph_census_search_and_entity_are_three_read_shapes() -> None:
+    from neural_amplifier.dashboard import graph_view
+
+    seen: list[tuple[str, dict[str, object]]] = []
+
+    def fake(base: str, path: str, payload: dict[str, object], timeout: float = 8.0) -> object:
+        seen.append((path, payload))
+        if path == "/search":
+            return {
+                "results": [
+                    {"entity": "http://g/unit/colony-pod", "score": 0.7, "text": "Colony Pod"}
+                ]
+            }
+        if "COUNT" in str(payload.get("query")):
+            return {"rows": [{"t": "http://g/smac/Unit", "n": 26}]}
+        return {"rows": [{"p": "http://g/label", "o": "Colony Pod"}]}
+
+    census = graph_view("http://g", post=fake)
+    assert census["mode"] == "census"
+    assert census["rows"][0] == {"type": "Unit", "iri": "http://g/smac/Unit", "count": 26}
+
+    search = graph_view("http://g", query="colony", post=fake)
+    assert search["mode"] == "search"
+    assert search["rows"][0]["entity"] == "http://g/unit/colony-pod"
+
+    entity = graph_view("http://g", entity="http://g/unit/colony-pod", post=fake)
+    assert entity["mode"] == "entity"
+    assert entity["rows"] == [{"predicate": "http://g/label", "object": "Colony Pod"}]
+    assert [p for p, _ in seen] == ["/query", "/search", "/query"]
+
+
+def test_graph_reads_never_write() -> None:
+    """A browse panel must not be able to mutate the graph the brain reads."""
+    from neural_amplifier.dashboard import graph_view
+
+    paths: list[str] = []
+
+    def fake(base: str, path: str, payload: dict[str, object], timeout: float = 8.0) -> object:
+        paths.append(path)
+        return {"rows": [], "results": []}
+
+    for kwargs in ({}, {"query": "x"}, {"entity": "http://g/e"}):
+        graph_view("http://g", post=fake, **kwargs)  # type: ignore[arg-type]
+    assert set(paths) <= {"/query", "/search"}
+    assert not any(p in {"/episode", "/knot", "/propose"} for p in paths)
+
+
+def test_the_graph_endpoint_is_served_and_reports_unconfigured(monkeypatch) -> None:
+    monkeypatch.delenv("NA_DASHBOARD_QUIPU", raising=False)
+    monkeypatch.delenv("NA_QUIPU_URL", raising=False)
+    client = TestClient(create_app(brain=ScriptedBrain(), log=DecisionLog(Path(os.devnull))))
+    body = client.get("/dashboard/api/graph").json()
+    assert body["state"] == "unconfigured"
+
+
+def test_a_paused_run_says_the_game_stopped_not_that_the_page_is_stale() -> None:
+    """Stiwi, 2026-08-24: a quiet page with no explanation reads as broken.
+
+    "IDLE SINCE <timestamp>" is a fact about the ARTIFACTS. The reader manages a game and
+    wants a fact about the GAME.
+    """
+    from neural_amplifier.dashboard import run_state
+
+    got = run_state(
+        {"configured": True, "active": False, "idle_seconds": 4721.1, "turn": 78, "decisions": 610}
+    )
+    assert got["state"] == "paused"
+    assert "79 MINUTES" in got["headline"]
+    assert "not a broken page" in got["detail"]
+
+
+def test_run_state_separates_no_run_from_paused_from_live() -> None:
+    from neural_amplifier.dashboard import run_state
+
+    states = {
+        run_state({"configured": False})["state"],
+        run_state({"configured": True, "active": False, "idle_seconds": 300, "turn": 1})["state"],
+        run_state({"configured": True, "active": True, "turn": 5, "decisions": 9})["state"],
+    }
+    assert states == {"no-run", "paused", "live"}
+
+
+def test_every_internal_term_the_page_shows_has_a_plain_name_and_help() -> None:
+    """The audience manages a game, not this service. "degraded" meant nothing to him."""
+    from neural_amplifier.dashboard import _DISPOSITIONS, PLAIN_DISPOSITION, glossary
+
+    g = glossary()
+    # every disposition the why-panel can render is translated
+    assert set(_DISPOSITIONS) <= set(PLAIN_DISPOSITION)
+    for group in ("tier", "disposition", "grounding"):
+        for key, entry in g[group].items():
+            assert entry["name"] and entry["help"], f"{group}.{key} has no plain wording"
+            assert entry["name"] != key, f"{group}.{key} was not actually translated"
+    assert "engine's safe default" in g["fallback"]["help"]
+
+
+def test_the_fallback_wording_never_calls_it_degraded() -> None:
+    """The word the user could not read must not survive in what he is shown."""
+    from neural_amplifier.dashboard import glossary
+
+    g = glossary()
+    shown = " ".join(
+        entry["name"]
+        for group in ("tier", "disposition", "grounding")
+        for entry in g[group].values()
+    )
+    shown += " " + g["fallback"]["name"]
+    assert "degraded" not in shown.lower()
+
+
+def test_the_glossary_endpoint_is_served() -> None:
+    client = TestClient(create_app(brain=ScriptedBrain(), log=DecisionLog(Path(os.devnull))))
+    body = client.get("/dashboard/api/glossary").json()
+    assert body["tier"]["llm"]["name"] == "LLM decided"
+    assert body["disposition"]["unsatisfied"]["name"] == "Goal not met yet"
+
+
+def test_live_endpoint_carries_the_run_state() -> None:
+    client = TestClient(create_app(brain=ScriptedBrain(), log=DecisionLog(Path(os.devnull))))
+    body = client.get("/dashboard/api/live").json()
+    assert body["run_state"]["state"] in {"no-run", "paused", "live"}
+
+
+def test_the_served_page_uses_no_internal_jargon() -> None:
+    """The glossary test was too narrow and this slipped past it.
+
+    Asserting only that the GLOSSARY is translated says nothing about the page, which still
+    rendered "GUARD", "ADAPTER ABSENT", "// DEGRADED", "ADVISORIES" and "STRIPPED" as headings.
+    The guard has to look at what is actually served.
+    """
+    page = TestClient(create_app(brain=ScriptedBrain())).get("/dashboard").text
+    for jargon in (
+        "// DEGRADED",
+        "ADAPTER ABSENT",
+        "LINK DEGRADED",
+        ">GUARD<",
+        "<b>ADVISORIES</b>",
+        "<b>STRIPPED</b>",
+    ):
+        assert jargon not in page, f"the page still shows internal jargon: {jargon}"

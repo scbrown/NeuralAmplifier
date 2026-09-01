@@ -30,6 +30,7 @@ from .deferrals import DEFER_ACTION_ID, Deferral, DeferralSet, is_defer
 from .directives import DirectiveStore, accept, entities_shown, evaluate, relevant, tradeoffs
 from .fairness import profile as fairness_profile
 from .fog import Redaction, redact
+from .grounding_evidence import Cache
 from .knowledge import (
     Grounding,
     Guard,
@@ -197,6 +198,7 @@ class Orchestrator:
         deferrals: DeferralSet | None = None,
         queue: QueueStore | None = None,
         turn_plan: PlanStore | None = None,
+        grounding_cache: Cache | None = None,
     ) -> None:
         self.brain = brain
         # How many times a decision whose every choice was thrown out may be re-asked with the
@@ -220,6 +222,21 @@ class Orchestrator:
         # Quipu and Hank, both optional. Absent means a less-informed
         # decision, never a stalled turn (``knowledge.py``).
         self.retriever = retriever
+        # Where turn-boundary grounding evidence is published for Yupana to verify
+        # (``grounding_evidence.py``). ``None`` — the default — publishes NOTHING.
+        #
+        # That default is deliberate and was chosen after measuring the alternative. Defaulting
+        # to the real cache made the *test suite* write live evidence: 968 tests ran and two
+        # files landed in ``~/.local/state/hank/grounding``, entities and all. Evidence written
+        # by a test is byte-indistinguishable from evidence written by a game, so a fixture
+        # could make a real agent's action read as grounded — a fabricated-grounding channel
+        # inside the mechanism built to make grounding falsifiable.
+        #
+        # So the library never writes to a shared host path on its own. The deployment wires a
+        # cache in explicitly (``service.py``), which is the one place that knows it is a real
+        # run. Absent a cache the decision simply carries no reference, and Yupana reports
+        # ``missing`` — the truth.
+        self.grounding_cache = grounding_cache
         self.guard = guard
         # The standing plan. Absent means every decision is made on its own, which is where
         # this project started and is still a legitimate way to run.
@@ -241,6 +258,102 @@ class Orchestrator:
         # The bulk-turn plan table (na-7bk). Absent means no bulk mode, which is the same
         # legitimate way to run as an absent queue.
         self.turn_plan = turn_plan
+
+    def review(self, world_view: WorldView) -> Result:
+        """Reconsider faction strategy without pretending a review is a game action.
+
+        A review has no action space: its output is a revision of the standing directives.  It
+        deliberately shares the brain and directive compiler with ordinary decisions, while
+        bypassing action validation because there is no engine action to validate.  This is the
+        second reason to wake described in ``docs/long-horizon-play.md``.
+
+        The caller supplies the turn-boundary world view (including trajectory).  Every current
+        directive is shown: relevance filtering is for a concrete decision, while the subject of
+        a strategic review is the plan itself.
+        """
+        started = time.monotonic()
+        if world_view.action_space:
+            raise ValueError("a strategic review has no action space")
+        if world_view.scope != "turn":
+            raise ValueError("a strategic review is faction-scoped (scope='turn')")
+
+        current = self.plan.in_force(world_view.turn) if self.plan is not None else []
+        world_view = world_view.model_copy(
+            update={
+                "surface_id": "faction.strategy_review",
+                "directives": evaluate(current, world_view) or None,
+                "advisories": [
+                    *(world_view.advisories or []),
+                    "STRATEGIC REVIEW: there is no game action to choose. Return choices=[] and "
+                    "use directives to open, keep, or revise measurable commitments for future "
+                    "turns. Re-issue a commitment with the same id to record an explicit keep. "
+                    "Every directive must set horizon_turn later than this review turn; a plan "
+                    "without a future checkpoint cannot fail and will be refused.",
+                ],
+            }
+        )
+        if self.store is not None:
+            self.store.put(world_view)
+
+        degrade_reason: str | None = None
+        try:
+            answer = self.brain.decide(world_view)
+        except BrainError as exc:
+            degrade_reason = str(exc) or "brain error"
+            answer = Orders(degraded=True)
+        except Exception as exc:
+            degrade_reason = f"{type(exc).__name__}: {exc}"
+            answer = Orders(degraded=True)
+
+        # Choices on a no-action occasion are neither applied nor silently reinterpreted.
+        rejected = []
+        if answer.choices:
+            rejected.append(
+                f"{len(answer.choices)} action choice(s) ignored: strategic review has no action space"
+            )
+        candidates = [
+            directive
+            for directive in answer.directives
+            if directive.horizon_turn is not None and directive.horizon_turn > world_view.turn
+        ]
+        for directive in answer.directives:
+            if directive not in candidates:
+                rejected.append(
+                    f"directive {directive.id!r} rejected: a strategic commitment needs "
+                    f"horizon_turn later than review turn {world_view.turn}"
+                )
+        issued, refused = self._issue(candidates, world_view, degrade_reason)
+        rejected.extend(refused)
+        final = answer.model_copy(
+            update={
+                "choices": [],
+                "directives": candidates,
+                "degraded": degrade_reason is not None,
+            }
+        )
+        record = self._record(
+            world_view=world_view,
+            orders=final,
+            degrade_reason=degrade_reason,
+            latency_ms=int((time.monotonic() - started) * 1000),
+            unknown=0,
+            fog=Redaction(world_view=world_view, removed=0, enforced=True),
+            knowledge=Knowledge(
+                quipu_absent=self.retriever is None,
+                hank_absent=self.guard is None,
+            ),
+            plan=self._plan_block(
+                world_view,
+                final,
+                issued=issued,
+                rejected=rejected,
+                configured=self.plan is not None,
+                dropped=[],
+            ),
+            tier="review",
+        )
+        self.telemetry.emit(record)
+        return Result(orders=final, record=record)
 
     def decide(self, world_view: WorldView) -> Result:
         started = time.monotonic()
@@ -880,6 +993,11 @@ class Orchestrator:
             and not fairness.handicaps
         ):
             fairness = fairness_profile(fairness.slot, fairness.difficulty)
+        # ONE hash, bound to both the record and the evidence. Hashing twice would be two
+        # serialisations of the same object and nothing would notice if they ever disagreed —
+        # and a mismatch here is reported by Yupana as `unresolved`, i.e. as broken evidence
+        # rather than as the producer bug it would be.
+        digest = world_view_hash(world_view.model_dump(mode="json"))
         return DecisionRecord(
             trace_id=world_view.traceparent(),
             game_id=self.game_id,
@@ -890,7 +1008,7 @@ class Orchestrator:
             surface_id=world_view.surface_id,
             scope=world_view.scope,
             tier=tier,  # type: ignore[arg-type]
-            world_view_hash=world_view_hash(world_view.model_dump(mode="json")),
+            world_view_hash=digest,
             action_space_size=len(world_view.action_space),
             chosen=[c.model_dump(mode="json") for c in orders.choices],
             reason=orders.choices[0].reason if orders.choices else None,
@@ -908,7 +1026,38 @@ class Orchestrator:
             repairs=repairs,
             repair_inputs=list(repair_inputs),
             knowledge=KnowledgeBlock(**asdict(knowledge)),
+            grounding=self._grounding_ref(world_view, digest),
             plan=plan,
             redacted_deltas=fog.removed,
             fog_enforced=fog.enforced,
         )
+
+    def _grounding_ref(self, world_view: WorldView, digest: str) -> dict[str, str] | None:
+        """Bind this turn's consultation to this decision's input, and publish the evidence.
+
+        The consultation happened once, at ``/turn``; the binding is per decision, because a
+        decision is the unit anyone audits. Content-addressing makes the fan-out free — two
+        decisions with the same world view resolve to the same file — so this costs one local
+        write per distinct input and never a graph round trip. That matters: ``/decide`` blocks
+        the game thread and has been measured at 244 decisions in one turn (na-x5n), which is
+        why the consultation is not repeated here.
+
+        Fog-scoped through ``faction_id``. An unscoped lookup would bind one faction's decision
+        to another faction's consultation and the record would look perfectly ordinary, which
+        is the failure mode ``turns.view`` is fail-closed to avoid.
+
+        Never raises. Grounding degrades and never stalls a turn — but the degradation is
+        *visible*, because a decision with no reference is one Yupana reports as ``missing``
+        rather than one it silently passes.
+        """
+        if self.grounding_cache is None:
+            return None
+        lookup = getattr(self.retriever, "consultation_for", None)
+        if not callable(lookup):
+            return None
+        faction_id = getattr(world_view, "faction_id", None)
+        consultation = lookup(world_view.turn, faction_id)
+        if consultation is None:
+            return None
+        ref = self.grounding_cache.publish(consultation, digest)
+        return ref.as_dict() if ref is not None else None

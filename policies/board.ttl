@@ -15,7 +15,7 @@
 # "action" (a dispatched action) and "transition" (a state change); yupana added "order" for the
 # FR-36 pre-apply seam, which is the one a game order sits at.
 
-@prefix aegis: <https://aegis.local/ontology/> .
+@prefix aegis: <http://aegis.gastown.local/ontology/> .
 @prefix rdfs:  <http://www.w3.org/2000/01/rdf-schema#> .
 @prefix na:    <http://neuralamplifier.local/policy/> .
 
@@ -76,3 +76,43 @@ na:meet-the-defence-goal-when-close-pred a aegis:Predicate ;
     aegis:selectorLang "graph-pattern" ;
     aegis:matchType "must-match" ;
     aegis:evidenceSource "?b a smac:BaseState ; smac:garrison_count ?g ; smac:defend_goal ?goal | ?g >= 1" .
+
+# Proactive production checks from aegis-6czy9. These remain advisory because the board exposes
+# current state, not the future turn on which a Colony Pod completes. A size-one base may grow
+# before completion, but the agent must prove that projection rather than silently wagering the
+# base. The companion surplus rule catches a stalled pod plan before minerals are sunk into it.
+na:colony-pod-preserves-base-population a aegis:Policy ;
+    rdfs:label "colony-pod-preserves-base-population" ;
+    aegis:targets "smac:BaseState" ;
+    aegis:claim "A Colony Pod build needs projected population above one at completion or it consumes the base" ;
+    aegis:boundary "order" ;
+    aegis:effect "warn" ;
+    aegis:selector na:colony-pod-preserves-base-population-sel ;
+    aegis:predicate na:colony-pod-preserves-base-population-pred .
+
+na:colony-pod-preserves-base-population-sel a aegis:Selector ;
+    aegis:selectorLang "graph-pattern" ;
+    aegis:evidenceSource "?b a smac:BaseState ; smac:current_item_name ?item | ?item = \"Colony Pod\"" .
+
+na:colony-pod-preserves-base-population-pred a aegis:Predicate ;
+    aegis:selectorLang "graph-pattern" ;
+    aegis:matchType "must-match" ;
+    aegis:evidenceSource "?b a smac:BaseState ; smac:pop_size ?pop | ?pop >= 2" .
+
+na:colony-pod-needs-mineral-surplus a aegis:Policy ;
+    rdfs:label "colony-pod-needs-mineral-surplus" ;
+    aegis:targets "smac:BaseState" ;
+    aegis:claim "A Colony Pod build needs positive mineral surplus as well as safe projected population" ;
+    aegis:boundary "order" ;
+    aegis:effect "warn" ;
+    aegis:selector na:colony-pod-needs-mineral-surplus-sel ;
+    aegis:predicate na:colony-pod-needs-mineral-surplus-pred .
+
+na:colony-pod-needs-mineral-surplus-sel a aegis:Selector ;
+    aegis:selectorLang "graph-pattern" ;
+    aegis:evidenceSource "?b a smac:BaseState ; smac:current_item_name ?item | ?item = \"Colony Pod\"" .
+
+na:colony-pod-needs-mineral-surplus-pred a aegis:Predicate ;
+    aegis:selectorLang "graph-pattern" ;
+    aegis:matchType "must-match" ;
+    aegis:evidenceSource "?b a smac:BaseState ; smac:mineral_surplus ?m | ?m >= 1" .

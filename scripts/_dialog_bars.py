@@ -46,6 +46,10 @@ BAR = (103, 91, 181)     # the lighter stripe of a SMAC dialog action bar
 TOL = 24
 MIN_RUN = 40             # absolute floor, in px — below this it is texture, not a button
 MIN_ANCHOR = 0.20        # a real dialog's widest bar spans this much of the WINDOW
+#: A narrower widest-bar is still a dialog if it is CORROBORATED by a stack of bars.
+#: Both numbers are anchored to measurements, not taste — see the anchor note below.
+MIN_ANCHOR_ABS = 240     # px; below this a stripe is not a button at any geometry we ship
+ANCHOR_CLUSTER = 4       # bars stacked with the widest before a narrow one counts
 MIN_OF_DIALOG = 0.25     # a button spans at least this fraction of the dialog's own width
 X_SLACK = 10             # a button may overhang the widest bar by an antialiased pixel or two
 ROW_GAP = 6              # scanlines this close belong to the same bar
@@ -89,12 +93,45 @@ def bars(path):
             for a, b in found:
                 if widest is None or b - a > widest[2] - widest[1]:
                     widest = (y, a, b)
-    # IS there a dialog? This test is deliberately the one the previous version used — a bar
-    # spanning a fifth of the WINDOW — because it is what keeps a base-management panel from
-    # reading as a dialog when no dialog is up. Only the question of which buttons BELONG to
-    # that dialog is answered relative to the dialog itself.
-    if widest is None or widest[2] - widest[1] < MIN_ANCHOR * w:
+    # IS there a dialog?
+    #
+    # This test WAS "a bar spanning a fifth of the WINDOW", and it is the same window-relative
+    # mistake the note above describes — fixed there for the per-button floor and left standing
+    # here, one layer up, on the gate that decides whether any button is reported at all.
+    #
+    # MEASURED on the two rows that died (aegis-7iwft): the Planetary Council's VOTE bar is
+    # 487px on a 2560px window. The floor was 512px. **It missed by 25 pixels**, so `bars()`
+    # returned "no dialog" on a screen showing a full-width VOTE button, the driver blind-
+    # alternated SPACE/RETURN 500+ times, and two deep ladder rows died on it. The colour match
+    # was never the problem: the pixels at the button's centre are exactly BAR.
+    #
+    # A window-relative floor cannot work, because the dialog is not window-sized and nothing
+    # says a modal on a 4K display must be 800px wide. But it cannot simply be lowered either:
+    # it is what stops the base-management panel below the map reading as a dialog.
+    #
+    # So a wide bar still qualifies ALONE, and a narrower one qualifies when CORROBORATED by
+    # the thing that actually distinguishes a dialog from panel chrome — several bars stacked
+    # in one tight vertical group. Measured across the fixtures:
+    #
+    #     council (both dead rows)  15 runs, widest 487px, all inside an 18px band -> dialog
+    #     comm officer modal        40 runs, widest 788px                          -> dialog
+    #     plain map + HUD            0 runs                                        -> not
+    #
+    # The true negative has ZERO qualifying runs, so it is not near this boundary at all.
+    if widest is None:
         return [], (w, h)
+    widest_w = widest[2] - widest[1]
+    if widest_w < MIN_ANCHOR * w:
+        stacked = sum(
+            1
+            for y in per_row
+            for a, b in per_row[y]
+            if abs(y - widest[0]) <= CLUSTER_GAP
+            and a >= widest[1] - X_SLACK
+            and b <= widest[2] + X_SLACK
+        )
+        if widest_w < MIN_ANCHOR_ABS or stacked < ANCHOR_CLUSTER:
+            return [], (w, h)
 
     dialog_w = widest[2] - widest[1]
     floor = MIN_OF_DIALOG * dialog_w

@@ -1,0 +1,15 @@
+{
+  "arm": "trigger",
+  "choices": {
+    "tech:12": 4,
+    "tech:59": 4,
+    "tech:81": 2
+  },
+  "degraded": 2,
+  "issued": [],
+  "issued_count": 0,
+  "prompt_chars": 1199,
+  "runs": 10,
+  "stability": 0.4,
+  "surface": "faction.tech"
+}
