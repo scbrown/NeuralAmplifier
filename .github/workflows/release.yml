@@ -68,5 +68,8 @@ jobs:
         with:
           tag_name: ${{ env.RELEASE_TAG }}
           body_path: release-notes/${{ env.RELEASE_TAG }}.md
-          files: dist/*
+          files: |
+            dist/*.whl
+            dist/*.tar.gz
+            dist/SHA256SUMS.txt
           fail_on_unmatched_files: true
