@@ -485,7 +485,7 @@ against the design. If you're an AI agent working in this repo, start with
 
 ## 📄 License
 
-[MIT](LICENSE) for this repository — the Python orchestrator, the Thinker adapter (Thinker is
+[MIT](LICENSE) (scope note in [NOTICE](NOTICE)) for this repository — the Python orchestrator, the Thinker adapter (Thinker is
 MIT too), the `.gls.js` mod, and the docs.
 
 **One boundary to know:** the GSE `http` builtin under `adapters/glsmac/builtin/` modifies
