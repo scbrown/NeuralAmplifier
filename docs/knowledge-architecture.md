@@ -644,3 +644,27 @@ The net-new Hank capabilities (generic non-code ingestion; the game-state policy
 the `hank_guard` and `hank_whatif` surfaces; per-game/per-faction tenancy as an isolation
 boundary) belong in Hank's own `docs/hank-spec.md` as new FRs; how Neural Amplifier *consumes*
 them lives here.
+
+## Optional Jev observations
+
+Set `NA_JEV_COMMAND` to a JSON argv list pointing at camayoc's `scripts/jev.py`,
+for example `["python3", "/path/to/camayoc/scripts/jev.py"]`. Camayoc remains the
+API client and owns credential resolution. Leave this variable unset to make no
+Jev calls. `NA_JEV_TIMEOUT` defaults to 0.5 seconds per call and accepts at most
+2 seconds; an unavailable client produces a recorded advisory failure.
+
+The guard asks whether the proposed legal orders contradict the active directives.
+It can warn but cannot strip an order, trigger a repair, or replace the brain's
+rationale. No active directive means no guard call. StateGuard remains in the
+chain and keeps its arithmetic checks. A separate tier choice is recorded as
+`jev_tier`, including the request, model, usage, confidence and `acted_on: false`.
+It does not change the configured tier or brain, including on deterministic
+surfaces. `none-of-these` is a valid recommendation. An absent `jev_tier` means
+unconfigured; `status: unavailable` means configured but unsuccessful.
+
+These synchronous observations add bounded latency: up to one timeout for routing
+and one per guard invocation (including an existing repair attempt). They are
+opt-in experiments; enable them only where the adapter deadline has that headroom.
+The tier observation is made after the brain's decision but sees only the menu and
+active intent, never its answer. Its transport latency is in the observation;
+the existing decision latency describes the decision before that observation.

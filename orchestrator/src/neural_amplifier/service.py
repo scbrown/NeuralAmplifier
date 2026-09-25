@@ -282,6 +282,11 @@ def build_guard(retriever: object | None, config: Config | None = None) -> objec
         from .yupana import YupanaGuard
 
         guards.append(YupanaGuard(policies=load_policies()))
+    from .jev import JevGuard, from_env
+
+    jev = from_env()
+    if jev is not None:
+        guards.append(JevGuard(jev))
     return GuardChain(*guards)
 
 
@@ -425,6 +430,7 @@ def create_app(
     # Read once, here. A malformed na.toml should refuse to start the service rather than
     # failing one turn at a time in a running game.
     config = load_config()
+    from .jev import from_env
 
     resolved_log = log
     if resolved_log is None and config.run.decision_log:
@@ -498,6 +504,7 @@ def create_app(
         # that knows the run is real — the Orchestrator default writes nothing precisely so a
         # test cannot manufacture evidence for a live agent (``grounding_evidence.py``).
         grounding_cache=GroundingCache(),
+        jev=from_env(),
     )
     app.state.orchestrator = orchestrator
 

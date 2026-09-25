@@ -156,3 +156,22 @@ since re-pinning invalidates the committed answers.
 
 Register the answer in `EVALS`, not only in a document. An eval whose result you have to go and
 find is one nobody rereads before repeating the work.
+
+### Jev grounding ranking (na-htm)
+
+`just jev-ranking` explicitly scores each pinned fact against its decision's action
+space through the camayoc client configured by `NA_JEV_COMMAND`. This is a paid
+operation, never part of CI or normal scoring. It refuses to overwrite an existing
+`runs/na-htm/jev-scores.json`; preserve an old run before replacing its pin. The
+artifact records each request, rubric, model, usage and answer, plus a fingerprint
+of the decision menus, directives and grounding. A stale or incomplete pin refuses
+scoring. Equal scores retain retriever order.
+
+With a valid pin, `just eval prompts na-htm` adds a `.jev` arm beside `.all` and
+`.ranked`. `just eval score na-htm` evaluates both rankings against the same all-arm
+citations, random MRR/top-k baselines and dominance gate, and compares each truncated
+arm's modal choice with `.all`. Missing Jev answers remain visibly missing. Without
+a pin it reports Jev unavailable and scores the existing arms as before. A score
+pin alone establishes no citation result: collect the brain answers before drawing
+conclusions. Jev scores are fractional positions on the described rubric, following
+the [TypeSafe Score contract](https://docs.typesafe.ai/primitives/score).

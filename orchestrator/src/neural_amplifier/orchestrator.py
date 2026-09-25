@@ -31,6 +31,7 @@ from .directives import DirectiveStore, accept, entities_shown, evaluate, releva
 from .fairness import profile as fairness_profile
 from .fog import Redaction, redact
 from .grounding_evidence import Cache
+from .jev import Caller, tier_observation
 from .knowledge import (
     Grounding,
     Guard,
@@ -199,8 +200,10 @@ class Orchestrator:
         queue: QueueStore | None = None,
         turn_plan: PlanStore | None = None,
         grounding_cache: Cache | None = None,
+        jev: Caller | None = None,
     ) -> None:
         self.brain = brain
+        self.jev = jev
         # How many times a decision whose every choice was thrown out may be re-asked with the
         # reason attached. ``knowledge-architecture.md`` allows up to two.
         #
@@ -1008,6 +1011,7 @@ class Orchestrator:
             surface_id=world_view.surface_id,
             scope=world_view.scope,
             tier=tier,  # type: ignore[arg-type]
+            jev_tier=tier_observation(self.jev, world_view) if self.jev else None,
             world_view_hash=digest,
             action_space_size=len(world_view.action_space),
             chosen=[c.model_dump(mode="json") for c in orders.choices],
