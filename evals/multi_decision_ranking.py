@@ -117,12 +117,23 @@ def arms(links: Path | None = None, keep: int = KEEP) -> dict[str, Any]:
     ground at all (social engineering, technologies). Keeping the parameter lets ``run.py`` treat
     every eval alike.
     """
+    specs = decisions()
+    jev = jev_orderings(specs)
     out: dict[str, Any] = {}
-    for name, spec in decisions().items():
+    for name, spec in specs.items():
         full = list(spec["grounding"])
         out[f"{name}.all"] = _world_view(spec, full)
         out[f"{name}.ranked"] = _world_view(spec, rank_lines(full)[:keep])
+        if jev is not None:
+            out[f"{name}.jev"] = _world_view(spec, jev[name][:keep])
     return out
+
+
+def jev_orderings(specs: dict[str, Any]) -> dict[str, list[str]] | None:
+    from jev_ranking import load
+
+    pin = PINNED.with_name("jev-scores.json")
+    return load(pin, specs) if pin.exists() else None
 
 
 # --- scoring -------------------------------------------------------------------------------
@@ -206,6 +217,18 @@ def dominance(pooled: list[tuple[str, str]]) -> dict[str, Any]:
 
 def score(out: Path, links: Path | None = None, keep: int = KEEP) -> None:
     specs = decisions()
+    _score(out, specs, {name: rank_lines(list(spec["grounding"]))
+                       for name, spec in specs.items()}, "ranked", keep)
+    jev = jev_orderings(specs)
+    if jev is None:
+        print("\nJev: UNAVAILABLE — no pinned scores; no model is called during scoring.")
+    else:
+        print("\nJEV RANKING — same all-arm citations, nulls, and dominance gate:")
+        _score(out, specs, jev, "jev", keep)
+
+
+def _score(out: Path, specs: dict[str, Any], orderings: dict[str, list[str]],
+           ranked_arm: str, keep: int) -> None:
 
     print(f"{'decision':28} {'surf':16} {'turn':>4} {'opts':>5} {'facts':>6}  fact ids")
     for name, spec in specs.items():
@@ -232,11 +255,11 @@ def score(out: Path, links: Path | None = None, keep: int = KEEP) -> None:
     empty_cells: list[str] = []
     for name, spec in specs.items():
         full = list(spec["grounding"])
-        order = [ln.split(" ", 1)[0] for ln in rank_lines(full)]
+        order = [ln.split(" ", 1)[0] for ln in orderings[name]]
         position = {fid: i for i, fid in enumerate(order)}
-        for arm in ("all", "ranked"):
+        for arm in ("all", ranked_arm):
             offered = [
-                ln.split(" ", 1)[0] for ln in (full if arm == "all" else rank_lines(full)[:keep])
+                ln.split(" ", 1)[0] for ln in (full if arm == "all" else orderings[name][:keep])
             ]
             per_run, runs = _citations(out, name, arm, offered)
             if not runs:
@@ -346,9 +369,9 @@ def score(out: Path, links: Path | None = None, keep: int = KEEP) -> None:
     # fact per option, so truncating removes the argument for a particular option rather than
     # removing information, and an unexplained option loses.
     agree = [
-        (name, choices.get((name, "all"), {}), choices.get((name, "ranked"), {}))
+        (name, choices.get((name, "all"), {}), choices.get((name, ranked_arm), {}))
         for name in specs
-        if (name, "ranked") in choices and (name, "all") in choices
+        if (name, ranked_arm) in choices and (name, "all") in choices
     ]
     if agree:
         print(f"\ndid truncating to {keep} move the decision:")
@@ -356,7 +379,7 @@ def score(out: Path, links: Path | None = None, keep: int = KEEP) -> None:
             a_top = max(a, key=a.get) if a else "?"
             r_top = max(r, key=r.get) if r else "?"
             verdict = "same modal choice" if a_top == r_top else "MOVED"
-            print(f"  {name:28} all={a_top!r:>18} ranked={r_top!r:>18}  {verdict}")
+            print(f"  {name:28} all={a_top!r:>18} {ranked_arm}={r_top!r:>18}  {verdict}")
 
 
 def _shared_facts(specs: dict[str, dict[str, Any]]) -> set[str]:

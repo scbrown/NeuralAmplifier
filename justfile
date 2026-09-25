@@ -428,3 +428,7 @@ docs cmd="check":
         check) npx --yes {{markdownlint}} "**/*.md" && mdbook build ;;
         *)     echo "Unknown: {{cmd}}. Try: build serve lint fix fmt check" ;;
     esac
+
+# Explicit paid harvest through the configured camayoc client; never part of CI.
+jev-ranking:
+    uv run --directory orchestrator python ../evals/jev_ranking.py

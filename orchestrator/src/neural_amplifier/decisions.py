@@ -173,6 +173,8 @@ class DecisionRecord(BaseModel):
     surface_id: str | None = None
     scope: str
     tier: Tier
+    #: Shadow observation only; never changes tier or the selected brain.
+    jev_tier: dict[str, Any] | None = None
 
     world_view_hash: str
     action_space_size: int
