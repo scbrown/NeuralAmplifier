@@ -29,9 +29,17 @@ This bead's own history is a warning about diagnosing it: the original report bl
 touches nothing — and the retraction says so at length. The gate is on the *auto*-export, not on
 any `bd export` invocation.
 
+## Now br, not bd
+
+The tracker moved to br, and bd is retired and refuses every command, which failed `just check`
+for everyone. The history above is about bd and is kept because the lesson (never trust the
+auto path) still holds. br has no `export -o`: `br sync --flush-only` writes beside its own
+`.beads`, so this takes a consistent SQLite backup of the store into a temp `.beads` and flushes
+there. Nothing is written outside that temp directory. br also redacts owner emails in exports.
+
 ## What this does
 
-Always a forced `bd export -o`, never the auto path. Then it diffs the new export against the
+Always a forced export into a temp store copy, never the auto path. Then it diffs the new export against the
 committed JSONL and **refuses to install a regression**, because the failure this guards is
 one-directional: work disappearing.
 
@@ -43,7 +51,9 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import shutil
+import sqlite3
 import subprocess
 import sys
 import tempfile
@@ -54,17 +64,99 @@ TRACKED = REPO / ".beads" / "issues.jsonl"
 AUDIT_SNAPSHOT = REPO / ".beads" / "interactions.snapshot.jsonl"
 
 
-def live_audit_path() -> Path:
-    """Return bd's real audit path, which is in the main checkout for worktrees."""
+# The tracker moved from bd to br (aegis-sgvm5q). bd is retired on this host and refuses
+# every command, so the old calls failed `just check` for everyone. Every br call below passes
+# --no-auto-import and --no-auto-flush: this script reads the store and must never import a
+# working-tree JSONL into it, or flush into a checkout.
+BR = ["br", "--no-auto-import", "--no-auto-flush"]
+
+
+def main_checkout() -> Path:
+    """The checkout that owns the store. A worktree has no store of its own, and br run
+    there would auto-import the worktree's JSONL into a FRESH store, making this check compare
+    the tracked file to itself and pass every time."""
     proc = subprocess.run(
-        ["bd", "context", "--json"],
-        cwd=REPO,
-        capture_output=True,
-        text=True,
+        ["git", "rev-parse", "--path-format=absolute", "--git-common-dir"],
+        cwd=REPO, capture_output=True, text=True,
     )
     if proc.returncode != 0:
-        raise RuntimeError(f"bd context failed: {proc.stderr.strip()}")
-    return Path(json.loads(proc.stdout)["beads_dir"]) / "interactions.jsonl"
+        raise RuntimeError(f"cannot locate the main checkout: {proc.stderr.strip()}")
+    return Path(proc.stdout.strip()).parent
+
+
+def store() -> dict:
+    """br's own answer for where the store lives: `path` (the .beads dir) and `database_path`."""
+    proc = subprocess.run(BR + ["where", "--json"], cwd=main_checkout(), capture_output=True, text=True)
+    if proc.returncode != 0:
+        raise RuntimeError(f"br where failed: {proc.stderr.strip()}")
+    return json.loads(proc.stdout)
+
+
+def live_audit_path() -> Path:
+    """The live audit log, which is in the main checkout's .beads for worktrees."""
+    return Path(store()["path"]) / "interactions.jsonl"
+
+
+# The tracked JSONL is a PUBLIC projection of the store. br already redacts owner emails from it;
+# local home paths are the same kind of leak (a comment quoting a worktree path, a
+# source_repo_path field). Normalize them in the projection only; the store keeps its data.
+HOME_PATH = re.compile(r"/home/[A-Za-z0-9._-]+/")
+
+
+def publishable(value):
+    """Replace absolute home-directory prefixes with ~/ in every string, recursively."""
+    if isinstance(value, str):
+        return HOME_PATH.sub("~/", value)
+    if isinstance(value, list):
+        return [publishable(item) for item in value]
+    if isinstance(value, dict):
+        return {key: publishable(item) for key, item in value.items()}
+    return value
+
+
+def publish_lines(path: Path) -> None:
+    """Rewrite only the JSONL lines that contain a home path, so br's own bytes survive
+    everywhere else and the diff stays reviewable."""
+    lines = []
+    for line in path.read_text().splitlines(keepends=True):
+        if HOME_PATH.search(line):
+            record = publishable(json.loads(line))
+            line = json.dumps(record, separators=(",", ":"), ensure_ascii=False) + "\n"
+        lines.append(line)
+    path.write_text("".join(lines))
+
+
+def fresh_export(dest: Path) -> None:
+    """Export the store to ``dest`` without writing anything outside a temp directory.
+
+    br has no `export -o`; `br sync --flush-only` writes the JSONL beside its own .beads.
+    So take a consistent SQLite backup of the store into a temp .beads and flush THERE.
+    Measured before this was written: an export from a backup-API copy is byte-identical to
+    one from the live store's files.
+    """
+    where = store()
+    with tempfile.TemporaryDirectory() as tmp:
+        beads = Path(tmp) / ".beads"
+        beads.mkdir()
+        db = beads / Path(where["database_path"]).name
+        src = sqlite3.connect(f"file:{where['database_path']}?mode=ro", uri=True)
+        try:
+            dst = sqlite3.connect(db)
+            src.backup(dst)
+            dst.close()
+        finally:
+            src.close()
+        for name in ("metadata.json", "config.yaml"):
+            if (Path(where["path"]) / name).exists():
+                shutil.copy2(Path(where["path"]) / name, beads / name)
+        proc = subprocess.run(
+            ["br", "--db", str(db), "--no-auto-import", "sync", "--flush-only"],
+            cwd=tmp, capture_output=True, text=True,
+        )
+        if proc.returncode != 0:
+            raise RuntimeError(f"br sync --flush-only failed: {proc.stderr.strip()}")
+        shutil.copyfile(beads / "issues.jsonl", dest)
+    publish_lines(dest)
 
 
 def load(path: Path) -> dict[str, dict]:
@@ -187,32 +279,28 @@ def main() -> int:
     )
     args = parser.parse_args()
 
-    if shutil.which("bd") is None:
+    if shutil.which("br") is None:
         if args.check:
-            print("beads export check skipped: bd is not installed")
+            print("beads export check skipped: br is not installed")
             return 0
-        print("bd is required to refresh the beads export", file=sys.stderr)
+        print("br is required to refresh the beads export", file=sys.stderr)
         return 1
 
     with tempfile.NamedTemporaryFile("w+", suffix=".jsonl", delete=False) as handle:
         fresh_path = Path(handle.name)
 
-    # ALWAYS -o. The auto-export is the thing being worked around, and `bd export` with no -o
-    # writes to stdout and touches no file at all.
-    proc = subprocess.run(
-        ["bd", "export", "-o", str(fresh_path)],
-        cwd=REPO,
-        capture_output=True,
-        text=True,
-    )
-    if proc.returncode != 0:
-        print(f"bd export failed: {proc.stderr.strip()}", file=sys.stderr)
+    # ALWAYS a forced export into a temp store copy, never the auto path (see fresh_export).
+    try:
+        fresh_export(fresh_path)
+    except (RuntimeError, OSError, sqlite3.Error, KeyError, ValueError) as error:
+        print(f"br export failed: {error}", file=sys.stderr)
         return 1
 
     fresh = load(fresh_path)
     audit_path = live_audit_path()
     audit_base = committed_audit()
-    fresh_audit, audit_merge_problems = merge_audit(audit_base, load(audit_path))
+    live_tail = publishable(load(audit_path)) if audit_path.exists() else {}
+    fresh_audit, audit_merge_problems = merge_audit(audit_base, live_tail)
     if not fresh:
         # An empty export over a populated tracker is the worst possible write.
         print("refusing to install an empty export", file=sys.stderr)
