@@ -492,3 +492,9 @@ MIT too), the `.gls.js` mod, and the docs.
 [GLSMAC](https://github.com/afwbkbc/glsmac), which is **AGPL-3.0**. Those engine-side changes
 inherit AGPL-3.0 and are meant to be contributed upstream — a reason we keep that surface small
 and separate. See [adapters/glsmac/README.md](adapters/glsmac/README.md).
+
+## Retained tracker data
+
+The tracked tracker JSONL files are retained reference data. The required quality
+gate does not regenerate them through the retired tracker or require a local
+tracker database. Keep those snapshots unchanged during release preparation.
