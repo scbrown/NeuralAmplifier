@@ -21,6 +21,16 @@ Quipu's `graph` request parameter, then decisions filter the cached result local
 Override it only with `NA_QUIPU_DATASET`. Capture belongs in the same plane: POST
 episodes with `"graph":"urn:neuralamplifier:graph:knowledge"`. A graph that exists
 but is absent from the decision request is not integration.
+
+**An LLM run will not start blind.** For the `claude`, `claude-code` and `agent` brains, the
+service runs the turn-boundary read once at start and refuses to serve if there is no retriever,
+the read fails, or the read returns zero rows. Zero rows is the quiet failure: quipu answers a
+query scoped to a dataset the server does not hold with an empty result, not an error, so
+before this gate a store without the dataset decided every turn with no facts and no
+`degraded` flag (aegis-09m measured 0 of 8,607 live decisions grounded). `/health` reports
+`knowledge.state` as `grounded`, `blind-allowed` or `not-required`, and `play-preflight` blocks
+on anything but `grounded`. Set `NA_ALLOW_BLIND=1` only for a run meant to be ungrounded. Every
+decision record carries `knowledge.quipu_reason` when retrieval degraded or found nothing.
 This doc covers only the orchestrator↔Quipu wire: interfaces, the retrieval calls at
 `/decide`, budgeting, `group_id` conventions, and degradation.
 
