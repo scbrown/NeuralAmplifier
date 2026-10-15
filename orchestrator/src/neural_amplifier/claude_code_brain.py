@@ -336,7 +336,7 @@ class ClaudeCodeBrain:
         return orders
 
 
-def _usage_of_envelope(envelope: dict) -> dict[str, int] | None:
+def _usage_of_envelope(envelope: dict[str, object]) -> dict[str, int] | None:
     """Tokens this call was billed for, from the ``claude -p`` JSON envelope.
 
     Same keys and provider semantics as the API lane (`ClaudeBrain._usage_of`): ``input`` is
@@ -361,7 +361,7 @@ def _usage_of_envelope(envelope: dict) -> dict[str, int] | None:
     return out or None
 
 
-def _served_model(envelope: dict) -> str | None:
+def _served_model(envelope: dict[str, object]) -> str | None:
     """The model that answered, as Claude Code reports it in ``modelUsage``.
 
     The lane is unpinned by design, so this is the only place the answer can come from. If
