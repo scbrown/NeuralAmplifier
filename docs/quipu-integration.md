@@ -28,9 +28,12 @@ the read fails, or the read returns zero rows. Zero rows is the quiet failure: q
 query scoped to a dataset the server does not hold with an empty result, not an error, so
 before this gate a store without the dataset decided every turn with no facts and no
 `degraded` flag (aegis-09m measured 0 of 8,607 live decisions grounded). `/health` reports
-`knowledge.state` as `grounded`, `blind-allowed` or `not-required`, and `play-preflight` blocks
-on anything but `grounded`. Set `NA_ALLOW_BLIND=1` only for a run meant to be ungrounded. Every
-decision record carries `knowledge.quipu_reason` when retrieval degraded or found nothing.
+`knowledge.state` as `grounded`, `blind-allowed` or `not-required`. `play-preflight` passes
+`grounded`, warns and plays on an explicit `blind-allowed`, and blocks on anything else,
+including an orchestrator too old to report the state. Set `NA_ALLOW_BLIND=1` only for a run
+meant to be ungrounded. Every decision record carries `knowledge.quipu_reason` when retrieval
+degraded or found nothing.
+
 This doc covers only the orchestrator↔Quipu wire: interfaces, the retrieval calls at
 `/decide`, budgeting, `group_id` conventions, and degradation.
 
