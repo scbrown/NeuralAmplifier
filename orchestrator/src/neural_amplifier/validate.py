@@ -40,8 +40,9 @@ class Validation:
         notes: str | None = None,
         degraded: bool = False,
         usage: dict[str, int] | None = None,
+        served_model: str | None = None,
     ) -> Orders:
-        """The validated orders, REBUILT — which is why `usage` has to be handed back in.
+        """The validated orders, REBUILT — which is why `usage` and `served_model` are handed back.
 
         This constructs a fresh `Orders` from the kept choices, so anything the brain attached to
         the original and did not put in a choice is dropped here. That silently zeroed the token
@@ -49,7 +50,12 @@ class Validation:
         without it, and the record recorded 0/0 having made a real paid call.
         """
         return Orders(
-            choices=self.kept, notes=notes, degraded=degraded, cited=self.cited, usage=usage
+            choices=self.kept,
+            notes=notes,
+            degraded=degraded,
+            cited=self.cited,
+            usage=usage,
+            served_model=served_model,
         )
 
 
