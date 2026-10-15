@@ -157,7 +157,13 @@ class ClaudeBrain:
                     model=self.model,
                     max_tokens=16000,
                     output_format=model_for(world_view.scope),
-                    system=_SYSTEM,
+                    # The system prompt is identical on every decision of a game and is most of
+                    # the input, yet 0 of 701 M1 decisions read anything from cache (aegis-5xi).
+                    # A prompt under the model's minimum cacheable length is sent uncached with
+                    # no error, so `tokens.cached` on the record is the only proof this works.
+                    system=[
+                        {"type": "text", "text": _SYSTEM, "cache_control": {"type": "ephemeral"}}
+                    ],
                     messages=[{"role": "user", "content": world_view.model_dump_json()}],
                     **kwargs,
                 )
@@ -187,6 +193,7 @@ class ClaudeBrain:
             ("input", "input_tokens"),
             ("output", "output_tokens"),
             ("cached", "cache_read_input_tokens"),
+            ("cache_write", "cache_creation_input_tokens"),
         ):
             value = getattr(usage, attr, None)
             if isinstance(value, int):
