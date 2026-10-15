@@ -385,19 +385,21 @@ def test_the_announcements_own_faction_attributes_its_entries() -> None:
     assert store.view(43, faction_id=4).unattributed == 0
 
 
-def test_the_agent_turn_route_refuses_an_unscoped_read() -> None:
+def test_the_agent_turn_route_refuses_an_unscoped_read(monkeypatch: pytest.MonkeyPatch) -> None:
     """The gate is a 422, not a default — see the endpoint's own note on why.
 
     Measured before this landed: an unscoped read returned 49 of another faction's base names.
     """
+    monkeypatch.setenv("NA_ALLOW_BLIND", "1")  # tests the route, not retrieval (aegis-09m)
     client = TestClient(create_app(brain=agent_brain()))
     refused = client.post("/agent/turn", json={"turn": 43})
     assert refused.status_code == 422
     assert "faction" in refused.json()["detail"]
 
 
-def test_the_agent_turn_route_answers_a_scoped_read() -> None:
+def test_the_agent_turn_route_answers_a_scoped_read(monkeypatch: pytest.MonkeyPatch) -> None:
     """The positive half. A 422 on everything would pass the test above just as well."""
+    monkeypatch.setenv("NA_ALLOW_BLIND", "1")  # tests the route, not retrieval (aegis-09m)
     client = TestClient(create_app(brain=agent_brain()))
     client.post("/turn", json=two_faction_turn().model_dump())
     view = client.post("/agent/turn", json={"turn": 43, "faction_id": 3}).json()

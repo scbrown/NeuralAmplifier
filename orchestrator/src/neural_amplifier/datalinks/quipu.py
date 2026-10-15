@@ -393,6 +393,16 @@ class QuipuRetriever:
                 raise RuntimeError("faction_id is required for cached Quipu grounding")
             if primed is None:
                 raise RuntimeError("Quipu grounding was not primed for this faction and turn")
+            if not primed:
+                # The turn query reads the whole engine rulebook, so zero rows is never "this
+                # turn needs no rules". It is a dataset this server does not hold: quipu answers
+                # a query scoped to an unregistered graph or dataset with an empty result, not
+                # an error (measured, quipu 0.14.0, aegis-09m). Before this check that was a
+                # clean decision with no facts, which no record could tell from a grounded one.
+                raise RuntimeError(
+                    f"Quipu dataset {self.dataset} returned 0 rows at the turn boundary; "
+                    "it is missing or empty on this server"
+                )
             rows = primed
         else:
             rows = primed if primed is not None else self.query(build_query(asked, self.engine))
