@@ -1,0 +1,67 @@
+{
+  "note": "Does the model change the answer on byte-identical prompts? (aegis-5xi)",
+  "arms": {
+    "base_production_turn135.all": {
+      "task_sha256": "c85817bbabec47f16be87559ff254f6ad7f5b044a577de94f223de506d5aff57"
+    },
+    "base_production_turn135.ranked": {
+      "task_sha256": "d029b744db2dda6689251180c6917e5c59646dd4f53a17ea713fcf9c93961986"
+    },
+    "base_production_turn42.all": {
+      "task_sha256": "9e622759b4a9d2607857f648e3bf8dcf64562e57e9da1d6b1c0d9691523d914e"
+    },
+    "base_production_turn42.ranked": {
+      "task_sha256": "114c2114198556363bcbd362bab378c04e093b0f1e84db6bc1be56b94a0146b5"
+    },
+    "faction_se_turn135.all": {
+      "task_sha256": "0e5328c2eef7f967a5ff3cba365e98b4fe3d37cdbbf42ffddc2661217a13f5be"
+    },
+    "faction_se_turn135.ranked": {
+      "task_sha256": "7d8d86e00e7ed5aea6b8adcda669b649bba0a8539b1f2ef4d6aaaa36c78d5e36"
+    },
+    "faction_tech_turn135.all": {
+      "task_sha256": "d52347fb4917ebbb1a1fd8cdeb946b3d78f6dfaf5311369eb6f50b9cebc43548"
+    },
+    "faction_tech_turn135.ranked": {
+      "task_sha256": "122ab818b2a7d6fd49fecc8b4f2cfa08500a5b732f8b29111bff4d08b0fce343"
+    }
+  },
+  "models": {
+    "claude-haiku-4-5": {
+      "answers": "na-htm/{arm}.answers.jsonl",
+      "answered": "2026-08-22",
+      "how": "na-htm's committed run: one independent agent per decision (evals/README.md)"
+    },
+    "claude-opus-5-5": {
+      "answers": "na-xmd/claude-opus-5-5/{arm}.answers.jsonl",
+      "answered": "2026-10-15",
+      "how": "claude -p --model claude-opus-5-5 --output-format json --tools '' --strict-mcp-config --setting-sources '' --no-session-persistence, system prompt 'Follow the task in the user message exactly. Output only what it asks for.', task.txt on stdin; one fresh process per answer",
+      "spend_usd": 0.8052,
+      "latency_ms_p50": 3313
+    }
+  },
+  "pools": {
+    "tech+se": [
+      "faction_se_turn135.all",
+      "faction_se_turn135.ranked",
+      "faction_tech_turn135.all",
+      "faction_tech_turn135.ranked"
+    ],
+    "production": [
+      "base_production_turn135.all",
+      "base_production_turn135.ranked",
+      "base_production_turn42.all",
+      "base_production_turn42.ranked"
+    ],
+    "all": [
+      "base_production_turn135.all",
+      "base_production_turn135.ranked",
+      "base_production_turn42.all",
+      "base_production_turn42.ranked",
+      "faction_se_turn135.all",
+      "faction_se_turn135.ranked",
+      "faction_tech_turn135.all",
+      "faction_tech_turn135.ranked"
+    ]
+  }
+}

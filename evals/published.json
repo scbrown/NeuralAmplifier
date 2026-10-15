@@ -90,6 +90,12 @@
       "tables": [],
       "derives": [],
       "retained": "the current and trigger arm results, plus the current arm's per-run trail and the scripts that generated and inspect them. The pre-registered reading and measured result are recorded in NOTES.md; no numeric table is published."
+    },
+    {
+      "id": "na-xmd",
+      "tables": ["Opus 5.5 vs Haiku 4.5 on na-htm's committed prompts"],
+      "derives": [["evals/cross_model.py", "evals/runs/na-xmd"]],
+      "retained": "Opus 5.5 answers per arm. The Haiku answers and the task bytes are na-htm's, pinned by sha256 in the manifest."
     }
   ]
 }
