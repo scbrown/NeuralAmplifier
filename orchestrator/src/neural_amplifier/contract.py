@@ -538,3 +538,9 @@ class Orders(_Model):
     #: different request threads, and a `last_usage` attribute on a shared brain would attribute
     #: one decision's cost to the other — rarely, and undetectably.
     usage: dict[str, int] | None = Field(default=None, exclude=True)
+    #: The model the provider says ANSWERED, when that differs from what the brain was
+    #: configured with. The claude-code lane runs unpinned on purpose, so its configured model
+    #: is None and the record used to say `claude-code` on every row: 1,817 of 1,817 in ladder
+    #: attempt 4, which made "which model hit this wall" unanswerable (aegis-5xi). Excluded and
+    #: brain-set for the same reasons as `usage`.
+    served_model: str | None = Field(default=None, exclude=True)
