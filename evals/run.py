@@ -31,6 +31,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import build_history  # noqa: E402
+import cross_model  # noqa: E402
 import grounding_compaction  # noqa: E402
 import hurry_grounding  # noqa: E402
 import multi_decision_ranking  # noqa: E402
@@ -70,6 +71,13 @@ EVALS = {
         "UNANSWERED — built and self-tested, not yet run. na-373's question, re-posed over four\n"
         " decisions whose fact pools are near-disjoint, so no single fact can carry the number.\n"
         " Answering it is a paid run; the design, the dominance gate and the null are in place.",
+    ),
+    "na-xmd": (
+        cross_model,
+        "Does the model change the answer on byte-identical prompts?",
+        "Partly. Opus 5.5 vs Haiku 4.5 on na-htm's committed bytes: legality equal (80/80 each);\n"
+        " modal stability on tech+SE 37/40 vs 22/40 (Fisher p=0.0002), production 32/40 vs 37/40\n"
+        " (p=0.19, not significant). Steadier is not stronger: no outcome is measured here.",
     ),
 }
 
@@ -116,7 +124,9 @@ def main() -> None:
         stale = 0
         for name in ids:
             module, _, _ = EVALS[name]
-            stale += check_prompts(RUNS / name, module.arms(args.links), name)
+            # An eval over pinned bytes (na-xmd) checks those bytes; it has no prompts to regenerate.
+            own = getattr(module, "check", None)
+            stale += own(args.links) if own else check_prompts(RUNS / name, module.arms(args.links), name)
         raise SystemExit(1 if stale else 0)
 
     if args.eval_id not in EVALS:
