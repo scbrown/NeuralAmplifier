@@ -537,7 +537,9 @@ class Orchestrator:
 
             # Precedence is order: engine legality first, so the guard never sees an
             # action the engine did not offer and cannot re-add one.
-            legal = checked.orders(notes=orders.notes, usage=orders.usage)
+            legal = checked.orders(
+                notes=orders.notes, usage=orders.usage, served_model=orders.served_model
+            )
             ruling = rule(self.guard, legal, asked)
             allowed = apply(legal, ruling)
 
@@ -1019,7 +1021,8 @@ class Orchestrator:
             degraded=orders.degraded,
             degrade_reason=degrade_reason,
             fairness_profile=[h.id for h in fairness.handicaps] if fairness else [],
-            model=getattr(self.brain, "model", None) or self.brain.name,
+            # What answered, when the provider said; else what was configured; else the lane.
+            model=orders.served_model or getattr(self.brain, "model", None) or self.brain.name,
             # What the call was actually billed for. Absent on a scripted or degraded decision,
             # where zeroes are the truth rather than a gap (na-6db: the field existed and was
             # structurally zero on every record, which reads as a measured "free").

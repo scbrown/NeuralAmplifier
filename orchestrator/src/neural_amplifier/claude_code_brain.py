@@ -331,7 +331,53 @@ class ClaudeCodeBrain:
         if orders is None:
             self.malformed += 1
             raise BrainError("could not find orders JSON in the reply")
+        orders.usage = _usage_of_envelope(envelope)
+        orders.served_model = _served_model(envelope)
         return orders
+
+
+def _usage_of_envelope(envelope: dict[str, object]) -> dict[str, int] | None:
+    """Tokens this call was billed for, from the ``claude -p`` JSON envelope.
+
+    Same keys and provider semantics as the API lane (`ClaudeBrain._usage_of`): ``input`` is
+    the uncached input, ``cached`` the cache reads, plus ``cache_write`` because this lane
+    caches its long system prompt on every first call. Before aegis-5xi nothing read the
+    envelope's usage and every record said 0/0 (measured: a $0.21 call recorded as free).
+    Defensive because usage is telemetry, never a reason to fail a decided turn.
+    """
+    usage = envelope.get("usage")
+    if not isinstance(usage, dict):
+        return None
+    out: dict[str, int] = {}
+    for key, field in (
+        ("input", "input_tokens"),
+        ("output", "output_tokens"),
+        ("cached", "cache_read_input_tokens"),
+        ("cache_write", "cache_creation_input_tokens"),
+    ):
+        value = usage.get(field)
+        if isinstance(value, int):
+            out[key] = value
+    return out or None
+
+
+def _served_model(envelope: dict[str, object]) -> str | None:
+    """The model that answered, as Claude Code reports it in ``modelUsage``.
+
+    The lane is unpinned by design, so this is the only place the answer can come from. If
+    more than one model appears, the one that produced the most output answered the decision;
+    the others are Claude Code's own helpers.
+    """
+    per_model = envelope.get("modelUsage")
+    if not isinstance(per_model, dict) or not per_model:
+        return None
+
+    def produced(item: tuple[str, object]) -> int:
+        value = item[1].get("outputTokens") if isinstance(item[1], dict) else None
+        return value if isinstance(value, int) else -1
+
+    name, _ = max(per_model.items(), key=produced)
+    return name or None
 
 
 def _strip_issuing(system: str) -> str:
