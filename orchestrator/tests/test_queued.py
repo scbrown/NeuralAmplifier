@@ -283,7 +283,9 @@ def test_a_faction_scope_answer_and_a_base_answer_are_different_entries() -> Non
     assert len(store.standing()) == 2
 
 
-def test_the_queue_endpoints_work_when_the_brain_is_an_attached_agent() -> None:
+def test_the_queue_endpoints_work_when_the_brain_is_an_attached_agent(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """The regression test for a shadowing bug mypy found and no test could see.
 
     `create_app` binds the AgentBrain's DecisionQueue to a local called `queue`, in the same
@@ -298,6 +300,7 @@ def test_the_queue_endpoints_work_when_the_brain_is_an_attached_agent() -> None:
     from neural_amplifier.agent_brain import AgentBrain
     from neural_amplifier.doorbell import Doorbell
 
+    monkeypatch.setenv("NA_ALLOW_BLIND", "1")  # tests the queue, not retrieval (aegis-09m)
     brain = AgentBrain(doorbell=Doorbell(target="", enabled=False), timeout=10)
     client = TestClient(create_app(brain=brain))
 

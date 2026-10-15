@@ -59,6 +59,10 @@ def test_the_wrong_brain_is_blocking_not_a_warning(monkeypatch: pytest.MonkeyPat
     assert report.blocked is True
 
 
+#: What a gated orchestrator reports when its start probe read the dataset (aegis-09m).
+GROUNDED = {"knowledge": {"state": "grounded", "brain": "agent", "probe_rows": 374}}
+
+
 def test_an_unreachable_orchestrator_is_blocking(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(pre, "get_json", lambda url, timeout=2.0: None)
 
@@ -70,13 +74,46 @@ def test_an_unreachable_orchestrator_is_blocking(monkeypatch: pytest.MonkeyPatch
 
 def test_the_agent_brain_passes(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
-        pre, "get_json", lambda url, timeout=2.0: {"brain": "agent", "game_id": "game-1"}
+        pre,
+        "get_json",
+        lambda url, timeout=2.0: {"brain": "agent", "game_id": "game-1", **GROUNDED},
     )
 
     report = pre.Report()
     pre.check_orchestrator(report, "http://x")
 
     assert rows(report)["orchestrator"][0] == pre.OK
+    assert rows(report)["grounding"][0] == pre.OK
+    assert report.blocked is False
+
+
+def test_an_orchestrator_that_cannot_say_it_is_grounded_blocks(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """aegis-09m: 8,607 live decisions ran with zero facts while every check read green."""
+    monkeypatch.setattr(
+        pre, "get_json", lambda url, timeout=2.0: {"brain": "agent", "game_id": "game-1"}
+    )
+
+    report = pre.Report()
+    pre.check_orchestrator(report, "http://x")
+
+    assert rows(report)["grounding"] == (pre.FAIL, "blocking")
+    assert report.blocked is True
+
+
+def test_a_deliberately_blind_run_warns_and_plays(monkeypatch: pytest.MonkeyPatch) -> None:
+    health = {
+        "brain": "agent",
+        "game_id": "g",
+        "knowledge": {"state": "blind-allowed", "reason": "probe returned 0 rows"},
+    }
+    monkeypatch.setattr(pre, "get_json", lambda url, timeout=2.0: health)
+
+    report = pre.Report()
+    pre.check_orchestrator(report, "http://x")
+
+    assert rows(report)["grounding"] == (pre.WARN, "optional")
     assert report.blocked is False
 
 
@@ -90,6 +127,7 @@ def test_a_failing_telemetry_sink_does_not_block_the_game(monkeypatch: pytest.Mo
             "brain": "agent",
             "game_id": "g",
             "telemetry": {"healthy": False, "failures": ["DecisionLog"]},
+            **GROUNDED,
         },
     )
 

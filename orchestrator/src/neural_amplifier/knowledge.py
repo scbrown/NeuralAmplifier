@@ -122,6 +122,11 @@ class Knowledge:
     hank_absent: bool = False
     quipu_latency_ms: int = 0
     hank_latency_ms: int = 0
+    #: WHY retrieval was degraded or absent, in the retriever's own words. Before aegis-09m the
+    #: record kept only the boolean: 701, 723 and 5,366 live Haiku decisions all read
+    #: `quipu_degraded: true` and none said why, so the cause had to be reconstructed months
+    #: later from code and a replayed store.
+    quipu_reason: str | None = None
 
     @property
     def cited(self) -> int:
@@ -273,6 +278,9 @@ def summarise(
         hank_absent=not guarded,
         quipu_latency_ms=grounding.latency_ms,
         hank_latency_ms=ruling.latency_ms,
+        quipu_reason=(grounding.reason or None)
+        if (grounding.degraded or not grounding.facts)
+        else None,
     )
 
 

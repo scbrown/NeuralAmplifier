@@ -74,6 +74,8 @@ class KnowledgeBlock(BaseModel):
     #: (``*_degraded``) or ran and found nothing (``quipu_hits == 0``).
     quipu_absent: bool = False
     hank_absent: bool = False
+    #: Why retrieval degraded or was absent, as the retriever said it (aegis-09m).
+    quipu_reason: str | None = None
 
     @property
     def utilisation(self) -> float | None:

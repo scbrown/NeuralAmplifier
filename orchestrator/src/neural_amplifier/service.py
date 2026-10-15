@@ -207,6 +207,62 @@ def _resolve_deferrals_for(
     return [d.id for d in closed]
 
 
+#: Brains whose decisions are supposed to be informed by the knowledge layer. The scripted brain
+#: (CI, tests, the default) never reads grounding, so a blind start is not a defect there.
+_KNOWLEDGE_CONSUMERS = frozenset({"claude", "claude-code", "agent"})
+
+
+class BlindStartRefused(RuntimeError):
+    """An LLM run would start with a knowledge layer that cannot deliver a single fact."""
+
+
+def knowledge_gate(
+    brain_name: str, retriever: object | None, allow_blind: bool
+) -> dict[str, object]:
+    """Prove at START that retrieval can ground a decision, or refuse to serve an LLM run.
+
+    aegis-09m measured 0 of 8,607 live LLM decisions carrying a retrieved fact, across four
+    games, each blind in a different way: a retriever that failed on every call, one that was
+    never configured, and (on current main, reproduced) a dataset the server does not hold,
+    which quipu answers with zero rows and no error. All of them served a whole game, and
+    nothing said so until the logs were read afterwards. One positive-control query here, the
+    same turn-boundary read the game makes, turns each of those into a refusal at launch.
+
+    ``NA_ALLOW_BLIND=1`` is the explicit escape for a run that is MEANT to be ungrounded (an
+    ablation arm). It is reported as such, never as grounded.
+    """
+    if brain_name not in _KNOWLEDGE_CONSUMERS:
+        return {"state": "not-required", "brain": brain_name}
+    inner = getattr(retriever, "inner", retriever)  # RememberingRetriever wraps the store reader
+    reason: str | None = None
+    rows: int | None = None
+    if inner is None:
+        reason = "no retriever configured (set NA_QUIPU_URL)"
+    elif not (hasattr(inner, "query") and hasattr(inner, "engine")):
+        reason = f"retriever {type(inner).__name__} cannot be probed"
+    else:
+        from .datalinks.quipu import build_turn_query
+
+        try:
+            rows = len(inner.query(build_turn_query(inner.engine)))
+        except Exception as exc:  # noqa: BLE001 — the probe reports, the gate decides
+            reason = f"probe query failed: {type(exc).__name__}: {exc}"[:300]
+        else:
+            if rows == 0:
+                reason = (
+                    f"probe returned 0 rows from {getattr(inner, 'dataset', None) or 'the default graph'}"
+                    f" on {getattr(inner, 'base_url', '?')}"
+                )
+    if reason is None:
+        return {"state": "grounded", "brain": brain_name, "probe_rows": rows}
+    if not allow_blind:
+        raise BlindStartRefused(
+            f"refusing to start a {brain_name} run blind: {reason}. Fix the knowledge layer, or set"
+            " NA_ALLOW_BLIND=1 for a run that is meant to be ungrounded."
+        )
+    return {"state": "blind-allowed", "brain": brain_name, "probe_rows": rows, "reason": reason}
+
+
 def _build_retriever(config: Config) -> object | None:
     """Quipu-backed grounding, opt-in via ``knowledge.quipu_url``.
 
@@ -507,6 +563,14 @@ def create_app(
         jev=from_env(),
     )
     app.state.orchestrator = orchestrator
+    # At start, like a malformed na.toml: a game that would run blind is refused before its
+    # first turn, not discovered from its decision log afterwards (aegis-09m).
+    knowledge = knowledge_gate(
+        orchestrator.brain.name,
+        resolved_retriever,
+        allow_blind=os.environ.get("NA_ALLOW_BLIND", "").strip() == "1",
+    )
+    app.state.knowledge = knowledge
 
     # The observer lane consumes the same immutable run evidence as replay.  It is mounted on
     # the orchestrator process for a zero-configuration first demo, but has no reference to the
@@ -603,6 +667,9 @@ def create_app(
             "status": "ok",
             "brain": orchestrator.brain.name,
             "game_id": orchestrator.game_id,
+            # Read back by the launch identity check next to `brain` (aegis-09m): a run is an
+            # informed LLM run only when this says `grounded`.
+            "knowledge": knowledge,
             # A run whose exporter is quietly failing otherwise looks identical
             # to a healthy one.
             "telemetry": {

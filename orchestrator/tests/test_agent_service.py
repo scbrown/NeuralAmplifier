@@ -38,6 +38,13 @@ WORLD_VIEW = {
 }
 
 
+@pytest.fixture(autouse=True)
+def _ungrounded_by_design(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Every service here is deliberately ungrounded: this file tests the agent hand-off, not
+    retrieval, so it opts in to starting blind exactly as an ablation arm would (aegis-09m)."""
+    monkeypatch.setenv("NA_ALLOW_BLIND", "1")
+
+
 @pytest.fixture
 def agent_app(tmp_path):
     """A service whose brain is an attached agent, with the doorbell muted."""

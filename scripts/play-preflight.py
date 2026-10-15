@@ -106,6 +106,30 @@ def check_orchestrator(report: Report, url: str) -> None:
 
     report.add(OK, True, "orchestrator", f"up at {url}, brain=agent, game {health.get('game_id')}")
 
+    # The orchestrator's own start gate is the authority on grounding (aegis-09m): it ran the
+    # turn-boundary read against the configured DATASET. The quipu check below asks the default
+    # graph a trivial question, which a store without the dataset answers happily, and that is
+    # how a run decides with zero facts while every check reads green.
+    knowledge = health.get("knowledge")
+    state = knowledge.get("state") if isinstance(knowledge, dict) else None
+    if state == "grounded":
+        report.add(OK, True, "grounding", f"start probe read {knowledge.get('probe_rows')} rows")
+    elif state == "blind-allowed":
+        report.add(
+            WARN,
+            False,
+            "grounding",
+            f"started blind on purpose (NA_ALLOW_BLIND): {knowledge.get('reason')}",
+        )
+    else:
+        report.add(
+            FAIL,
+            True,
+            "grounding",
+            "this orchestrator does not report its knowledge state — it predates the start gate, "
+            "so nothing proves the game will be grounded",
+        )
+
     telemetry = health.get("telemetry")
     if isinstance(telemetry, dict) and not telemetry.get("healthy", True):
         report.add(
