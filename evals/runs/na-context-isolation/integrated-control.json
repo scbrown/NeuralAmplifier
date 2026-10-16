@@ -1,0 +1,14 @@
+{
+  "tier": "llm",
+  "degraded": false,
+  "model": "claude-opus-5-5",
+  "tokens": {
+    "input": 2,
+    "output": 397,
+    "cached": 3233,
+    "cache_write": 1345
+  },
+  "latency_ms": 5983,
+  "cost_usd": 0.0193546,
+  "orders_validated": true
+}

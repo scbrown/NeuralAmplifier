@@ -8,7 +8,8 @@ game, which is exactly what a stability sample must not be. Run the same world v
 ten times and you measure a conversation, not a decision.
 
 ``claude -p`` gives the same model with none of that. Each call is a fresh process with a fresh
-context, so N runs are N independent samples — the property the whole measurement discipline
+context. Safe mode suppresses host customizations, tools and MCP are disabled, and a scratch
+working directory separates each invocation from project files. N runs are N independent samples — the property the whole measurement discipline
 rests on. It also needs no API key: it uses whatever credentials Claude Code already has, which
 is why the "this needs a paid API call" framing that :class:`~.brain.ClaudeBrain` implied is no
 longer the only option.
@@ -30,6 +31,7 @@ import json
 import os
 import re
 import subprocess
+import tempfile
 import time
 from pathlib import Path
 
@@ -278,6 +280,18 @@ class ClaudeCodeBrain:
             "-p",
             "--output-format",
             "json",
+            # Keep authentication and managed policy, without host instructions,
+            # memory, hooks, skills, plugins or MCP entering the game decision.
+            "--safe-mode",
+            "--setting-sources",
+            "",
+            "--tools",
+            "",
+            "--strict-mcp-config",
+            "--mcp-config",
+            '{"mcpServers":{}}',
+            "--disable-slash-commands",
+            "--no-session-persistence",
             "--system-prompt",
             self._system(),
         ]
@@ -288,13 +302,15 @@ class ClaudeCodeBrain:
         attempts = transient_attempts()
         for attempt in range(attempts):
             try:
-                done = subprocess.run(
-                    argv,
-                    input=payload,
-                    capture_output=True,
-                    text=True,
-                    timeout=self.timeout,
-                )
+                with tempfile.TemporaryDirectory(prefix="na-claude-") as cwd:
+                    done = subprocess.run(
+                        argv,
+                        input=payload,
+                        capture_output=True,
+                        text=True,
+                        timeout=self.timeout,
+                        cwd=cwd,
+                    )
             except subprocess.TimeoutExpired as exc:
                 _record_provider_call("failure", "timeout")
                 raise BrainError(f"claude -p timed out after {self.timeout}s") from exc
