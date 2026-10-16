@@ -168,14 +168,14 @@ def test_deterministic_surface_stays_deterministic(thinker_base):
     assert result.record.jev_tier["suggestion"] == "bigger-model"
 
 
-def test_service_wires_optional_guard_and_tier(monkeypatch):
+def test_service_wires_optional_guard_and_tier(monkeypatch, tmp_path):
     from neural_amplifier import jev
     from neural_amplifier.hank import GuardChain
     from neural_amplifier.service import create_app
 
     fake = Fake()
     monkeypatch.setattr(jev, "from_env", lambda: fake)
-    monkeypatch.setenv("NA_CONFIG", "/nonexistent/na.toml")
+    monkeypatch.setenv("NA_CONFIG", str(tmp_path / "missing-na.toml"))
     app = create_app(brain=ScriptedBrain(), sinks=[])
     assert app.state.orchestrator.jev is fake
     assert isinstance(app.state.orchestrator.guard, GuardChain)

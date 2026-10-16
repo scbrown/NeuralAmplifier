@@ -11,6 +11,18 @@
   ],
   "runs": [
     {
+      "id": "na-context-isolation",
+      "tables": [
+        "one paired CLI context-isolation control, not gameplay strength"
+      ],
+      "derives": [
+        [
+          "evals/runs/na-context-isolation/score.py"
+        ]
+      ],
+      "retained": "Provider usage summaries, byte hashes, legal control choices and integrated Orchestrator validation. No credentials, host context or model transcript retained; one sample per arm, no strategy/performance conclusion."
+    },
+    {
       "id": "na-6db",
       "tables": ["M1 baseline vs brain trajectory", "M2 baseline vs brain-directive"],
       "derives": [

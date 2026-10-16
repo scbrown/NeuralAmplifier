@@ -116,6 +116,14 @@ brain never knows which game it's driving — it speaks one [contract](docs/cont
   require `brain=claude-code` (or the intended paid brain) from `/health`, then require
   `llm_decisions > 0` from `/coverage` after play. `just play check <port>` performs the
   launch-side identity checks.
+The `claude-code` lane requires Claude Code with `--safe-mode` support. Each call
+uses an empty temporary working directory, the explicit NA system prompt, no tools or MCP
+servers, and no session persistence. Safe mode excludes host memory and customizations while
+retaining normal authentication and managed policy. Unsupported CLI flags fail the decision
+through the existing safe fallback; the lane never copies credentials into a new config tree.
+See [the isolated-context control](evals/runs/na-context-isolation/NOTES.md) for measured token
+usage and its limits.
+
 - `NA_BRAIN=agent` makes the orchestrator *serve* decisions instead of calling a model. Claude
   Code (or anything speaking MCP) attaches, collects the world view, and answers.
 - Control inverts, invariants do not: an agent is not a privileged client, and its orders go

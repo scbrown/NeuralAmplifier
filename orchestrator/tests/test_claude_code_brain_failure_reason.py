@@ -346,3 +346,62 @@ def test_the_plain_json_contract_names_the_commitment_horizon() -> None:
     system = ClaudeCodeBrain()._system()
 
     assert '"horizon_turn": <future turn' in system
+
+
+def test_decision_isolates_host_context_without_copying_auth(
+    monkeypatch: Any, tmp_path: Path
+) -> None:
+    import neural_amplifier.claude_code_brain as mod
+
+    world = _world()
+    brain = ClaudeCodeBrain(model="explicit-model")
+    parent = tmp_path / "host-project"
+    parent.mkdir()
+    (parent / "CLAUDE.md").write_text("Host instructions must not enter a game decision.")
+    monkeypatch.chdir(parent)
+    invocations: list[Path] = []
+
+    def fake_run(argv: list[str], **kwargs: Any) -> subprocess.CompletedProcess[str]:
+        for flag in (
+            "--safe-mode",
+            "--strict-mcp-config",
+            "--disable-slash-commands",
+            "--no-session-persistence",
+        ):
+            assert flag in argv
+        for flag in ("--setting-sources", "--tools"):
+            assert argv[argv.index(flag) + 1] == ""
+        assert json.loads(argv[argv.index("--mcp-config") + 1]) == {"mcpServers": {}}
+        assert argv[argv.index("--system-prompt") + 1] == brain._system()
+        assert argv[argv.index("--model") + 1] == "explicit-model"
+        assert "--bare" not in argv and "--dangerously-skip-permissions" not in argv
+        assert "env" not in kwargs  # retain normal authentication; never copy credentials
+        assert kwargs["input"] == world.model_dump_json()
+        assert kwargs["timeout"] == brain.timeout
+        cwd = Path(kwargs["cwd"])
+        assert cwd != parent and cwd.is_dir() and not list(cwd.iterdir())
+        invocations.append(cwd)
+        return subprocess.CompletedProcess(argv, 0, _reply(world.action_space[0].id), "")
+
+    monkeypatch.setattr(mod.subprocess, "run", fake_run)
+    for _ in range(2):
+        orders = brain.decide(world)
+        assert orders.choices[0].action_id == world.action_space[0].id
+    assert len(set(invocations)) == 2
+    assert not any(p.exists() for p in invocations)
+    assert (parent / "CLAUDE.md").is_file()
+
+
+def test_scratch_directory_is_removed_on_timeout(monkeypatch: Any) -> None:
+    import neural_amplifier.claude_code_brain as mod
+
+    paths: list[Path] = []
+
+    def timeout(argv: list[str], **kwargs: Any) -> subprocess.CompletedProcess[str]:
+        paths.append(Path(kwargs["cwd"]))
+        raise subprocess.TimeoutExpired(argv, 1)
+
+    monkeypatch.setattr(mod.subprocess, "run", timeout)
+    with pytest.raises(mod.BrainError, match="timed out"):
+        ClaudeCodeBrain().decide(_world())
+    assert paths and not paths[0].exists()
