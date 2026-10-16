@@ -1,6 +1,6 @@
 [project]
 name = "neural-amplifier"
-version = "0.2.0"
+version = "0.3.0"
 description = "An LLM brain for Sid Meier's Alpha Centauri — the platform-agnostic orchestrator"
 readme = "README.md"
 requires-python = ">=3.11"
