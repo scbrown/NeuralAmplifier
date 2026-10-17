@@ -1,0 +1,6 @@
+Script started on 2026-10-17 07:14:37-04:00 [COMMAND="just --command python3 release-notes/probes/v0.3.1/reproduce.py" <not executed on terminal>]
+Same package-version read: published tag 0.3.0 -> candidate 0.3.1
+Lock, built wheel METADATA and sdist PKG-INFO: 0.3.1
+Candidate artifacts only; no tag publication or runtime installation.
+
+Script done on 2026-10-17 07:14:37-04:00 [COMMAND_EXIT_CODE="0"]
