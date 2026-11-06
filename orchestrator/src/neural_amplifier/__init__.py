@@ -5,6 +5,8 @@ Speaks only ``docs/contract.md`` and never learns which engine it is driving.
 
 from __future__ import annotations
 
+from importlib.metadata import version
+
 from .brain import Brain, BrainError, ClaudeBrain, ScriptedBrain
 from .contract import Action, Choice, Fairness, Orders, WorldView
 from .coverage import Report, report
@@ -50,4 +52,4 @@ __all__ = [
     "validate",
 ]
 
-__version__ = "0.1.0"
+__version__ = version("neural-amplifier")
