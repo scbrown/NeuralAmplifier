@@ -7,6 +7,7 @@ import json
 import sys
 from pathlib import Path
 
+from . import __version__
 from .decisions import DecisionLog
 
 
@@ -41,6 +42,7 @@ def missing_input(path: Path, what: str, *, directory: bool = False) -> str | No
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="neural-amplifier")
+    parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
     sub = parser.add_subparsers(dest="command", required=True)
 
     serve = sub.add_parser("serve", help="run the orchestrator HTTP service")
