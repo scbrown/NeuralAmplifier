@@ -96,7 +96,9 @@ jobs:
           dll=$(find build -name thinker.dll -print -quit)
           test -n "$dll" || { echo "thinker.dll was not produced"; exit 1; }
           file "$dll"
-          file "$dll" | grep -q "PE32 executable (DLL)" \
+          # Newer file(1) prints "PE32 executable for MS Windows 4.00 (DLL)";
+          # older releases print "PE32 executable (DLL)". Accept both, never PE32+.
+          file "$dll" | grep -qE 'PE32 executable( for MS Windows [0-9.]+)? \(DLL\)' \
             || { echo "not a 32-bit PE DLL"; exit 1; }
       - uses: actions/upload-artifact@v4
         with:
