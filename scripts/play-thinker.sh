@@ -15,6 +15,7 @@
 #   NA_AUTO_TURN=<secs> end our own turn after this long with no turn change
 #   NA_EXIT_TURN=<n>    stop AT ABSOLUTE TURN n (docs/headless-harness.md §3.2)
 #   NA_TIMEOUT=<secs>   kill the run if it has not stopped by then (§3.3)
+#   NA_XVFB_SCREEN=WxHxD headless only: Xvfb screen (default: thinker.ini window size)
 #
 # NA_AUTO_TURN is what makes the other two mean anything. A loaded save resumes
 # at the PLAYER's turn and the engine then waits for the player, so without it an
@@ -659,8 +660,15 @@ cd "$PLAY_DIR"
 rc=0
 if [ "$cmd" = "headless" ]; then
     command -v xvfb-run >/dev/null || die "xvfb-run missing — run scripts/setup-host.sh"
-    log "launching on a virtual display (Xvfb)"
-    "${timeout_args[@]}" xvfb-run -a --server-args="-screen 0 1280x1024x24" \
+    # Size the virtual screen from the game's own window, never a fixed 1280x1024. A copy staged
+    # from an attended install keeps window_width/height=2560x1440, and a prefix that was ever
+    # used attended keeps a Wine virtual desktop at that size; either one on a smaller Xvfb
+    # screen dies at X_CreateWindow with BadWindow before the main menu (aegis-8fye.1, vati).
+    xw="$(grep -oP '^window_width=\K[0-9]+' "$INI" 2>/dev/null || true)"
+    xh="$(grep -oP '^window_height=\K[0-9]+' "$INI" 2>/dev/null || true)"
+    screen="${NA_XVFB_SCREEN:-${xw:-1280}x${xh:-1024}x24}"
+    log "launching on a virtual display (Xvfb $screen)"
+    "${timeout_args[@]}" xvfb-run -a --server-args="-screen 0 $screen" \
         bash -c 'wine thinker.exe "$@" && wineserver -w' _ \
         "${resume_args[@]}" "${exit_args[@]}" || rc=$?
 else
