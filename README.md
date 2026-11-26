@@ -65,11 +65,13 @@ The brain never learns which engine it is driving — Thinker and GLSMAC meet it
   > skip 9            # scout holds
 ```
 
-Same loop, two modes: **autonomous opponent** or **human copilot**.
+Same loop, two modes: **autonomous opponent**, which is built, and **human copilot**, which is
+designed and not built (see **What's Next**).
 
 > The transcript above is the real record shape — surfaces, metrics, history, action space,
-> guard chain and the post-apply check are all wired and tested. What has *not* happened yet is
-> a decision executing inside a running game; see **Coverage & Plan**.
+> guard chain and the post-apply check are all wired and tested, and decisions have executed
+> inside running games. What has *not* happened yet is a completed full game, or a person
+> playing with or against the brain; see **Coverage & Plan** and **What's Next**.
 
 ## 🤔 Why Neural Amplifier?
 
@@ -79,7 +81,7 @@ Same loop, two modes: **autonomous opponent** or **human copilot**.
 | Explains *why* it made a move | ❌ | ❌ | ✅ |
 | Every input fully inspectable | ❌ | ⚠️ | ✅ |
 | Plays fair (fog-of-war respected) | ⚠️ (often cheats) | ⚠️ | ✅ |
-| Doubles as a human copilot | ❌ | ❌ | ✅ |
+| Doubles as a human copilot | ❌ | ❌ | 🚧 designed |
 | Grounded in the game's rules + real strategy, not hard-coded heuristics | ❌ | ❌ | ✅ |
 
 > **On "plays fair":** that's a design commitment, not a freebie. SMAC hands non-human factions
@@ -110,20 +112,20 @@ brain never knows which game it's driving — it speaks one [contract](docs/cont
 
 **🎮 The brain is pluggable — and can be an agent in your terminal**
 
-- `NA_BRAIN=claude-code` runs the model through the host's Claude Code subscription;
-  `NA_BRAIN=claude` uses the Anthropic SDK; `NA_BRAIN=scripted` is the deterministic,
-  no-cost default used by CI. A launch is not an LLM run merely because `/health` is green:
-  require `brain=claude-code` (or the intended paid brain) from `/health`, then require
-  `llm_decisions > 0` from `/coverage` after play. `just play check <port>` performs the
-  launch-side identity checks.
-The `claude-code` lane requires Claude Code with `--safe-mode` support. Each call
-uses an empty temporary working directory, the explicit NA system prompt, no tools or MCP
-servers, and no session persistence. Safe mode excludes host memory and customizations while
-retaining normal authentication and managed policy. Unsupported CLI flags fail the decision
-through the existing safe fallback; the lane never copies credentials into a new config tree.
-See [the isolated-context control](evals/runs/na-context-isolation/NOTES.md) for measured token
-usage and its limits.
-
+- Four brains behind one protocol, chosen with `NA_BRAIN` or `[brain]` in [`na.toml`](na.toml):
+  `scripted` is the deterministic, no-cost default used by CI; `claude` uses the Anthropic SDK;
+  `claude-code` runs the model through the host's Claude Code subscription; `agent` hands
+  decisions to an attached harness.
+- A launch is not an LLM run merely because `/health` is green: require `brain=claude-code` (or
+  the intended paid brain) from `/health`, then require `llm_decisions > 0` from `/coverage`
+  after play. `just play check <port>` performs the launch-side identity checks.
+- The `claude-code` lane requires Claude Code with `--safe-mode` support. Each call is a fresh
+  process in an empty temporary working directory, with the explicit NA system prompt, no tools
+  or MCP servers, and no session persistence. Safe mode excludes host memory and customizations
+  while retaining normal authentication and managed policy. Unsupported CLI flags fail the
+  decision through the existing safe fallback; the lane never copies credentials into a new
+  config tree. See [the isolated-context control](evals/runs/na-context-isolation/NOTES.md) for
+  measured token usage and its limits.
 - `NA_BRAIN=agent` makes the orchestrator *serve* decisions instead of calling a model. Claude
   Code (or anything speaking MCP) attaches, collects the world view, and answers.
 - Control inverts, invariants do not: an agent is not a privileged client, and its orders go
@@ -131,14 +133,19 @@ usage and its limits.
   engine did not offer.
 - Any harness plugs in the same way — it attaches and asks. Neural Amplifier launches nothing.
   See **[docs/agent-play.md](docs/agent-play.md)**.
+- The brain is chosen once per process today, for every faction. Seating a person, a model call
+  and an attached harness in the same game is the next phase; see **What's Next**.
 
 **🔌 Two engine adapters — the hands**
 
 - **Thinker (near-term):** a fork of the MIT/C++ [Thinker](https://github.com/induktio/thinker)
   mod that bridges the original `terranx.exe`'s AI hooks. The **complete, balanced** game —
-  production, tech, diplomacy, real fog — controllable on day one.
+  production, tech, diplomacy, real fog — controllable on day one. The adapter code lives in the
+  fork, [scbrown/thinker](https://github.com/scbrown/thinker); `adapters/thinker/` here holds
+  its notes.
 - **GLSMAC (long-term):** a `.gls.js` mod + a small GSE `http` builtin for the open-source
-  engine. Clean and testable, but its game systems are still being built.
+  engine. Clean and testable, but its game systems are still being built, and this adapter is
+  not scaffolded yet.
 
 **🧠 Two tiers of decision**
 
@@ -234,8 +241,10 @@ choice and records why.
 
 > **Proven in a running game.** Named save fixtures reproduce blocking surfaces, and unattended
 > rows have executed LLM decisions through Wine with brain identity, coverage, degradation,
-> adherence and fair-play read-backs. Long-form ladder evaluation is still in progress; a live
-> turn is proof of the wire, not yet proof of strategic strength.
+> adherence and fair-play read-backs. A live turn is proof of the wire, not of strategic
+> strength: no full game has been completed, and in the measured arms (turns 101–140) no
+> decision was answered by reasoning from an earlier turn and the brain issued no directive of
+> its own. [docs/long-horizon-play.md](docs/long-horizon-play.md) §1 has the numbers.
 
 ### The plan, in dependency order
 
@@ -248,7 +257,7 @@ flowchart LR
 
     A --> B --> C --> D
 
-    subgraph nofb["surfaces with NO native AI path · 21 of 77"]
+    subgraph nofb["surfaces with NO native AI path · 19 of 77"]
         E["<b>0 · build the deterministic tier first</b><br/>in Thinker, as a normal mod feature"]
     end
     E --> A
@@ -261,9 +270,9 @@ flowchart LR
     class D,E todo
 ```
 
-**Step 0 is the one that is easy to skip and expensive to skip.** 21 of the 77 surfaces
-(`surfaces.NO_AI_PATH`) are decisions the native AI *never makes* — `base.abandon`,
-`council.vote`, `diplo.base_swap`. Putting an LLM straight onto those breaks
+**Step 0 is the one that is easy to skip and expensive to skip.** 19 of the 77 surfaces
+(`surfaces.NO_AI_PATH`) are decisions the native AI *never makes* — `base.abandon` and
+`diplo.base_swap` among them. Putting an LLM straight onto those breaks
 [invariant 9](AGENTS.md): *degrade safely.* There is no native choice to fall back to when the
 model is slow, over budget, or wrong, so a failure there stalls or corrupts a turn rather than
 quietly reverting to a competent default.
@@ -274,21 +283,22 @@ tier on top of it. That also means the work is independently useful: a better de
 improves the game whether or not a brain is attached, and it gives the LLM something to be measured
 *against* rather than merely compared to.
 
-One of the 21 turned out **not** to need step 0 at all. `base.retool` already had a working
+One of the 19 turned out **not** to need step 0 at all. `base.retool` already had a working
 deterministic tier folded into `select_build` — a category-crossing penalty of 400, or 800 with a
 secret project at risk. What was missing was never an answer; it was the *record*. Worth stating
 because it is the cheerful failure mode of a list like this: a surface can sit in the
 build-it-first pile for months because nobody read the function that already does the work. The
-other 13 uninstrumented ones were audited in the same pass; `base.retool` was the outlier.
+other uninstrumented ones were audited in the same pass; `base.retool` was the outlier.
 
-Of the 64 not yet instrumented, **25 are `unit`-scope** and mostly stay deterministic on volume
+Of the 63 not yet instrumented, **25 are `unit`-scope** and mostly stay deterministic on volume
 grounds — see [docs/decision-inputs.md](docs/decision-inputs.md) §5 for why, and why revisiting
-them should mean deciding *operations* rather than tile moves. **20 still need their tier built.**
+them should mean deciding *operations* rather than tile moves. **18 still need their tier
+built**, and 19 are not separate decisions at all (below).
 
-The last bucket — "base and faction surfaces with a native path and a safe fallback" — is now
-**empty, and mostly not because it was instrumented.** Ten surfaces were, and reading the fork
-for the rest found that the bucket had been badly overcounted: it was derived from the registry
-partition, which describes decisions *the game has* rather than decision points *the adapter can
+The last bucket — "base and faction surfaces with a native path and a safe fallback" — is **down
+to one, `diplo.tribute`, and mostly not because the rest were instrumented.** Ten surfaces were,
+and reading the fork for the rest found that the bucket had been badly overcounted: it was
+derived from the registry partition, which describes decisions *the game has* rather than decision points *the adapter can
 hook*. Nineteen turned out to be one of three things — already answered under another id
 (`select_build` has one chooser, so the facility pick, the queue and the HQ-relocation test are
 all `base.production`), computed rather than chosen (`mod_base_psych` is a survey; the drone-riot
@@ -300,6 +310,30 @@ prints the split.
 Detail, including the seam and action-space quality per surface:
 **[docs/game-surface.md](docs/game-surface.md) §2.5**. What each surface needs in its world view:
 **[docs/decision-inputs.md](docs/decision-inputs.md)**.
+
+## 🧭 What's Next
+
+**Designed, not built.** [docs/seats-and-policy.md](docs/seats-and-policy.md) is the plan for
+the next phase, and it says in its first lines that nothing in it exists yet. The goal is a game
+a person can sit down to: play with the brain, play against it, and watch it think.
+
+- **Seats.** One faction, one principal, and the drivers that act for it. A person, a stateless
+  model call and an attached agent harness share a game, each behind a token so that faction
+  identity is never something a caller asserts.
+- **Policy.** A seat steers Thinker's deterministic AI for its own faction — expansion, military
+  share, aggression, targets — instead of answering every base. The model sets the posture and
+  the engine's own code executes it, which is also what makes a round fast.
+- **Skills.** Deterministic Starlark scripts over that seat API, stored in Quipu with their
+  trial record and reused in later games. The shape follows
+  [Voyager](https://arxiv.org/abs/2305.16291); the difference is that success is judged by the
+  engine's own metrics rather than by a critic model.
+- **Isolation.** No seat reads another's world view, plans, memory or skill book. A book is
+  private while a game runs and shared when it ends.
+- **A live console.** The dashboard grows a live stream — who is thinking, about what, for how
+  long — with a player view that hides opponents and a spectator view that does not.
+
+The build order starts with what needs no new code: a person on the human slot against one
+LLM-routed opponent.
 
 ## 🧠 Knowledge & Guardrails
 
@@ -368,8 +402,9 @@ and the rollout are in the [design doc](docs/knowledge-architecture.md).
 > **Track A (Thinker) is the current focus** — the complete, balanced game, controllable
 > today. The fork now instruments fourteen decision surfaces and *applies* five of them, intercepts
 > in-game dialogs, and ships a side-effect-free probe for every surface. The wire is tested
-> against real orchestrators and live game fixtures. The remaining honest gap is outcome quality:
-> completing and comparing long rows, not whether the hook fires.
+> against real orchestrators and live game fixtures. The remaining honest gaps are outcome
+> quality — completing and comparing long rows, not whether the hook fires — and a game a person
+> can play with and against the brain, which is **What's Next**.
 
 ```bash
 git clone https://github.com/scbrown/NeuralAmplifier && cd NeuralAmplifier
@@ -381,14 +416,19 @@ just check           # Run the quality gate
 Layout:
 
 ```text
-orchestrator/       Python brain — the LLM decision loop (Claude Agent SDK) · MIT
+orchestrator/       Python decision loop with pluggable brains · MIT
 adapters/
-  thinker/          Current focus: DLL bridge to terranx.exe (MIT)
-  glsmac/           Long-term: .gls.js mod + GSE http builtin (AGPL boundary)
-docs/               contract.md         the world-view / action-space interface
-                    game-surface.md     every decision the game asks + AI coverage matrix
-                    headless-harness.md game fixture + running unattended
-                    observability.md    decision records, tracing, coverage
+  thinker/          Current focus: notes for the DLL bridge (code is in scbrown/thinker, MIT)
+  glsmac/           Long-term: .gls.js mod + GSE http builtin (AGPL boundary; not scaffolded)
+evals/              behavioural evals, their committed runs, and named save fixtures
+policies/           gameplay and edit-time policies, projected from Quipu
+docs/               contract.md          the world-view / action-space interface
+                    game-surface.md      every decision the game asks + AI coverage matrix
+                    agent-play.md        an attached harness as the brain
+                    long-horizon-play.md what a game needs beyond one decision
+                    seats-and-policy.md  the next phase: seats, policy, skills, console
+                    headless-harness.md  game fixture + running unattended
+                    observability.md     decision records, tracing, coverage, dashboard
                     building-and-testing.md, adapter notes, knowledge-architecture.md,
                     strategy-knowledge.md, ontology/, Quipu/Yupana integration docs
 ```
@@ -463,7 +503,7 @@ just test                # Run all tests
 just lint                # Lint everything
 just check               # Full quality gate (pre-commit hooks)
 just orchestrator test   # Component-scoped recipes: <component> <cmd>
-just glsmac test         # GLSMAC adapter (headless --gse-tests)
+just glsmac test         # GLSMAC adapter (headless --gse-tests; a no-op until scaffolded)
 just thinker build       # Thinker adapter (needs the Thinker toolchain)
 just docs check          # Markdown lint, then build the book
 just docs serve          # The docs site at localhost, with hot reload
