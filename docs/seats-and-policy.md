@@ -304,7 +304,7 @@ errors and self-verification. Read from the repository (`voyager/agents/skill.py
 | Self-verification by a critic model | a **success check** written in the metric vocabulary, judged by the engine's own numbers |
 | Automatic curriculum | the strategist's review, and a practice ladder over save fixtures |
 | Chroma plus a directory of files | a governed graph in Quipu |
-| `skill_library_dir` | the seat identity's own Quipu store, attached to every game it plays |
+| `skill_library_dir` | the seat's own book plus the shared commons, attached to every game it plays |
 
 Two of those rows are improvements rather than translations.
 
@@ -346,9 +346,9 @@ def on_decision(view, want_bases, hold_reserve):
   cannot name an action the engine did not offer. Records land at `tier = "skill"` with the
   skill's name and content hash.
 - **Deterministic and hermetic.** No clock, no network, no file, no randomness, a step budget.
-  The recommendation is Starlark, which is built for exactly this and reads like the Python a
-  model writes well (`starlark-pyo3` wraps the Rust implementation). The property that matters
-  is not the language: the same world view must always produce the same answer, because that is
+  The language is Starlark (ruled 2026-11-26), which is built for exactly this and reads like
+  the Python a model writes well; `starlark-pyo3` wraps the Rust implementation. The property
+  that matters is not the language: the same world view must always produce the same answer, because that is
   what lets `neural-amplifier replay` re-run a recorded game against a changed skill with no
   game running and report an exact diff.
 - **Parameters, not literals.** A skill that names base 7 or tile (13, 8) works in one game. A
@@ -380,12 +380,21 @@ Retrieval is Quipu's hybrid search over descriptions, filtered by applicability 
 the strategist chooses, parameterises and composes. That is where the model's judgement goes:
 *which* skills, for *this* board.
 
-### 5.5 Whose library
+### 5.5 Private during the game, shared after it
 
-A library is strategy, so it falls under ruling 4. Each seat identity has its own book, in its
-own Quipu database (§3.2), and takes it into every game. Beside the books sits a **commons**:
-skills an operator has promoted, read-only to every seat, in the same position as the datalinks.
-Promotion is a deliberate act with a record, never a default.
+Ruled 2026-11-26: a skill book is private while a game is in progress and shared once it ends.
+
+- **During a game** a seat reads two things: its own book, in its own Quipu database (§3.2), and
+  the **commons** — every skill shared so far, read-only. What a seat writes or revises
+  mid-game goes to its own book and nowhere else, which is ruling 4 applied to strategy.
+- **The commons is read as of the moment the game started.** Quipu reads are bitemporal, so a
+  seat's retrieval is pinned to the game-start transaction. Nothing published while the game is
+  running can reach an opponent in it, even if another game ends in the meantime.
+- **When the game ends**, each seat's new and changed skills are published to the commons with
+  their trials and provenance. Publication is a recorded step of ending a game, not a side
+  effect of writing a skill, and an abandoned game publishes nothing until it is closed.
+- **Status travels with the skill.** A `candidate` is published as a candidate. Sharing a skill
+  does not verify it.
 
 ### 5.6 What does not carry over from Minecraft
 
@@ -397,6 +406,38 @@ Promotion is a deliberate act with a record, never a default.
 - **The primitives are thinner.** Voyager's are rich because Mineflayer is. Ours are as wide as
   the applied surfaces, the order verbs and the knob registry, and the library can only be as
   expressive as §4 makes the deterministic tier steerable.
+
+### 5.7 Where a script runs, and what it reaches in Thinker
+
+**Starlark does not run inside Thinker, and should not.** The adapter is a 32-bit Windows DLL,
+cross-compiled with `i686-w64-mingw32-g++`, loaded into `terranx.exe` under Wine, inside an
+engine that is not thread-safe. An interpreter there would break "keep the adapter thin"
+(invariant 3), tie every skill to one engine, and put a second place to crash inside the turn
+loop. Skills run in the orchestrator, where `starlark-pyo3` is one Python dependency, and reach
+the game only through the contract — which is already how every brain reaches it. Thinker never
+learns that a script exists, and the GLSMAC adapter gets skills for nothing.
+
+So interoperability is not a language question. It is a question of **which wire a primitive
+rides**, and the three wires differ by three orders of magnitude:
+
+| Primitive | Wire | Cost | Good for |
+| --- | --- | --- | --- |
+| `choose(action_id)` | the reply to `/decide`, a call the adapter already makes | about a millisecond on the orchestrator side (0.9 ms median at the plan tier); the full trip through Wine is not measured | every decision the engine raises: production, hurry, tech, social engineering, council |
+| `set_policy(knob, value)` | the reply to `/turn` | once per faction per turn, answered from a stored value with no model call; on a timeout the adapter keeps the last policy | everything Thinker's own code decides: unit movement, terraforming, combat, expansion |
+| `order(move / skip / build)` | the command channel | about 250 ms an order — it is a file polled at 4 Hz | a handful of deliberate moves a turn, never a unit loop |
+
+The consequence is the division of labour in ruling 5, and it is forced rather than chosen: **a
+script cannot micro-manage units.** The engine does not raise a decision per unit move — 25
+unit-scope surfaces are uninstrumented — and fifty orders is twelve seconds. What moves an army
+is Thinker's C++, and a script steers it through knobs. Starlark decides *what posture*; C++
+decides *which tile*.
+
+**When a knob is too coarse**, the answer is a richer table, not an embedded interpreter. A
+skill can emit data the fork consults at a seam — a weight per build category, a priority per
+base, a list of target regions — carried in the same `/turn` reply. Tables keep the adapter a
+reader of numbers. If a case ever truly needs logic inside the engine's loop, Lua is the
+language that builds trivially for that toolchain; that would be a deliberate exception to
+invariant 3, and nothing in this design needs it.
 
 ## 6. The strategist is an attached harness
 
@@ -469,7 +510,7 @@ between reviews.
 | Guard and what-if on the board | Yupana `game-state`: ingest, guard, what-if, per-faction overlays | the installed 0.19.4 binary lacks the feature; tenancy is caller-asserted |
 | Strategist handoff | Camayoc's entity pattern | a game vocabulary; per-seat store routing |
 | Governed policy | `aegis:Policy` rows projected to Yupana | policies are not faction-scoped |
-| Skill library | hybrid search, SHACL on write, bitemporal reads, per-database isolation | the `na:Skill` vocabulary and shapes; a commons dataset |
+| Skill library | hybrid search, SHACL on write, bitemporal reads pinned to game start, per-database isolation | the `na:Skill` vocabulary and shapes; a commons dataset; the publish step at game end |
 | A game as an auditable run | Shuttle, through `export-run` | post-hoc only; no live signed steps |
 | Refused tool calls per seat | Desire Path's failure hook | wiring |
 | Work tracking | an epic on the existing board | `st` reads one seeds store per deployment, so a second project is not workable today |
@@ -523,8 +564,10 @@ cheap, and better in the next game than in this one.
    their own turn only if the forecast lands early enough. Not measured.
 3. **What does `enemy_strategy` do for a human slot?** Unverified, and it bounds how much of the
    target knob is real there.
-4. **Is the book private by default?** §5.5 assumes yes, with promotion to a commons. The
-   alternative — one shared library every seat learns from — grows faster and makes every
-   opponent play the same game.
-5. **Which script language.** Starlark is the recommendation; the requirement is determinism
-   and a hermetic runner, and a restricted Python subset would also meet it.
+4. **What a `/decide` round trip costs through Wine.** The orchestrator answers a skill in about
+   a millisecond; the adapter's HTTP client and the Wine boundary are not in that number, and
+   they set the floor for a turn played entirely from skills.
+5. **Does sharing after every game make every seat converge?** §5.5 publishes each book when its
+   game ends. If all seats then retrieve the same verified skills, opponents may play alike;
+   whether that happens is a measurement, and the provenance on each skill is what would show
+   it.
