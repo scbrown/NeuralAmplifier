@@ -11,7 +11,8 @@ Companions: [agent-play.md](agent-play.md) (the attached brain, as built),
 
 **Status: DESIGN. Nothing in this document is built.** Where it leans on something that exists,
 it says so and names the file. Line references into the Thinker fork are against `master`
-`94f9caf` (2026-08-27) and were read, not run.
+`94f9caf` (2026-08-27, based on upstream v5.5) and were read, not run. They will move when the
+fork syncs to upstream v5.6.
 
 ---
 
@@ -200,9 +201,18 @@ The first policy vocabulary, in order of leverage:
 9. **Social priorities.**
 10. **Project and satellite limits.**
 
-**Not steerable, and the design should not pretend otherwise:** `enemy_strategy`,
-`enemy_diplomacy`, the legacy `enemy_move`, and the engine's own `social_ai` and `base_hurry` are
-raw addresses in `terranx.exe` with no Thinker override. Diplomacy stays a decision surface.
+**Not steerable in the fork as it stands, and the design should not pretend otherwise:**
+`enemy_strategy`, `enemy_diplomacy`, the legacy `enemy_move`, and the engine's own `social_ai`
+and `base_hurry` are raw addresses in `terranx.exe` with no Thinker override. Diplomacy stays a
+decision surface.
+
+**That list is about to get shorter.** The fork is based on upstream v5.5 and is 17 commits
+behind. Upstream v5.6 (2026-11-24) rewrites `enemy_diplomacy` and `enemy_strategy` as C++ in
+`src/faction_event.cpp`, jumped to from the engine's addresses, and adds two diplomacy options,
+`rival_friction_bias` and `rival_defiance_bias`. After a sync, AI diplomacy and strategy have
+read sites like everything else in this section. The sync is not free — upstream renamed
+functions and rewrote files the fork edits heavily (`gameturn.cpp`, `faction.cpp`, `base.cpp`,
+`patch.cpp`) — and it should land before the policy seams are cut, so they are cut once.
 
 ### 4.2 How a policy reaches the game
 
