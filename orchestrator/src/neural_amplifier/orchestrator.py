@@ -28,6 +28,7 @@ from .decisions import (
 )
 from .deferrals import DEFER_ACTION_ID, Deferral, DeferralSet, is_defer
 from .directives import DirectiveStore, accept, entities_shown, evaluate, relevant, tradeoffs
+from .faction_policy import DEFAULT_POLICY_HASH, PolicyStore
 from .fairness import profile as fairness_profile
 from .fog import Redaction, redact
 from .grounding_evidence import Cache
@@ -201,8 +202,11 @@ class Orchestrator:
         turn_plan: PlanStore | None = None,
         grounding_cache: Cache | None = None,
         jev: Caller | None = None,
+        faction_policy: PolicyStore | None = None,
     ) -> None:
         self.brain = brain
+        #: Per-faction policy overlay; absent means every faction is under Thinker's defaults.
+        self.faction_policy = faction_policy
         self.jev = jev
         # How many times a decision whose every choice was thrown out may be re-asked with the
         # reason attached. ``knowledge-architecture.md`` allows up to two.
@@ -1021,6 +1025,11 @@ class Orchestrator:
             tier=tier,  # type: ignore[arg-type]
             jev_tier=tier_observation(self.jev, world_view) if self.jev else None,
             world_view_hash=digest,
+            policy_hash=(
+                self.faction_policy.hash_for(world_view.faction_id)
+                if self.faction_policy is not None
+                else DEFAULT_POLICY_HASH
+            ),
             action_space_size=len(world_view.action_space),
             chosen=[c.model_dump(mode="json") for c in orders.choices],
             reason=orders.choices[0].reason if orders.choices else None,

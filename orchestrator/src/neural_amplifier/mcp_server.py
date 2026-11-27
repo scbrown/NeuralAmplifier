@@ -165,6 +165,12 @@ class OrchestratorClient:
     def pending(self, full: bool = False) -> dict[str, Any]:
         return self._get("/agent/pending", {"mine": "true", "full": "true" if full else None})
 
+    def set_policy(self, knob: str, value: Any, reason: str) -> dict[str, Any]:
+        return self._call("/agent/policy", {"knob": knob, "value": value, "reason": reason})
+
+    def policy(self) -> dict[str, Any]:
+        return self._get("/agent/policy")
+
 
 class AgentError(RuntimeError):
     """Something the model should read and respond to, not a crash."""
@@ -491,6 +497,32 @@ def build_server(client: OrchestratorClient) -> Any:
         heard about reads `unknown`, never `applied`.
         """
         return json.dumps(client.outcomes(cursor), indent=2)
+
+    @server.tool()
+    def set_policy(knob: str, value: Any, reason: str) -> str:
+        """Set one knob of your faction's standing posture; Thinker's own AI plays under it.
+
+        One call steers many decisions you will never be asked about. `focus.fight` and the
+        other `focus.*` weights move production, social engineering, tech and energy together;
+        `strategy.*` are true/false strategy bits; `target.base` is a base id to attack (-1 for
+        none); `target.goals` is a list of up to 8 `{type, x, y, priority}` goals. `value: null`
+        clears a knob back to the faction's own default.
+
+        The knob list and bounds come from `policy_knobs`. An unknown knob or an out-of-bounds
+        value is refused here, while you can correct it. `reason` is required: a posture nobody
+        can explain later reads as a plan somebody is watching. It reaches the engine at the
+        next turn announcement.
+        """
+        return json.dumps(client.set_policy(knob, value, reason), indent=2)
+
+    @server.tool()
+    def policy_knobs() -> str:
+        """The knob registry and the knobs you have set.
+
+        This reads back what you SET, never what Thinker computed from it: Thinker's plans are
+        built from every faction's units, and nothing here reports them.
+        """
+        return json.dumps(client.policy(), indent=2)
 
     return server
 

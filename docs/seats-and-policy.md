@@ -231,6 +231,25 @@ arguments.
 units. Echoing computed plan state back to a model would be a fog leak through the policy door.
 A seat reads back what it *set*, never what Thinker derived.
 
+**Wire shape (slice A, orchestrator side).** The registry is `faction_policy.py`; a seat sets a
+knob with `POST /agent/policy` (`set_policy` over MCP) and reads back only what it set with
+`GET /agent/policy` (`policy_knobs`). The `/turn` reply then carries:
+
+```json
+{"turn": 12, "expected": 3,
+ "na_policy": [{"faction_id": 3, "knobs": {"focus.fight": 1, "strategy.land_power": true,
+                "target.base": 41,
+                "target.goals": [{"type": "attack", "x": 10, "y": 20, "priority": 5}]}}],
+ "policy_hash": "<sha256 hex of the canonical JSON of the na_policy list>"}
+```
+
+`na_policy` is the complete overlay, sorted by faction id, and lists only factions that have an
+LLM seat and at least one knob set. A faction missing from it has no overlay, so the fork restores
+its own value. When nothing is set, both keys are left out and the reply is byte-identical to the
+one before this existed. Canonical JSON means sorted keys and `(",", ":")` separators. Every
+decision record carries `policy_hash`, the hash of the knobs last *delivered* for its faction. It
+is `sha256("{}")` under Thinker's defaults.
+
 ### 4.3 A policy is a governed record
 
 Same discipline as a directive, which refuses a metric nobody reports:

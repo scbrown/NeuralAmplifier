@@ -182,6 +182,11 @@ def test_the_surface_is_answering_plus_acting_and_nothing_that_reads_the_board()
         "turn_forecast",
         "turn_plan_status",
         "deferred_decisions",
+        # The policy door (aegis-8fye.6). `set_policy` writes a posture; `policy_knobs` reads
+        # back the registry and what THIS seat set — never what Thinker computed, which is
+        # omniscient and is exactly the second source of board state this test forbids.
+        "set_policy",
+        "policy_knobs",
     }
 
 
