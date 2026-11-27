@@ -29,7 +29,7 @@ from .decisions import DecisionLog
 from .deferrals import DeferralSet
 from .directives import DirectiveStore, accept
 from .doorbell import Doorbell
-from .faction_policy import KnobError, PolicyStore, registry
+from .faction_policy import SET_BY, KnobError, PolicyStore, SetBy, registry
 from .grounding_evidence import Cache as GroundingCache
 from .intents import IntentError, UnitIntent
 from .intents import validate as validate_intent
@@ -777,12 +777,17 @@ def create_app(
         value, or a change with no reason. Takes effect at the next turn announcement.
         """
         fid = _faction(request, body.get("faction_id"))
-        # Who set it, for the change log: a seat's agent acting on its standing directives by
-        # default under a seat token, the operator otherwise. "skill" is the skill runtime's
-        # alone and is not accepted from the wire.
-        set_by = body.get("set_by") or ("directive" if seat_tokens is not None else "operator")
-        if set_by not in ("directive", "operator"):
-            raise HTTPException(422, "set_by is 'directive' or 'operator'")
+        # Who set it, for the change log, is derived here and never taken from the wire: under
+        # a seat token it is the seat's agent acting on its standing directives, and "operator"
+        # only when no seat token applies. "skill" is the skill runtime's alone. A body
+        # ``set_by`` that disagrees is refused before anything is logged, so a seat cannot
+        # record its own change as the operator's.
+        set_by: SetBy = "directive" if _seat(request) is not None else "operator"
+        claimed = body.get("set_by")
+        if claimed not in (None, "") and claimed != set_by:
+            if claimed not in SET_BY:
+                raise HTTPException(422, f"set_by must be one of {list(SET_BY)}")
+            raise HTTPException(422, f"set_by is derived from the caller: {set_by!r} here")
         seen = latest_view.get(fid)
         try:
             result = faction_policy.set_policy(

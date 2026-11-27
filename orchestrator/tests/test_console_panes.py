@@ -196,6 +196,36 @@ def test_the_wire_cannot_claim_a_skill_set_it(seated) -> None:
     assert log.read_policy() == []
 
 
+def test_a_seat_cannot_record_its_change_as_the_operators(seated) -> None:
+    app, client, _, log = seated
+    t3 = app.state.seat_tokens.tokens[3]
+    for claimed in ("operator", "skill", "nobody"):
+        body = {"knob": "focus.tech", "value": 1, "reason": "r", "set_by": claimed}
+        resp = client.post("/agent/policy", json=body, headers={SEAT_HEADER: t3})
+        assert resp.status_code == 422, claimed
+    assert log.read_policy() == []
+    assert app.state.faction_policy.knobs(3) == {}
+    # Under a seat token it is the seat's directive, claimed or not.
+    for body_set_by in ({}, {"set_by": "directive"}):
+        body = {"knob": "focus.tech", "value": 1, "reason": "r", **body_set_by}
+        assert client.post("/agent/policy", json=body, headers={SEAT_HEADER: t3}).status_code == 200
+    assert [r["set_by"] for r in log.read_policy()] == ["directive", "directive"]
+    assert "operator" not in {r["set_by"] for r in log.read_policy()}
+
+
+def test_operator_only_when_no_seat_token_applies(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.setenv("NA_ALLOW_BLIND", "1")
+    monkeypatch.setenv("NA_RUN_DIR", str(tmp_path))
+    log = DecisionLog(tmp_path / "orch" / "decisions.jsonl")
+    client = TestClient(create_app(log=log))
+    body = {"faction_id": 4, "knob": "focus.tech", "value": 1, "reason": "r"}
+    assert client.post("/agent/policy", json={**body, "set_by": "directive"}).status_code == 422
+    assert client.post("/agent/policy", json={**body, "set_by": "skill"}).status_code == 422
+    assert client.post("/agent/policy", json=body).status_code == 200
+    assert client.post("/agent/policy", json={**body, "set_by": "operator"}).status_code == 200
+    assert [r["set_by"] for r in log.read_policy()] == ["operator", "operator"]
+
+
 # --------------------------------------------------------------------------- seats
 
 
