@@ -688,7 +688,7 @@ if [ "$cmd" = "headless" ]; then
     # Size the virtual screen from the game's own window, never a fixed 1280x1024. A copy staged
     # from an attended install keeps window_width/height=2560x1440, and a prefix that was ever
     # used attended keeps a Wine virtual desktop at that size; either one on a smaller Xvfb
-    # screen dies at X_CreateWindow with BadWindow before the main menu (aegis-8fye.1, vati).
+    # screen dies at X_CreateWindow with BadWindow before the main menu (aegis-8fye.1).
     xw="$(grep -oP '^window_width=\K[0-9]+' "$INI" 2>/dev/null || true)"
     xh="$(grep -oP '^window_height=\K[0-9]+' "$INI" 2>/dev/null || true)"
     screen="${NA_XVFB_SCREEN:-${xw:-1280}x${xh:-1024}x24}"
