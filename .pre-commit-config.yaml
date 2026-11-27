@@ -11,11 +11,18 @@ repos:
       - id: check-added-large-files
 
   # Must match `markdownlint` in the justfile — see the note there.
+  #
+  # --no-globs: lint only the markdown files this commit stages, not the config's
+  # "**/*.md" over the working tree. A provisioned agent worktree carries files the
+  # repo does not own (skill symlinks under .claude/skills/, a tooling block appended
+  # to AGENTS.md), and globbing them made every commit in such a worktree fail on
+  # content nobody staged. Same version and same config rules as `just docs lint`
+  # and CI, which still lint the whole tree of a clean checkout (aegis-8fye.3.4).
   - repo: https://github.com/DavidAnson/markdownlint-cli2
     rev: v0.23.2
     hooks:
       - id: markdownlint-cli2
-        args: []
+        args: [--no-globs]
 
   # Python (orchestrator) — manages its own env; runs only on .py files,
   # so this is a no-op until the orchestrator lands and enforcing thereafter.
