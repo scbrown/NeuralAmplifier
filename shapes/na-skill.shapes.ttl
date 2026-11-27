@@ -7,9 +7,18 @@
 #
 # It matches orchestrator/src/neural_amplifier/skills.py: what skills.py
 # accepts, this shape accepts, and what skills.py refuses, this shape refuses.
-# One na:Skill node per VERSION. A rewrite is a new node that na:supersedes the
+# One na:Skill node per VERSION, at <skill/NAME/vVERSION>; the content hash is a
+# property, not the identity. A rewrite is a new node that na:supersedes the
 # old one, so the library as it stood at any earlier moment stays readable.
 # skill_shapes.to_turtle() is the serialisation this shape is tested against.
+#
+# The Quipu-backed store (skill_quipu.py) is APPEND-ONLY: nothing is retracted
+# on a normal write. A na:Skill node is written once; its na:status is the
+# status it was written with. A status change, a trial or a retirement is a new
+# immutable na:SkillState record, and readers take the latest state (highest
+# na:tx) per version. In the commons, a state counts only when a committed
+# na:Publication lists it in na:carriesState; the states and the publication
+# are one knot, so a refused or crashed write leaves the old state readable.
 
 @prefix na:   <http://neuralamplifier.local/ontology/skill/> .
 @prefix sh:   <http://www.w3.org/ns/shacl#> .
@@ -57,6 +66,22 @@ na:authoredBy      a owl:DatatypeProperty ; rdfs:domain na:Skill ;
 na:authoredInGame  a owl:DatatypeProperty ; rdfs:domain na:Skill .
 na:authoredAtTurn  a owl:DatatypeProperty ; rdfs:domain na:Skill .
 na:authoredWithModel a owl:DatatypeProperty ; rdfs:domain na:Skill .
+
+na:SkillState a owl:Class ;
+    rdfs:comment "One immutable state of one skill version: status, trials so far, retired reason. The latest by na:tx wins." .
+
+na:Publication a owl:Class ;
+    rdfs:comment "One seat's sharing step at the end of one game: the exact commons states it carries." .
+
+na:ofVersion   a owl:ObjectProperty ; rdfs:domain na:SkillState ; rdfs:range na:Skill .
+na:tx          a owl:DatatypeProperty ;
+    rdfs:comment "Write ordinal within its store: one more than the largest na:tx already there. Orders states and publications." .
+na:publishedBy a owl:DatatypeProperty ; rdfs:domain na:Publication ;
+    rdfs:comment "Seat identity that published." .
+na:game        a owl:DatatypeProperty ; rdfs:domain na:Publication ;
+    rdfs:comment "The game whose end this publication records." .
+na:carriesState a owl:ObjectProperty ; rdfs:domain na:Publication ; rdfs:range na:SkillState ;
+    rdfs:comment "A commons state this publication commits. States no publication carries are ignored." .
 
 na:metric     a owl:DatatypeProperty ;
     rdfs:comment "A metric name: of a success check, or of one trial delta." .
@@ -123,6 +148,45 @@ na:SkillShape a sh:NodeShape ;
         sh:path na:trial ; sh:class na:Trial ;
     ] , [
         sh:path na:authoredBy ; sh:datatype xsd:string ; sh:maxCount 1 ;
+    ] .
+
+# na:status, na:retiredReason and na:trial on a state mean what they mean on
+# na:Skill: the state replaces the version's own values from its na:tx on.
+# A state names a version (and trials) written in EARLIER transactions, and qp
+# runs this shape over the submitted document only, so these references are
+# sh:nodeKind sh:IRI, not sh:class; readers check the target's type.
+na:SkillStateShape a sh:NodeShape ;
+    sh:targetClass na:SkillState ;
+    sh:property [
+        sh:path na:ofVersion ; sh:nodeKind sh:IRI ;
+        sh:minCount 1 ; sh:maxCount 1 ;
+    ] , [
+        sh:path na:status ; sh:datatype xsd:string ;
+        sh:minCount 1 ; sh:maxCount 1 ;
+        sh:in ( "candidate" "verified" "retired" ) ;
+    ] , [
+        sh:path na:retiredReason ; sh:datatype xsd:string ;
+        sh:maxCount 1 ; sh:minLength 1 ;
+    ] , [
+        sh:path na:trial ; sh:nodeKind sh:IRI ;
+    ] , [
+        sh:path na:tx ; sh:datatype xsd:integer ;
+        sh:minCount 1 ; sh:maxCount 1 ; sh:minInclusive 1 ;
+    ] .
+
+na:PublicationShape a sh:NodeShape ;
+    sh:targetClass na:Publication ;
+    sh:property [
+        sh:path na:publishedBy ; sh:datatype xsd:string ;
+        sh:minCount 1 ; sh:maxCount 1 ; sh:minLength 1 ;
+    ] , [
+        sh:path na:game ; sh:datatype xsd:string ;
+        sh:minCount 1 ; sh:maxCount 1 ; sh:minLength 1 ;
+    ] , [
+        sh:path na:tx ; sh:datatype xsd:integer ;
+        sh:minCount 1 ; sh:maxCount 1 ; sh:minInclusive 1 ;
+    ] , [
+        sh:path na:carriesState ; sh:nodeKind sh:IRI ;
     ] .
 
 # metric: exactly metrics.VOCABULARY, sorted. A test keeps the two equal.

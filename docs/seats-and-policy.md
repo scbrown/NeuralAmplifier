@@ -491,6 +491,28 @@ Ruled 2026-11-26: a skill book is private while a game is in progress and shared
 - **Status travels with the skill.** A `candidate` is published as a candidate. Sharing a skill
   does not verify it.
 
+`orchestrator/src/neural_amplifier/skill_quipu.py` implements this over a `SkillBackend` (the
+`qp` CLI, or an in-memory fake for CI that, like `qp`, checks the shape against the merged
+post-write state). The store is **append-only**: `qp knot` cannot retract and assert in one
+transaction, so nothing is retracted on a normal write.
+
+- **Identity.** A version is the node `skill/<name>/v<version>`; the content hash is a property,
+  so the same code under a new success check, or a revert A->B->A, is a new node.
+- **State.** A trial, promotion or retirement writes a new immutable `na:SkillState` (version,
+  status, trials so far, retired reason, `na:tx`). Readers take the latest state per version. In a
+  seat book every write is one knot that commits its own state.
+- **The commons.** An entry's identity is (seat identity, name, version), under
+  `skill/seat/<seat>/`, so one seat never overwrites or downgrades another's entry.
+  `publish_at_game_end` is one knot: new version nodes, new states and the `na:Publication`
+  that lists exactly those states. Readers ignore states no committed publication carries, so a
+  refused or crashed publication leaves the old state readable. Where several entries answer a
+  name, the commons is deterministic: verified first, then the latest publication, then seat id.
+
+`SkillLibrary` holds one book per seat identity, pins the commons to the game-start transaction
+(`qp read --tx`) and hands a seat a `SeatSkills` view that cannot name another seat or write the
+commons; open or abandoned games publish nothing, and a second publish is a no-op. Provisioning
+the databases themselves is infrastructure, not this module.
+
 ### 5.6 What does not carry over from Minecraft
 
 - **An opponent moves.** A Minecraft skill fails for reasons inside the skill. A skill here can
