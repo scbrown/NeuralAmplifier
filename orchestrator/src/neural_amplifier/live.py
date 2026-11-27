@@ -287,6 +287,12 @@ class LiveStream:
                 },
             )
 
+    def write_policy(self, event: dict[str, Any]) -> None:
+        """A ``policy_change`` record, after the JSONL has it (``Emitter.emit_policy``)."""
+        faction = event.get("faction_id")
+        data = {k: v for k, v in event.items() if k not in ("kind", "faction_id")}
+        self._publish("policy", faction if isinstance(faction, int) else None, data)
+
     def outcome(self, traceparent: str, event: str, surface_id: str | None = None) -> None:
         """The engine's report: ``applied`` or ``diverged``."""
         with self._lock:

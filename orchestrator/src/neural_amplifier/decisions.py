@@ -272,6 +272,10 @@ class DecisionRecord(BaseModel):
     latency_ms: int | None = None
 
 
+#: The policy change log's file name, beside the merged decision log.
+POLICY_LOG = "policy.jsonl"
+
+
 class DecisionLog:
     """Append-only JSONL writer — the record of truth for a run."""
 
@@ -307,6 +311,33 @@ class DecisionLog:
             seat_path.parent.mkdir(parents=True, exist_ok=True)
             with seat_path.open("a", encoding="utf-8") as fh:
                 fh.write(line + "\n")
+
+    @property
+    def policy_path(self) -> Path:
+        """The policy change log, ``policy.jsonl`` beside the merged decision log."""
+        return self.path.with_name(POLICY_LOG)
+
+    def write_policy(self, event: dict[str, Any]) -> None:
+        """Append one ``policy_change`` record (``faction_policy.change_record``).
+
+        Its own file: the merged decision log is parsed line by line as decisions.
+        """
+        with self.policy_path.open("a", encoding="utf-8") as fh:
+            fh.write(json.dumps(event, sort_keys=True) + "\n")
+
+    def read_policy(self) -> list[dict[str, Any]]:
+        """Every policy change recorded so far, oldest first. A torn last line is skipped."""
+        if not self.policy_path.is_file():
+            return []
+        out: list[dict[str, Any]] = []
+        for line in self.policy_path.read_text(encoding="utf-8").splitlines():
+            try:
+                row = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if isinstance(row, dict):
+                out.append(row)
+        return out
 
     def write_event(self, seat: int, event: dict[str, Any]) -> Path | None:
         """Append a seat-scoped event (``review_missed``) to that seat's own log only.

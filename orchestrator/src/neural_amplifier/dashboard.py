@@ -618,6 +618,114 @@ class DashboardReader:
         return result
 
 
+#: A console field whose source does not exist in the decision log or run record. Never 0: a
+#: zero is a measurement, and nothing was measured.
+UNKNOWN = "UNKNOWN"
+
+
+def _percentile(values: list[int], pct: float) -> int:
+    """Nearest-rank percentile of a non-empty list."""
+    ordered = sorted(values)
+    rank = max(1, -(-len(ordered) * pct // 100))
+    return ordered[int(rank) - 1]
+
+
+def _seat_row(
+    seat: int | None, records: list[DecisionRecord], budget: float | None
+) -> dict[str, Any]:
+    """One SEATS row, from this seat's records only. A field with no source is ``UNKNOWN``."""
+    latest = records[-1] if records else None
+    latencies = [r.latency_ms for r in records if r.latency_ms is not None]
+    costs = [c for c in (_record_cost(r) for r in records) if c is not None]
+    if latest is None:
+        directives: Any = UNKNOWN
+    elif latest.plan.plan_absent:
+        directives = UNKNOWN  # no directive store configured: no source, not "none in force"
+    else:
+        directives = list(latest.plan.in_force)
+    return {
+        "seat": seat,
+        "decisions": len(records),
+        "driver": {
+            "principal": (latest.seat_principal if latest and latest.seat_principal else UNKNOWN),
+            "model": latest.model if latest and latest.model else UNKNOWN,
+        },
+        "standing_directives": directives,
+        "turn_plan": {
+            # A plan answer is its own tier, so a hit is in the record. A miss is not: it is
+            # retired in memory and shown to the next answerer as an advisory in the world view.
+            "hits": sum(r.tier == "plan" for r in records) if records else UNKNOWN,
+            "misses": UNKNOWN,
+        },
+        "latency_ms": {
+            "p50": _percentile(latencies, 50) if latencies else UNKNOWN,
+            "p95": _percentile(latencies, 95) if latencies else UNKNOWN,
+            "samples": len(latencies),
+        },
+        "degrade_rate": (
+            round(sum(r.degraded for r in records) / len(records), 4) if records else UNKNOWN
+        ),
+        "spend_usd": round(sum(costs), 4) if costs else UNKNOWN,
+        "budget_usd": budget if budget is not None else UNKNOWN,
+    }
+
+
+def seats_view(
+    records: list[DecisionRecord],
+    budgets: dict[int, float | None],
+    faction: int | None,
+) -> dict[str, Any]:
+    """The SEATS pane. ``faction`` None is the spectator; a seat sees only its own row.
+
+    Rows are the seat table's seats plus any seat the log names. Decisions no seat placed are
+    one ``seat: null`` row, and only the spectator sees it: it belongs to no player's chair.
+    """
+    by_seat: dict[int | None, list[DecisionRecord]] = {}
+    for record in records:
+        by_seat.setdefault(record.seat, []).append(record)
+    seats: list[int | None] = [*sorted({*budgets, *(k for k in by_seat if k is not None)})]
+    if faction is None and None in by_seat:
+        seats.append(None)
+    rows = [
+        _seat_row(seat, by_seat.get(seat, []), budgets.get(seat) if seat is not None else None)
+        for seat in seats
+        if faction is None or seat == faction
+    ]
+    return {"view": "spectator" if faction is None else "player", "seats": rows}
+
+
+def policy_view(
+    store: Any,
+    changes: list[dict[str, Any]] | None,
+    seats: set[int],
+    faction: int | None,
+) -> dict[str, Any]:
+    """The POLICY pane: each seat's knobs in force, and its change log as recorded.
+
+    ``changes`` None means there is no record of truth to read (no decision log configured), and
+    the log is then ``UNKNOWN`` — it is never reconstructed from the knobs currently in force.
+    """
+    logged = {int(c["faction_id"]) for c in changes or [] if isinstance(c.get("faction_id"), int)}
+    factions = sorted(seats | logged | set(store.factions()))
+    rows = []
+    for fid in factions:
+        if faction is not None and fid != faction:
+            continue
+        rows.append(
+            {
+                "faction_id": fid,
+                "knobs": store.knobs(fid),
+                "delivered_hash": store.hash_for(fid),
+                "changes": (
+                    UNKNOWN
+                    if changes is None
+                    else [c for c in changes if c.get("faction_id") == fid]
+                ),
+            }
+        )
+    return {"view": "spectator" if faction is None else "player", "policy": rows}
+
+
 def event_stream(
     live: LiveStream,
     sub: Subscription,
@@ -655,6 +763,8 @@ DASHBOARD_HTML = """<!doctype html>
 </style></head><body><header><h1>NEURAL AMPLIFIER // PLANETARY DATALINKS</h1><span id=status class=status>LINKING…</span></header><main>
 <div id=banner class=banner><b>LINKING…</b></div>
 <section class=panel><h2>NOW</h2><div id=nowView class=why>The live view needs a seat token or the spectator token: open this page with <code>#token=…</code> on the end of its address.</div><div id=nowOpen></div><div id=nowSpend class=summary></div><div id=nowFeed class=why></div></section>
+<section class=panel><h2>SEATS</h2><div id=seatsView class=why>The seats view needs a seat token or the spectator token (<code>#token=…</code>).</div></section>
+<section class=panel><h2>POLICY</h2><div id=policyView class=why>The policy view needs a seat token or the spectator token (<code>#token=…</code>).</div></section>
 <section class=panel><h2>MISSION CONTROL</h2><div id=summary class=summary></div></section>
 <section class=panel><h2>FACTION STATUS</h2><div id=factions class=factions></div></section>
 <section class=panel><h2>DECISION ARCHIVE</h2><table><thead><tr><th>Turn<th>Faction<th>What was decided<th><abbr title="Who actually chose: the language model, or the game engine's own default when the model could not be reached.">Decided by</abbr><th>Action taken<th><abbr title="What the game engine would have picked on its own, for comparison.">Engine would pick</abbr><th>Took<th>Cost</tr></thead><tbody id=decisions></tbody></table></section>
@@ -713,7 +823,16 @@ function nowAge(s){s=Math.max(0,Math.round(s));return s<90?s+' s':Math.round(s/6
 function renderNow(){const el=nowEl();nowOpen.innerHTML=NOW.open.size?`<table><thead><tr><th>Waiting on<th>Faction<th>Turn<th>Open for<th>Who is thinking<th>Thinking for</tr></thead><tbody>${[...NOW.open.values()].map(o=>`<tr><td>${esc(o.surface_id)}<td>${esc(o.faction_id)}<td>${esc(o.turn)}<td>${esc(nowAge(o.age_s+el-o.seen))}<td>${esc(o.thinking??(o.state==='raised'?'not yet claimed':'—'))}<td>${o.thinking_s==null?'—':esc(nowAge(o.thinking_s+el-o.seen))}</tr>`).join('')}</tbody></table>`:'<p class=d-none>Nothing is waiting for an answer right now.</p>';nowSpend.innerHTML=NOW.spend.map(s=>{const pct=s.budget_usd&&s.spent_usd!=null?Math.min(100,100*s.spent_usd/s.budget_usd):null;return `<div class=datum>SEAT ${esc(s.faction_id)} SPEND USD<b>${esc(s.spent_usd)}${s.budget_usd!=null?' of '+esc(s.budget_usd):''}</b>${pct==null?'':`<meter min=0 max=100 value="${pct.toFixed(1)}"></meter>`}</div>`}).join('');nowFeed.innerHTML=NOW.feed.slice(-8).reverse().map(e=>`<div>${esc(e.at)} // ${esc(e.kind)} // faction ${esc(e.faction_id)} // ${esc(e.surface_id)}${e.seat?' // '+esc(e.seat):''}${e.verdict?' // '+esc(e.verdict):''}</div>`).join('')}
 function startNow(){const m=/(?:^|[#&])token=([^&]+)/.exec(location.hash);if(!m)return;const src=new EventSource('/dashboard/api/events?token='+m[1]);
 src.addEventListener('hello',ev=>{const x=JSON.parse(ev.data);NOW.t0=Date.now();NOW.open=new Map(x.open.map(o=>[o.decision,{...o,seen:0}]));NOW.spend=x.spend;nowView.textContent=x.view==='spectator'?'SPECTATOR VIEW: every seat. Opening this during your own game is recorded on the run.':'PLAYER VIEW: seat '+x.faction_id+' only.';renderNow()});
-for(const k of ['raised','claimed','answered','guard','applied','diverged','abandoned'])src.addEventListener(k,ev=>{const x=JSON.parse(ev.data),el=nowEl();NOW.feed.push(x);if(NOW.feed.length>50)NOW.feed.shift();if(k==='raised')NOW.open.set(x.decision,{decision:x.decision,faction_id:x.faction_id,surface_id:x.surface_id,turn:x.turn,age_s:0,state:'raised',thinking:null,thinking_s:null,seen:el});if(k==='claimed'&&NOW.open.has(x.decision)){const o=NOW.open.get(x.decision);o.age_s+=el-o.seen;o.seen=el;o.state='claimed';o.thinking=x.seat;o.thinking_s=0}if(k==='answered'||k==='abandoned'){NOW.open.delete(x.decision);if(k==='answered'&&x.cost_usd!=null){const s=NOW.spend.find(s=>s.faction_id===x.faction_id);if(s)s.spent_usd=Math.round(((s.spent_usd??0)+x.cost_usd)*1e4)/1e4;else NOW.spend.push({faction_id:x.faction_id,spent_usd:x.cost_usd,budget_usd:null})}}renderNow()});
+for(const k of ['raised','claimed','answered','guard','applied','diverged','abandoned','policy'])src.addEventListener(k,ev=>{const x=JSON.parse(ev.data),el=nowEl();NOW.feed.push(x);if(NOW.feed.length>50)NOW.feed.shift();if(k==='raised')NOW.open.set(x.decision,{decision:x.decision,faction_id:x.faction_id,surface_id:x.surface_id,turn:x.turn,age_s:0,state:'raised',thinking:null,thinking_s:null,seen:el});if(k==='claimed'&&NOW.open.has(x.decision)){const o=NOW.open.get(x.decision);o.age_s+=el-o.seen;o.seen=el;o.state='claimed';o.thinking=x.seat;o.thinking_s=0}if(k==='answered'||k==='abandoned'){NOW.open.delete(x.decision);if(k==='answered'&&x.cost_usd!=null){const s=NOW.spend.find(s=>s.faction_id===x.faction_id);if(s)s.spent_usd=Math.round(((s.spent_usd??0)+x.cost_usd)*1e4)/1e4;else NOW.spend.push({faction_id:x.faction_id,spent_usd:x.cost_usd,budget_usd:null})}}renderNow()});
 src.onerror=()=>{nowView.textContent='The live view is not connected (a wrong token, or the service restarted and minted new ones). Retrying.'};setInterval(renderNow,1000)}
-loadGlossary().then(()=>{refresh();loadEvals();loadStrategy();loadGraph('');startNow()});
+//: SEATS and POLICY. Same token, same server-side filter as the stream; sent as a header so it
+//: stays out of the address. A field the record has no source for arrives as UNKNOWN and is
+//: shown as UNKNOWN, never as 0.
+const TOKEN=(/(?:^|[#&])token=([^&]+)/.exec(location.hash)??[])[1];
+const consoleGet=u=>fetch(u,{headers:{'X-NA-Seat':decodeURIComponent(TOKEN)}}).then(r=>{if(!r.ok)throw new Error(r.status);return r.json()});
+const fmtv=v=>v==null?'—':typeof v==='object'?JSON.stringify(v):String(v);
+async function loadConsole(){if(!TOKEN)return;try{const [s,p]=await Promise.all([consoleGet('/dashboard/api/seats'),consoleGet('/dashboard/api/policy')]);
+seatsView.innerHTML=s.seats.length?`<table><thead><tr><th>Seat<th>Driver<th>Standing directives<th>Turn plan hits / misses<th>Latency p50 / p95<th>Degrade rate<th>Spend / budget USD</tr></thead><tbody>${s.seats.map(r=>`<tr><td>${esc(r.seat??'unseated')}<td>${esc(r.driver.principal)} // ${esc(r.driver.model)}<td>${esc(Array.isArray(r.standing_directives)?(r.standing_directives.join(', ')||'none'):r.standing_directives)}<td>${esc(r.turn_plan.hits)} / ${esc(r.turn_plan.misses)}<td>${esc(r.latency_ms.p50)} / ${esc(r.latency_ms.p95)}<td>${esc(r.degrade_rate)}<td>${esc(r.spend_usd)} / ${esc(r.budget_usd)}</tr>`).join('')}</tbody></table>`:'<p class=d-none>No seats.</p>';
+policyView.innerHTML=p.policy.length?p.policy.map(f=>`<section class=wide><h3>SEAT ${esc(f.faction_id)}</h3><p>In force: ${Object.keys(f.knobs).length?Object.entries(f.knobs).map(([k,v])=>esc(k)+' = '+esc(fmtv(v))).join(' // '):'Thinker defaults'}</p>${f.changes==='UNKNOWN'?'<p class=d-none>Change log: UNKNOWN (no decision log is configured, so no change was recorded).</p>':f.changes.length?`<table><thead><tr><th>Time<th>Turn<th>Knob<th>Old → new<th>Reason<th>Set by<th>Outcome</tr></thead><tbody>${f.changes.slice().reverse().map(c=>`<tr class="${c.outcome==='refused'?'bad':''}"><td>${esc(c.at)}<td>${esc(c.turn??'UNKNOWN')}<td>${esc(c.knob)}<td>${esc(fmtv(c.old))} → ${esc(fmtv(c.new))}<td>${esc(c.reason)}<td>${esc(c.set_by)}<td>${esc(c.outcome)}${c.refusal?': '+esc(c.refusal):''}</tr>`).join('')}</tbody></table>`:'<p class=d-none>No change recorded.</p>'}</section>`).join(''):'<p class=d-none>No seat has a policy.</p>'}catch(e){seatsView.textContent=policyView.textContent='Not readable with this token ('+e.message+').'}finally{setTimeout(loadConsole,5000)}}
+loadGlossary().then(()=>{refresh();loadEvals();loadStrategy();loadGraph('');startNow();loadConsole()});
 </script></body></html>"""

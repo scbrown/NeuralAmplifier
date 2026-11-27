@@ -669,6 +669,8 @@ class PolicySet:
     knob: str
     value: Any
     reason: str
+    #: The turn of the view ``on_turn`` ran against, for the policy change log.
+    turn: int | None = None
 
 
 Effect = QueuedAnswer | str | PolicySet
@@ -832,7 +834,14 @@ class SkillBrain:
             elif isinstance(item, str) and self.orders is not None:
                 self.orders.issue(item)
             elif isinstance(item, PolicySet) and self.policy is not None:
-                self.policy.set_policy(item.faction_id, item.knob, item.value, item.reason)
+                self.policy.set_policy(
+                    item.faction_id,
+                    item.knob,
+                    item.value,
+                    item.reason,
+                    set_by="skill",
+                    turn=item.turn,
+                )
 
     def _policy_from(
         self, skill: Skill, effect: dict[str, Any], world_view: WorldView
@@ -852,7 +861,9 @@ class SkillBrain:
         why = effect.get("reason")
         reason = f"skill {skill.ref}" + (f": {why}" if isinstance(why, str) and why else "")
         # The faction is the view's, never the skill's: a skill steers one seat (§5.3).
-        return PolicySet(faction_id=faction, knob=knob, value=checked, reason=reason)
+        return PolicySet(
+            faction_id=faction, knob=knob, value=checked, reason=reason, turn=world_view.turn
+        )
 
 
 def _orders_from(skill: Skill, answer: Any) -> Orders | None:

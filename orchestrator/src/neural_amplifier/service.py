@@ -29,7 +29,7 @@ from .decisions import DecisionLog
 from .deferrals import DeferralSet
 from .directives import DirectiveStore, accept
 from .doorbell import Doorbell
-from .faction_policy import KnobError, PolicyStore, registry
+from .faction_policy import SET_BY, KnobError, PolicyStore, SetBy, registry
 from .grounding_evidence import Cache as GroundingCache
 from .intents import IntentError, UnitIntent
 from .intents import validate as validate_intent
@@ -605,6 +605,9 @@ def create_app(
         jev=from_env(),
     )
     app.state.orchestrator = orchestrator
+    # Every policy change, and every refused one, is a `policy_change` record through the same
+    # Emitter as the decisions: JSONL first, then the live stream (seats-and-policy §7).
+    faction_policy.observer = orchestrator.telemetry.emit_policy
     # At start, like a malformed na.toml: a game that would run blind is refused before its
     # first turn, not discovered from its decision log afterwards (aegis-09m).
     knowledge = knowledge_gate(
@@ -774,9 +777,26 @@ def create_app(
         value, or a change with no reason. Takes effect at the next turn announcement.
         """
         fid = _faction(request, body.get("faction_id"))
+        # Who set it, for the change log, is derived here and never taken from the wire: under
+        # a seat token it is the seat's agent acting on its standing directives, and "operator"
+        # only when no seat token applies. "skill" is the skill runtime's alone. A body
+        # ``set_by`` that disagrees is refused before anything is logged, so a seat cannot
+        # record its own change as the operator's.
+        set_by: SetBy = "directive" if _seat(request) is not None else "operator"
+        claimed = body.get("set_by")
+        if claimed not in (None, "") and claimed != set_by:
+            if claimed not in SET_BY:
+                raise HTTPException(422, f"set_by must be one of {list(SET_BY)}")
+            raise HTTPException(422, f"set_by is derived from the caller: {set_by!r} here")
+        seen = latest_view.get(fid)
         try:
             result = faction_policy.set_policy(
-                fid, str(body.get("knob") or ""), body.get("value"), str(body.get("reason") or "")
+                fid,
+                str(body.get("knob") or ""),
+                body.get("value"),
+                str(body.get("reason") or ""),
+                set_by=set_by,
+                turn=seen.turn if seen is not None else None,
             )
         except KnobError as exc:
             raise HTTPException(422, str(exc)) from exc
@@ -811,18 +831,48 @@ def create_app(
         """
         from .dashboard import event_stream
 
-        view = viewers.view_for(request.headers.get(SEAT_HEADER) or token)
-        if view is None:
-            raise HTTPException(401, "the live console needs a seat token or the spectator token")
-        kind, faction = view
-        if kind == "spectator":
-            run_record.spoil()
+        kind, faction = _console_view(request, token)
         body = event_stream(live, live.subscribe(faction), kind, limit=limit)
         return StreamingResponse(
             body,
             media_type="text/event-stream",
             headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
         )
+
+    def _console_view(request: Request, token: str | None) -> tuple[str, int | None]:
+        """The /events token rule: seat token -> own faction, spectator -> all, else 401.
+
+        A spectator read marks the run ``observer_spoiled``; ``RunRecord`` writes it once.
+        """
+        view = viewers.view_for(request.headers.get(SEAT_HEADER) or token)
+        if view is None:
+            raise HTTPException(401, "the live console needs a seat token or the spectator token")
+        if view[0] == "spectator":
+            run_record.spoil()
+        return view
+
+    @app.get("/dashboard/api/seats")
+    def dashboard_seats(request: Request, token: str | None = None) -> dict[str, object]:
+        """The SEATS pane, from the decision log and the seat table. No source: ``UNKNOWN``."""
+        from .dashboard import seats_view
+
+        _, faction = _console_view(request, token)
+        budgets = (
+            {fid: seat.budget_usd for fid, seat in router.seats.items()}
+            if router is not None
+            else {}
+        )
+        return seats_view(dashboard.records(), budgets, faction)
+
+    @app.get("/dashboard/api/policy")
+    def dashboard_policy(request: Request, token: str | None = None) -> dict[str, object]:
+        """The POLICY pane: knobs in force and the recorded change log, per seat."""
+        from .dashboard import policy_view
+
+        _, faction = _console_view(request, token)
+        changes = resolved_log.read_policy() if resolved_log is not None else None
+        seats = set(router.seats) if router is not None else set()
+        return policy_view(faction_policy, changes, seats, faction)
 
     @app.get("/dashboard/api/live")
     def dashboard_live() -> dict[str, object]:
