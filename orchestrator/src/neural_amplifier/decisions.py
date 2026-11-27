@@ -308,6 +308,22 @@ class DecisionLog:
             with seat_path.open("a", encoding="utf-8") as fh:
                 fh.write(line + "\n")
 
+    def write_event(self, seat: int, event: dict[str, Any]) -> Path | None:
+        """Append a seat-scoped event (``review_missed``) to that seat's own log only.
+
+        Not the merged view: every reader of ``self.path`` parses each line as a
+        :class:`DecisionRecord`, and an event is not a decision. The seat's log is the strategist's
+        evidence, which is where a review it missed belongs. Returns the path written, or None
+        outside seat mode (no run directory), where the caller's own record is all there is.
+        """
+        seat_path = self.seat_path(seat)
+        if seat_path is None:
+            return None
+        seat_path.parent.mkdir(parents=True, exist_ok=True)
+        with seat_path.open("a", encoding="utf-8") as fh:
+            fh.write(json.dumps(event, sort_keys=True) + "\n")
+        return seat_path
+
     def read(self) -> Iterator[DecisionRecord]:
         if not self.path.exists():
             return

@@ -28,6 +28,7 @@ from .coverage import report
 from .decisions import DecisionLog
 from .deferrals import DeferralSet
 from .directives import DirectiveStore, accept
+from .doorbell import Doorbell
 from .faction_policy import KnobError, PolicyStore, registry
 from .grounding_evidence import Cache as GroundingCache
 from .intents import IntentError, UnitIntent
@@ -41,6 +42,7 @@ from .pending import NotClaimable, Pending
 from .queued import Comparator, Predicate, QueuedAnswer, QueueError, QueueStore
 from .replay import WorldViewStore
 from .seats import SEAT_HEADER, SeatRouter, SeatTokens, seat_entities
+from .strategist import ReviewScheduler, every_from_env
 from .telemetry import OtelSink, Sink, sinks_for
 from .turnplan import PlanEntry, PlanError, PlanStore, TurnPlan
 from .turnplan import validate as validate_plan
@@ -659,6 +661,14 @@ def create_app(
                 "seat mode with no run directory (NA_RUN_DIR): seat tokens are held in memory "
                 "only, so no seat's MCP server can read one, and no per-seat evidence is split out"
             )
+    # The strategist's review cadence (§6, aegis-8fye.8). Seat mode only, and only seats that
+    # name a strategist; a missed review is logged on the seat's own log and changes nothing.
+    reviews = (
+        ReviewScheduler(router.seats, Doorbell.from_env(), resolved_log, every=every_from_env())
+        if router is not None
+        else None
+    )
+    app.state.reviews = reviews
     # Who may open the live stream: each seat's own token (player view) or the spectator token,
     # written to <run>/spectator/token at 0600. Opening the spectator view marks the run record.
     viewers = ViewerTokens(seat_tokens, spectator=os.environ.get("NA_SPECTATOR_TOKEN") or None)
@@ -765,11 +775,14 @@ def create_app(
         """
         fid = _faction(request, body.get("faction_id"))
         try:
-            return faction_policy.set_policy(
+            result = faction_policy.set_policy(
                 fid, str(body.get("knob") or ""), body.get("value"), str(body.get("reason") or "")
             )
         except KnobError as exc:
             raise HTTPException(422, str(exc)) from exc
+        if reviews is not None:
+            reviews.note_write(fid, "policy")
+        return result
 
     def _seat_intent(seat: int | None, raw: object) -> object:
         """Seat mode: an intent goes in the seat's own graph; a different faction is refused."""
@@ -893,6 +906,7 @@ def create_app(
                 "healthy": orchestrator.telemetry.healthy,
                 "failures": [f.error for f in orchestrator.telemetry.failures[-3:]],
             },
+            "reviews": reviews.status() if reviews is not None else None,
             "live": {
                 "viewers": live.viewers,
                 "dropped": live.dropped,
@@ -912,6 +926,9 @@ def create_app(
         # recording it as a resolution would be a lie about which board it was made on.
         _expire_deferrals(deferrals, world_view.turn)
         turn_store.note_raised(world_view)
+        if reviews is not None:
+            # Arithmetic and a daemon thread: a review never holds the turn it rings on.
+            reviews.observe(world_view)
         if world_view.faction_id is not None:
             latest_view[world_view.faction_id] = world_view
             posted_factions.add(world_view.faction_id)
@@ -1037,6 +1054,8 @@ def create_app(
             if rejected:
                 raise HTTPException(422, rejected[0])
             pending.proposed_directives.extend(accepted)
+            if reviews is not None:
+                reviews.note_write(pending.world_view.faction_id, "directive")
             return {
                 "decision_id": decision_id,
                 "issued": accepted[0].id,
@@ -1611,6 +1630,8 @@ def create_app(
             # 422 while the agent still holds the strategy and can fix the entry it got wrong.
             raise HTTPException(422, str(exc)) from exc
         turn_plan.install(installed)
+        if reviews is not None:
+            reviews.note_write(faction_id, "plan")
         return {"plan": installed.summary()}
 
     @app.get("/agent/plan")
