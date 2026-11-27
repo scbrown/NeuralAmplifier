@@ -36,12 +36,19 @@ from __future__ import annotations
 import hashlib
 import json
 import threading
-from collections.abc import Iterable, Mapping
+from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from types import MappingProxyType
 from typing import Any, Literal
 
 KnobType = Literal["int", "flag", "goals"]
+#: Who set a knob, as the change log names it: a skill's ``on_turn``, a seat's agent acting on
+#: its standing directives through ``/agent/policy``, or the operator.
+SetBy = Literal["skill", "directive", "operator"]
+SET_BY: tuple[str, ...] = ("skill", "directive", "operator")
+#: The ``kind`` of a change-log record.
+POLICY_CHANGE = "policy_change"
 
 #: Faction ids an overlay can name. 0 is native life and never a player; 8 is MaxPlayerNum.
 FACTION_IDS = range(1, 8)
@@ -229,6 +236,45 @@ def registry() -> list[dict[str, object]]:
     return rows
 
 
+def _json_safe(value: object) -> object:
+    """A refused value is recorded as given, but only as JSON can carry it."""
+    try:
+        return json.loads(json.dumps(value))
+    except (TypeError, ValueError):
+        return repr(value)
+
+
+def change_record(
+    faction_id: int,
+    knob: str,
+    old: object,
+    new: object,
+    reason: object,
+    set_by: str,
+    turn: int | None,
+    refused: str | None = None,
+) -> dict[str, Any]:
+    """One ``policy_change`` line: time, turn, knob, old -> new, reason, who, and the outcome.
+
+    A refused change is recorded too, with ``new`` as it was asked for and the refusal text, so
+    a seat that keeps asking for a posture it cannot have is visible rather than silent.
+    """
+    return {
+        "kind": POLICY_CHANGE,
+        "schema_version": "0.1",
+        "at": datetime.now(UTC).isoformat(timespec="seconds"),
+        "turn": turn,
+        "faction_id": faction_id,
+        "knob": knob,
+        "old": _json_safe(old),
+        "new": _json_safe(new),
+        "reason": reason if isinstance(reason, str) else _json_safe(reason),
+        "set_by": set_by,
+        "outcome": "refused" if refused is not None else "set",
+        "refusal": refused,
+    }
+
+
 class PolicyStore:
     """Each faction's knobs as set, and the overlay last delivered to the engine.
 
@@ -243,22 +289,47 @@ class PolicyStore:
         self._knobs: dict[int, dict[str, Any]] = {}
         self._reasons: dict[int, dict[str, str]] = {}
         self._delivered: dict[int, str] = {}
+        #: Receives each ``policy_change`` record: the service points it at
+        #: ``Emitter.emit_policy``, so the change log is JSONL first, then the live stream.
+        self.observer: Callable[[dict[str, Any]], None] | None = None
+        self.observer_failures = 0
 
     def set_policy(
-        self, faction_id: int, knob: str, value: object, reason: str
+        self,
+        faction_id: int,
+        knob: str,
+        value: object,
+        reason: str,
+        *,
+        set_by: SetBy = "operator",
+        turn: int | None = None,
     ) -> dict[str, object]:
         """Set (or, with ``value=None``, clear) one knob for a seat's own faction.
 
         Refuses an unknown knob, an out-of-bounds value, or a change with no reason — a posture
         nobody can explain later reads as a plan somebody is watching.
+
+        Every call, accepted or refused, is handed to :attr:`observer` as one ``policy_change``
+        record (the console's change log, ``seats-and-policy.md`` §7). The history is that
+        record and nothing else: it is never rebuilt from the knobs currently in force.
         """
-        if faction_id not in FACTION_IDS:
-            raise KnobError(f"faction {faction_id} cannot carry a policy (1..7)")
-        if not isinstance(reason, str) or not reason.strip():
-            raise KnobError("a policy change needs a reason")
-        if knob not in KNOBS:
-            raise KnobError(f"unknown knob {knob!r}; the registry has {sorted(KNOBS)}")
-        checked = None if value is None else validate(knob, value)
+        try:
+            if faction_id not in FACTION_IDS:
+                raise KnobError(f"faction {faction_id} cannot carry a policy (1..7)")
+            if not isinstance(reason, str) or not reason.strip():
+                raise KnobError("a policy change needs a reason")
+            if knob not in KNOBS:
+                raise KnobError(f"unknown knob {knob!r}; the registry has {sorted(KNOBS)}")
+            checked = None if value is None else validate(knob, value)
+        except KnobError as exc:
+            with self._lock:
+                previous = self._knobs.get(faction_id, {}).get(knob)
+            self._observe(
+                change_record(
+                    faction_id, knob, previous, value, reason, set_by, turn, refused=str(exc)
+                )
+            )
+            raise
         with self._lock:
             knobs = self._knobs.setdefault(faction_id, {})
             reasons = self._reasons.setdefault(faction_id, {})
@@ -269,13 +340,28 @@ class PolicyStore:
             else:
                 knobs[knob] = checked
                 reasons[knob] = reason.strip()
-            return {
-                "faction_id": faction_id,
-                "knob": knob,
-                "value": checked,
-                "superseded": previous,
-                "status": "set; it reaches the engine with the next turn announcement",
-            }
+        self._observe(change_record(faction_id, knob, previous, checked, reason, set_by, turn))
+        return {
+            "faction_id": faction_id,
+            "knob": knob,
+            "value": checked,
+            "superseded": previous,
+            "status": "set; it reaches the engine with the next turn announcement",
+        }
+
+    def _observe(self, event: dict[str, Any]) -> None:
+        """Hand one change record to the observer; a broken observer never refuses a set."""
+        if self.observer is None:
+            return
+        try:
+            self.observer(event)
+        except Exception:  # noqa: BLE001 — the change log must never stall a seat
+            self.observer_failures += 1
+
+    def factions(self) -> list[int]:
+        """Factions with at least one knob set."""
+        with self._lock:
+            return sorted(fid for fid, knobs in self._knobs.items() if knobs)
 
     def knobs(self, faction_id: int) -> dict[str, Any]:
         """What this faction's seat has SET. Never anything Thinker computed."""

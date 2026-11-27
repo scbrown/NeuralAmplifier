@@ -78,6 +78,25 @@ class Emitter:
                     SinkFailure(sink=type(sink).__name__, error=f"{type(exc).__name__}: {exc}")
                 )
 
+    def emit_policy(self, event: dict[str, Any]) -> None:
+        """A ``policy_change`` record, to every sink that carries one, in the same order.
+
+        Not a :class:`~.decisions.DecisionRecord`, so it goes only to sinks with a
+        ``write_policy`` method: the JSONL log (its own ``policy.jsonl``, since every reader of
+        the decision log parses each line as a decision) and then the live stream. The order is
+        the sink order, so a viewer never hears of a change the log does not already hold.
+        """
+        for sink in self.sinks:
+            write = getattr(sink, "write_policy", None)
+            if write is None:
+                continue
+            try:
+                write(event)
+            except Exception as exc:  # noqa: BLE001 — telemetry must never stall the game
+                self.failures.append(
+                    SinkFailure(sink=type(sink).__name__, error=f"{type(exc).__name__}: {exc}")
+                )
+
     @property
     def healthy(self) -> bool:
         return not self.failures

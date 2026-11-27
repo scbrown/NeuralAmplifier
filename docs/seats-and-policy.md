@@ -609,8 +609,19 @@ second device at port 8088 on that host.
 sink, registered last by `telemetry.sinks_for`. `GET /dashboard/api/events` is the stream and
 filters by token: a seat token gets its own faction, the spectator token (`<run>/spectator/token`)
 gets every faction, and no token gets 401. The first spectator connection writes
-`observer_spoiled` and `observer_spoiled_at` to `<run>/run.json`. Seats, Policy, Copilot and
-Graph are later slices.
+`observer_spoiled` and `observer_spoiled_at` to `<run>/run.json`.
+
+**Shipped, slice 2 (aegis-8fye.4):** the Seats and Policy panes, behind
+`GET /dashboard/api/seats` and `GET /dashboard/api/policy` under the same token rule as the
+stream (a spectator read spoils the run the same single time). Every `PolicyStore.set_policy`
+call, accepted or refused, is one `policy_change` record (time, turn, knob, old and new, reason,
+`set_by` of `skill`, `directive` or `operator`, outcome and refusal text) sent through
+`Emitter.emit_policy`: `policy.jsonl` beside the decision log first, then the stream. The change
+log is that file and nothing else; with no decision log configured it reads `UNKNOWN`, and it is
+never rebuilt from the knobs in force. Seats come from the decision log (driver, standing
+directives, turn-plan hits, latency p50/p95, degrade rate, spend) and the seat table (budget). A
+field with no source reads `UNKNOWN`, never 0; turn-plan misses are retired in memory and are
+not in the record, so they read `UNKNOWN`. Copilot and Graph are later slices.
 
 ## 8. Spend
 
