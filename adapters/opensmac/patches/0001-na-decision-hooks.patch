@@ -1,0 +1,416 @@
+diff --git a/src/engine/base.cpp b/src/engine/base.cpp
+index bbd3079..aefce44 100644
+--- a/src/engine/base.cpp
++++ b/src/engine/base.cpp
+@@ -1,4 +1,5 @@
+ #include "engine/base.h"
++#include "engine/na_decide.h"
+ #include "engine/stack_residue.h"
+ 
+ #include <cstdlib>
+@@ -3913,6 +3914,7 @@ void GAMEAPI base_hurry() {
+             }
+             int32_t rate = game().mfactions[faction_id].rule_hurry;
+             if (rate != 100 && spend < f.energy_credits / 10) spend = spend * 100 / rate;
++            spend = na::hook_base_hurry(faction_id, CurrentBaseID, spend, f.energy_credits, need);  // NA decision hook
+             int32_t minerals = cur_base().minerals_accumulated;
+             need = total - minerals;
+             int32_t price = need * need / 20 + need * 2;
+diff --git a/src/engine/base_misc.cpp b/src/engine/base_misc.cpp
+index 01f9dfc..b866250 100644
+--- a/src/engine/base_misc.cpp
++++ b/src/engine/base_misc.cpp
+@@ -1,4 +1,5 @@
+ #include "engine/base_misc.h"
++#include "engine/na_decide.h"
+ 
+ #include <cctype>
+ #include <cstdlib>
+@@ -2418,5 +2419,5 @@ int32_t GAMEAPI base_build(int32_t base_param, int32_t* out_a2, int32_t* out_a3,
+     b.score_facilities();
+     if (b.want_projects())
+         for (int32_t p = 0; p < 64; p++) b.score_project(p);
+-    return b.finish(out_a2, out_a3);
++    return na::hook_base_build(base_param, b.finish(out_a2, out_a3));  // NA decision hook
+ }
+diff --git a/src/engine/na_decide.cpp b/src/engine/na_decide.cpp
+new file mode 100644
+index 0000000..b8a628e
+--- /dev/null
++++ b/src/engine/na_decide.cpp
+@@ -0,0 +1,306 @@
++// Neural Amplifier decision hooks: record and replay. See na_decide.h.
++#include "engine/na_decide.h"
++
++#include <unistd.h>
++
++#include <cstdio>
++#include <cstdlib>
++#include <cstring>
++#include <map>
++#include <tuple>
++
++#include "engine/base.h"
++#include "engine/game_state.h"
++#include "engine/globals.h"
++#include "engine/social.h"
++#include "engine/tech.h"
++
++namespace na {
++namespace {
++
++// ---- SHA-256 (FIPS 180-4) ----
++struct Sha256 {
++    uint32_t h[8] = {0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a,
++                     0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19};
++    uint8_t buf[64];
++    uint64_t len = 0;
++    size_t n = 0;
++    static uint32_t rotr(uint32_t x, int r) { return (x >> r) | (x << (32 - r)); }
++    void block(const uint8_t* p) {
++        static const uint32_t k[64] = {
++            0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5,
++            0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3, 0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174,
++            0xe49b69c1, 0xefbe4786, 0x0fc19dc6, 0x240ca1cc, 0x2de92c6f, 0x4a7484aa, 0x5cb0a9dc, 0x76f988da,
++            0x983e5152, 0xa831c66d, 0xb00327c8, 0xbf597fc7, 0xc6e00bf3, 0xd5a79147, 0x06ca6351, 0x14292967,
++            0x27b70a85, 0x2e1b2138, 0x4d2c6dfc, 0x53380d13, 0x650a7354, 0x766a0abb, 0x81c2c92e, 0x92722c85,
++            0xa2bfe8a1, 0xa81a664b, 0xc24b8b70, 0xc76c51a3, 0xd192e819, 0xd6990624, 0xf40e3585, 0x106aa070,
++            0x19a4c116, 0x1e376c08, 0x2748774c, 0x34b0bcb5, 0x391c0cb3, 0x4ed8aa4a, 0x5b9cca4f, 0x682e6ff3,
++            0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208, 0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2};
++        uint32_t w[64];
++        for (int i = 0; i < 16; i++)
++            w[i] = (uint32_t)p[4 * i] << 24 | (uint32_t)p[4 * i + 1] << 16 | (uint32_t)p[4 * i + 2] << 8 | p[4 * i + 3];
++        for (int i = 16; i < 64; i++) {
++            uint32_t s0 = rotr(w[i - 15], 7) ^ rotr(w[i - 15], 18) ^ (w[i - 15] >> 3);
++            uint32_t s1 = rotr(w[i - 2], 17) ^ rotr(w[i - 2], 19) ^ (w[i - 2] >> 10);
++            w[i] = w[i - 16] + s0 + w[i - 7] + s1;
++        }
++        uint32_t a = h[0], b = h[1], c = h[2], d = h[3], e = h[4], f = h[5], g = h[6], hh = h[7];
++        for (int i = 0; i < 64; i++) {
++            uint32_t t1 = hh + (rotr(e, 6) ^ rotr(e, 11) ^ rotr(e, 25)) + ((e & f) ^ (~e & g)) + k[i] + w[i];
++            uint32_t t2 = (rotr(a, 2) ^ rotr(a, 13) ^ rotr(a, 22)) + ((a & b) ^ (a & c) ^ (b & c));
++            hh = g; g = f; f = e; e = d + t1; d = c; c = b; b = a; a = t1 + t2;
++        }
++        h[0] += a; h[1] += b; h[2] += c; h[3] += d; h[4] += e; h[5] += f; h[6] += g; h[7] += hh;
++    }
++    void update(const void* data, size_t sz) {
++        const uint8_t* p = (const uint8_t*)data;
++        len += sz;
++        while (sz--) {
++            buf[n++] = *p++;
++            if (n == 64) { block(buf); n = 0; }
++        }
++    }
++    std::string hex() {
++        uint64_t bits = len * 8;
++        uint8_t pad = 0x80;
++        update(&pad, 1);
++        uint8_t z = 0;
++        while (n != 56) update(&z, 1);
++        for (int i = 7; i >= 0; i--) { uint8_t b = (uint8_t)(bits >> (8 * i)); update(&b, 1); }
++        char out[65];
++        for (int i = 0; i < 8; i++) std::snprintf(out + 8 * i, 9, "%08x", h[i]);
++        return std::string(out, 64);
++    }
++};
++
++std::string sha256_hex(const std::string& s) {
++    Sha256 c;
++    c.update(s.data(), s.size());
++    return c.hex();
++}
++
++// ---- mode and log ----
++enum class Mode { Off, Live, Replay };
++
++struct Record {
++    int32_t choice;
++    std::string inputs_sha256;
++    bool used = false;
++};
++using Key = std::tuple<int32_t, int32_t, std::string, int32_t, int32_t>;  // turn faction surface key seq
++
++int32_t stub_decider(const char*, const std::string&, const std::vector<int32_t>&, int32_t fallback) {
++    return fallback;  // the stub plays the engine's own choice; a model bridge replaces this
++}
++
++struct State {
++    Mode mode = Mode::Off;
++    FILE* log = nullptr;
++    std::map<Key, Record> replay;
++    std::map<std::tuple<int32_t, int32_t, std::string, int32_t>, int32_t> seq;
++    Decider decider = stub_decider;
++    long records = 0;
++    bool init = false;
++};
++State g;
++
++[[noreturn]] void fail(const char* what, int32_t turn, const std::string& detail) {
++    std::fprintf(stderr, "NA-REPLAY DIVERGENCE at turn %d: %s %s\n", turn, what, detail.c_str());
++    std::fflush(stderr);
++    std::_Exit(3);
++}
++
++void at_exit() {
++    if (g.log) {
++        std::fflush(g.log);
++        fsync(fileno(g.log));
++        std::fclose(g.log);
++        g.log = nullptr;
++    }
++    if (g.mode == Mode::Replay) {
++        long unused = 0;
++        for (auto& kv : g.replay) unused += !kv.second.used;
++        std::fprintf(stderr, "NA-REPLAY: %ld records applied, %ld unused\n", g.records, unused);
++    } else if (g.mode == Mode::Live) {
++        std::fprintf(stderr, "NA-LIVE: %ld records written\n", g.records);
++    }
++}
++
++bool field_int(const char* line, const char* name, int32_t* out) {
++    char pat[40];
++    std::snprintf(pat, sizeof(pat), "\"%s\":", name);
++    const char* p = std::strstr(line, pat);
++    if (!p) return false;
++    *out = (int32_t)std::strtol(p + std::strlen(pat), nullptr, 10);
++    return true;
++}
++
++bool field_str(const char* line, const char* name, std::string* out) {
++    char pat[40];
++    std::snprintf(pat, sizeof(pat), "\"%s\":\"", name);
++    const char* p = std::strstr(line, pat);
++    if (!p) return false;
++    p += std::strlen(pat);
++    const char* e = std::strchr(p, '"');
++    if (!e) return false;
++    out->assign(p, e - p);
++    return true;
++}
++
++void ensure_init() {
++    if (g.init) return;
++    g.init = true;
++    const char* m = std::getenv("NA_OPENSMAC_MODE");
++    const char* path = std::getenv("NA_OPENSMAC_LOG");
++    if (!m || !*m || !std::strcmp(m, "off")) return;
++    if (!path || !*path) {
++        std::fprintf(stderr, "NA: NA_OPENSMAC_MODE=%s needs NA_OPENSMAC_LOG\n", m);
++        std::_Exit(2);
++    }
++    if (!std::strcmp(m, "live")) {
++        g.mode = Mode::Live;
++        g.log = std::fopen(path, "w");
++        if (!g.log) { std::perror(path); std::_Exit(2); }
++    } else if (!std::strcmp(m, "replay")) {
++        g.mode = Mode::Replay;
++        FILE* f = std::fopen(path, "r");
++        if (!f) { std::perror(path); std::_Exit(2); }
++        char line[4096];
++        long lineno = 0;
++        while (std::fgets(line, sizeof(line), f)) {
++            lineno++;
++            int32_t turn, faction, key, seq, choice;
++            std::string surface, hash;
++            if (!field_int(line, "turn", &turn) || !field_int(line, "faction", &faction) ||
++                !field_int(line, "key", &key) || !field_int(line, "seq", &seq) ||
++                !field_int(line, "choice", &choice) || !field_str(line, "surface", &surface) ||
++                !field_str(line, "inputs_sha256", &hash)) {
++                std::fprintf(stderr, "NA-REPLAY: malformed record at line %ld\n", lineno);
++                std::_Exit(2);
++            }
++            g.replay[Key(turn, faction, surface, key, seq)] = Record{choice, hash};
++        }
++        std::fclose(f);
++    } else {
++        std::fprintf(stderr, "NA: unknown NA_OPENSMAC_MODE=%s (off|live|replay)\n", m);
++        std::_Exit(2);
++    }
++    std::atexit(at_exit);
++}
++
++using Legal = bool (*)(int32_t faction, int32_t key, int32_t choice, const std::vector<int32_t>& legal);
++
++bool in_list(int32_t, int32_t, int32_t choice, const std::vector<int32_t>& legal) {
++    for (int32_t v : legal)
++        if (v == choice) return true;
++    return false;
++}
++
++// The common path: inputs -> (decider | log) -> legality -> record -> apply.
++int32_t decide(const char* surface, int32_t faction, int32_t key, const std::string& obs,
++               const std::vector<int32_t>& legal, int32_t fallback, Legal is_legal) {
++    int32_t turn = CurrentTurn;
++    int32_t seq = g.seq[std::make_tuple(turn, faction, std::string(surface), key)]++;
++    std::string inputs = "{\"surface\":\"" + std::string(surface) + "\",\"turn\":" + std::to_string(turn) +
++                         ",\"faction\":" + std::to_string(faction) + ",\"key\":" + std::to_string(key) +
++                         ",\"obs\":" + obs + ",\"legal\":[";
++    for (size_t i = 0; i < legal.size(); i++) inputs += (i ? "," : "") + std::to_string(legal[i]);
++    inputs += "],\"fallback\":" + std::to_string(fallback) + "}";
++    std::string hash = sha256_hex(inputs);
++    int32_t choice;
++    const char* source;
++    if (g.mode == Mode::Replay) {
++        auto it = g.replay.find(Key(turn, faction, surface, key, seq));
++        char id[160];
++        std::snprintf(id, sizeof(id), "(faction %d, surface %s, key %d, seq %d)", faction, surface, key, seq);
++        if (it == g.replay.end()) fail("no logged record for", turn, id);
++        if (it->second.inputs_sha256 != hash)
++            fail("inputs_sha256 mismatch for", turn,
++                 std::string(id) + " logged " + it->second.inputs_sha256 + " replayed " + hash);
++        choice = it->second.choice;
++        it->second.used = true;
++        if (!is_legal(faction, key, choice, legal))
++            fail("logged choice is illegal for", turn, std::string(id) + " choice " + std::to_string(choice));
++        source = "replay";
++    } else {
++        choice = g.decider(surface, inputs, legal, fallback);
++        source = g.decider == stub_decider ? "stub" : "model";
++        if (!is_legal(faction, key, choice, legal)) {
++            choice = fallback;
++            source = "fallback";
++        }
++        std::fprintf(g.log,
++                     "{\"turn\":%d,\"faction\":%d,\"surface\":\"%s\",\"key\":%d,\"seq\":%d,"
++                     "\"inputs_sha256\":\"%s\",\"choice\":%d,\"source\":\"%s\"}\n",
++                     turn, faction, surface, key, seq, hash.c_str(), choice, source);
++        std::fflush(g.log);
++    }
++    g.records++;
++    return choice;
++}
++
++bool build_legal(int32_t faction, int32_t base_id, int32_t item, const std::vector<int32_t>&) {
++    if (item >= 0) return item < 512 && veh_avail(item, faction, base_id);
++    return -item > 0 && -item < 134 && facility_avail(-item, faction, base_id, 0);
++}
++
++bool hurry_legal(int32_t, int32_t, int32_t spend, const std::vector<int32_t>& legal) {
++    return spend >= 0 && spend <= legal[1];  // legal = [min, max]
++}
++
++}  // namespace
++
++void set_decider(Decider d) { g.decider = d ? d : stub_decider; }
++
++int32_t hook_base_build(int32_t base_id, int32_t choice) {
++    ensure_init();
++    if (g.mode == Mode::Off || base_id < 0) return choice;
++    BASE& b = game().bases[base_id];
++    int32_t faction = (uint8_t)b.faction_id;
++    std::string obs = "{\"x\":" + std::to_string(b.x) + ",\"y\":" + std::to_string(b.y) +
++                      ",\"pop\":" + std::to_string(b.pop_size) +
++                      ",\"minerals\":" + std::to_string(b.minerals_accumulated) +
++                      ",\"queue0\":" + std::to_string(b.queue_items[0]) + "}";
++    // The legal set is open-ended (any unit or facility the base may build); legality is checked
++    // for the chosen item through the engine's own veh_avail/facility_avail.
++    return decide("base_build", faction, base_id, obs, {choice}, choice, build_legal);
++}
++
++int32_t hook_tech_selection(int32_t faction_id, int32_t choice) {
++    ensure_init();
++    if (g.mode == Mode::Off) return choice;
++    std::vector<int32_t> legal;
++    for (int32_t t = 0; t < 89; t++)
++        if (tech_avail(t, faction_id)) legal.push_back(t);
++    if (choice < 0) legal.push_back(choice);  // nothing to research: the engine's -1 stays legal
++    Faction& f = game().factions[faction_id];
++    std::string obs = "{\"credits\":" + std::to_string(f.energy_credits) + "}";
++    return decide("tech_selection", faction_id, -1, obs, legal, choice, in_list);
++}
++
++int32_t hook_social_ai(int32_t faction_id, int32_t packed) {
++    ensure_init();
++    if (g.mode == Mode::Off) return packed;
++    // packed: 4 categories x 2 bits (model per category), as social_ai's best_choice.
++    std::vector<int32_t> legal;
++    for (int32_t c = 0; c < 256; c++) {
++        bool ok = true;
++        for (int32_t cat = 0; cat < 4 && ok; cat++) {
++            int32_t model = (c >> (2 * cat)) & 3;
++            ok = model == 0 || society_avail(cat, model, faction_id);
++        }
++        if (ok || c == packed) legal.push_back(c);
++    }
++    Faction& f = game().factions[faction_id];
++    std::string obs = "{\"credits\":" + std::to_string(f.energy_credits) + "}";
++    return decide("social_ai", faction_id, -1, obs, legal, packed, in_list);
++}
++
++int32_t hook_base_hurry(int32_t faction_id, int32_t base_id, int32_t spend, int32_t credits, int32_t need) {
++    ensure_init();
++    if (g.mode == Mode::Off) return spend;
++    std::string obs = "{\"credits\":" + std::to_string(credits) + ",\"need\":" + std::to_string(need) + "}";
++    return decide("base_hurry", faction_id, base_id, obs, {0, spend}, spend, hurry_legal);
++}
++
++}  // namespace na
+diff --git a/src/engine/na_decide.h b/src/engine/na_decide.h
+new file mode 100644
+index 0000000..684198e
+--- /dev/null
++++ b/src/engine/na_decide.h
+@@ -0,0 +1,27 @@
++// Neural Amplifier decision hooks (eval/research adapter; patch carried by scbrown/NeuralAmplifier,
++// adapters/opensmac). Inert unless NA_OPENSMAC_MODE is "live" or "replay".
++//
++// Each hook receives the engine's own (default) choice and returns the choice to apply. Live mode
++// asks the decider (the in-process stub unless one is installed), checks legality, appends one
++// JSONL decision record and applies it. Replay mode reads the record for the same
++// (turn, faction, surface, key, seq), recomputes inputs_sha256, exits loudly on a divergence,
++// applies the logged choice through the same legality check and never calls the decider.
++#pragma once
++#include <cstdint>
++#include <string>
++#include <vector>
++
++namespace na {
++
++// A decider maps the canonical inputs (JSON bytes) and the legal options to a choice.
++// `fallback` is the engine's own choice; returning it is always legal.
++using Decider = int32_t (*)(const char* surface, const std::string& inputs_json,
++                            const std::vector<int32_t>& legal, int32_t fallback);
++void set_decider(Decider d);
++
++int32_t hook_base_build(int32_t base_id, int32_t choice);
++int32_t hook_tech_selection(int32_t faction_id, int32_t choice);
++int32_t hook_social_ai(int32_t faction_id, int32_t packed_choice);
++int32_t hook_base_hurry(int32_t faction_id, int32_t base_id, int32_t spend, int32_t credits, int32_t need);
++
++}  // namespace na
+diff --git a/src/engine/social.cpp b/src/engine/social.cpp
+index bc8afdf..228b649 100644
+--- a/src/engine/social.cpp
++++ b/src/engine/social.cpp
+@@ -1,4 +1,5 @@
+ #include "engine/social.h"
++#include "engine/na_decide.h"
+ 
+ #include "engine/base.h"
+ #include "engine/design.h"
+@@ -456,6 +457,7 @@ void GAMEAPI social_ai(int32_t faction_id, int32_t growth, int32_t tech, int32_t
+             for (int32_t i = 0; i < 4; i++) out[i] = soc_pending(f)[i];
+         return;
+     }
++    best_choice = na::hook_social_ai(faction_id, best_choice);  // NA decision hook
+     if (out) {
+         for (int32_t i = 0; i < 4; i++) {
+             out[i] = best_choice & 3;
+diff --git a/src/engine/tech.cpp b/src/engine/tech.cpp
+index 07735b4..ce996f2 100644
+--- a/src/engine/tech.cpp
++++ b/src/engine/tech.cpp
+@@ -1,4 +1,5 @@
+ #include "engine/tech.h"
++#include "engine/na_decide.h"
+ 
+ #include "engine/base.h"
+ #include "engine/base_misc.h"
+@@ -909,6 +910,7 @@ int32_t GAMEAPI tech_selection(int32_t faction_id) {
+         return f.tech_research_id;
+     }
+     int32_t tech_id = tech_pick(faction_id, 0, -1, nullptr);
++    tech_id = na::hook_tech_selection(faction_id, tech_id);  // NA decision hook
+     f.tech_research_id = tech_id;
+     if (MultiplayerActive && is_human(faction_id)) {
+         synch_researching(faction_id);

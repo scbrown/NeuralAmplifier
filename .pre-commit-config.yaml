@@ -2,8 +2,11 @@ repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v5.0.0
     hooks:
+      # Patch files keep their diff context byte for byte (a blank context line is one space).
       - id: trailing-whitespace
+        exclude: ^adapters/opensmac/patches/.*\.patch$
       - id: end-of-file-fixer
+        exclude: ^adapters/opensmac/patches/.*\.patch$
       - id: check-yaml
       - id: check-json
         types: [json]
