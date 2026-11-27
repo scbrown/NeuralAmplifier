@@ -23,13 +23,13 @@ import json
 import math
 import subprocess
 from collections.abc import Callable
-from dataclasses import dataclass
 from decimal import Decimal
 from pathlib import Path
 
 from .skills import Skill
 
-#: The shape file, at the repository root.
+#: The shape file, at the repository root. Source-checkout only: it is not shipped as package
+#: data, so an installed wheel has no shape file and shapes_bytes() raises FileNotFoundError.
 SHAPES_PATH = Path(__file__).resolve().parents[3] / "shapes" / "na-skill.shapes.ttl"
 #: sha256 of the shape file's bytes. Change the file, change this, in the same review.
 SHAPES_SHA256 = "7b20da55bfd956e76b1dffefd8bebfd2922683c1b02852fd1d205af31ee26277"
@@ -52,16 +52,6 @@ def shapes_bytes(path: Path = SHAPES_PATH) -> bytes:
     if digest != SHAPES_SHA256:
         raise ShapesError(f"{path} hashes to {digest}, not the pinned {SHAPES_SHA256}")
     return data
-
-
-@dataclass(frozen=True)
-class SuccessCheck:
-    """What success means for a skill (§5.4): ``metric comparator target`` within a horizon."""
-
-    metric: str
-    comparator: str
-    target: float
-    horizon_turns: int
 
 
 def skill_iri(name: str, digest: str) -> str:
@@ -90,17 +80,16 @@ def _block(iri: str, cls: str, props: list[tuple[str, str]]) -> str:
     return f"{iri} a na:{cls} ;\n" + " ;\n".join(body) + " ."
 
 
-def to_turtle(
-    skill: Skill,
-    *,
-    success_check: SuccessCheck | None = None,
-    retired_reason: str | None = None,
-    authored_by: str | None = None,
-) -> str:
+def to_turtle(skill: Skill, *, authored_by: str | None = None) -> str:
     """One skill version as a Turtle document for :data:`SHAPES_PATH` to check.
 
-    ``None`` fields are omitted rather than written, so a missing value is a missing triple.
+    Everything comes from the :class:`~neural_amplifier.skills.Skill` itself, including its
+    ``check`` (a :class:`~neural_amplifier.skills.SuccessCheck`) and ``retired_reason``, so a
+    practice-authored or shelved version serialises with them. ``authored_by`` is provenance the
+    store does not yet carry. ``None`` fields are omitted, so a missing value is a missing triple.
     """
+    success_check = skill.check
+    retired_reason = skill.retired_reason
     me = skill_iri(skill.name, skill.hash)
     props: list[tuple[str, str]] = [
         ("name", _str(skill.name)),

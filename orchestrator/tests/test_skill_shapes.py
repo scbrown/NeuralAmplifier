@@ -31,12 +31,11 @@ from neural_amplifier.skill_shapes import (
     SHAPES_PATH,
     SHAPES_SHA256,
     ShapesError,
-    SuccessCheck,
     load_shapes,
     shapes_bytes,
     to_turtle,
 )
-from neural_amplifier.skills import Skill, SkillStore, Trial, content_hash
+from neural_amplifier.skills import Skill, SkillStore, SuccessCheck, Trial, content_hash
 
 SH = Namespace("http://www.w3.org/ns/shacl#")
 NA = Namespace(skill_shapes.NA)
@@ -193,9 +192,9 @@ def test_closed_lists_match_skills_py() -> None:
 def test_a_skill_from_skills_py_conforms(tmp_path: Path) -> None:
     skill = stored_skill(tmp_path)
     assert violations(to_turtle(skill)) == []
-    assert violations(to_turtle(skill, success_check=CHECK, authored_by="seat-2")) == []
-    retired = replace(skill, status="retired")
-    assert violations(to_turtle(retired, retired_reason="lost to a rush")) == []
+    assert violations(to_turtle(replace(skill, check=CHECK), authored_by="seat-2")) == []
+    retired = replace(skill, status="retired", retired_reason="lost to a rush")
+    assert violations(to_turtle(retired)) == []
 
 
 def test_turtle_round_trips_the_fields(tmp_path: Path) -> None:
@@ -224,10 +223,10 @@ def _bad_instances(skill: Skill) -> dict[str, str]:
         "verdict error": to_turtle(replace(skill, trials=(replace(first, verdict="error"),))),
         "bad knob id": to_turtle(replace(skill, requires=("Focus",))),
         "unknown metric": to_turtle(
-            skill, success_check=SuccessCheck("happiness", "at_least", 1.0, 5)
+            replace(skill, check=SuccessCheck("happiness", "at_least", 1.0, 5))
         ),
-        "bad comparator": to_turtle(skill, success_check=replace(CHECK, comparator="above")),
-        "zero horizon": to_turtle(skill, success_check=replace(CHECK, horizon_turns=0)),
+        "bad comparator": to_turtle(replace(skill, check=replace(CHECK, comparator="above"))),
+        "zero horizon": to_turtle(replace(skill, check=replace(CHECK, horizon_turns=0))),
         "unknown status": to_turtle(replace(skill, status="beta")),
         "bad hash": to_turtle(replace(skill, hash="not-a-hash")),
     }
@@ -253,10 +252,35 @@ def test_a_bad_instance_is_refused(tmp_path: Path, case: str) -> None:
 def test_a_non_finite_number_has_no_turtle_form(tmp_path: Path) -> None:
     skill = stored_skill(tmp_path)
     with pytest.raises(ValueError, match="decimal"):
-        to_turtle(skill, success_check=replace(CHECK, target=float("inf")))
+        to_turtle(replace(skill, check=replace(CHECK, target=float("inf"))))
     trial = Trial("fixture:early", 1, "pass", {"base_count": float("nan")})
     with pytest.raises(ValueError, match="decimal"):
         to_turtle(replace(skill, trials=(trial,)))
+
+
+def test_check_and_retired_reason_come_from_the_stored_skill(tmp_path: Path) -> None:
+    """A practice-authored, then shelved, version from SkillStore keeps both in Turtle."""
+    store = SkillStore(root=tmp_path / "practice")
+    saved = store.save(
+        "expand_early",
+        "expand while the base can pay",
+        CODE,
+        check={"metric": "base_count", "comparator": "at_least", "target": 3, "horizon_turns": 20},
+        require_check=True,
+    )
+    store.retire(saved.name, saved.version, "shelved after 4 round(s)")
+    skill = SkillStore(root=tmp_path / "practice").get(saved.name, saved.version)
+    assert skill is not None and skill.check is not None
+    text = to_turtle(skill)
+    assert violations(text) == []
+    graph = Graph().parse(data=text, format="turtle")
+    (node,) = graph.subjects(RDF.type, NA.Skill)
+    assert str(graph.value(node, NA.retiredReason)) == "shelved after 4 round(s)"
+    check = graph.value(node, NA.successCheck)
+    assert str(graph.value(check, NA.metric)) == "base_count"
+    assert str(graph.value(check, NA.comparator)) == "at_least"
+    assert float(graph.value(check, NA.target).toPython()) == 3.0
+    assert int(graph.value(check, NA.horizonTurns).toPython()) == 20
 
 
 # --- the loader ----------------------------------------------------------------------------
@@ -312,7 +336,7 @@ def _qp_validate(tmp_path: Path, turtle: str) -> dict[str, Any]:
 @needs_qp
 def test_qp_accepts_a_skill_from_skills_py(tmp_path: Path) -> None:
     skill = stored_skill(tmp_path)
-    report = _qp_validate(tmp_path, to_turtle(skill, success_check=CHECK, authored_by="seat-2"))
+    report = _qp_validate(tmp_path, to_turtle(replace(skill, check=CHECK), authored_by="seat-2"))
     assert report["conforms"] is True, report
 
 
