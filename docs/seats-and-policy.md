@@ -155,6 +155,53 @@ not a curious one with a shell.
 - **Board: only the orchestrator calls Yupana**, with the tenant derived from the seat token. An
   agent never holds a Yupana URL.
 
+### 3.2.1 What tiers 2 and 3 enforce now (aegis-8fye.9)
+
+**The command channel (tier 2), in the fork.** Every mutating verb goes through `na_order_gate`
+with the faction derived from the entity, and the `apply*` and fixture verbs are refused unless
+the operator flag is set in `thinker.ini` (Thinker fork, slice A).
+
+**The seat harness profile (tier 2).** `neural-amplifier seat-profile --seat <n> --run-dir <run>
+--out <dir>` writes a seat's `settings.json` and `mcp.json` at 0600, outside the run directory
+(it refuses a path inside it), and prints the launch line. The profile is `seat_profile.py`:
+
+- `--tools ""` removes every built-in tool, so no file tool and no shell exists in the session.
+  The deny rules are the second lock: every file tool is denied on the run directory (and on
+  each `--protect` path, such as the game's saves), and `Bash`, `WebFetch`, `WebSearch`, `Task`
+  and `Agent` are denied outright, because a path rule on `Read` does not bind `cat`.
+- `--strict-mcp-config` with one server: the seat's own `neural-amplifier mcp`. The seat token
+  goes in that server's environment, never on a command line that `/proc` shows to every
+  process on the host.
+- `--setting-sources ""` and `--permission-mode dontAsk`: no project allow rule merges in, and
+  anything not pre-approved is refused instead of prompting.
+
+The leak probe is `tests/test_seat_isolation.py`. It asks the profile whether any tool can read
+a sibling seat's log, and it calls every route the seat's MCP server reaches with seat 3's token
+while seat 5 has a decision waiting. The route list is read from the MCP server's source, so a
+new route is probed without anyone adding it to the test. `NA_LIVE_SEAT_PROBE=1` also runs the
+real harness against the profile. That makes a model call, so CI never sets it.
+
+**The board (tier 3).** Only the orchestrator calls Yupana. `yupana.tenant()` derives the tenant:
+in seat mode it is `seat-<n>`, from the seat token on `/agent/whatif` and from the engine-stated
+`faction_id` on the guard path. An agent never names it. `what_if` refuses a decision that is
+not the caller seat's before it ingests anything. The profile refuses to write a seat
+environment that carries a Yupana, Hank or Quipu URL. Legacy runs (no `[seats]`) keep the
+faction-name tenant.
+
+**Memory (tier 3): design only. Provisioning is infrastructure, not a job.**
+
+- One Quipu database per seat identity, named for the identity and not the game, so a seat's
+  book survives across games. A database is the boundary because scoped-writer grants pin
+  writes and do not restrict reads.
+- A seat's bearer is scoped to its own database. The orchestrator reads the seat's database
+  for retrieval on that seat's decisions, plus the shared read-only datalinks dataset. A seat
+  never holds a Quipu URL, for the same reason it never holds a Yupana one.
+- A **commons dataset** for promoted skills: read-only to every seat and written only by the
+  promotion step, which an operator approves. A skill reaches the commons by promotion, never
+  by a seat writing there.
+- Until the databases exist, a seated run uses no learned memory (the shared datalinks only).
+  One shared memory database would let one seat read another's book.
+
 ### 3.3 The person is a player too
 
 When Stiwi plays against an agent, the console is the leak. So the console has a **player view**
