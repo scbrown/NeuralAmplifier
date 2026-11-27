@@ -179,6 +179,11 @@ class DecisionRecord(BaseModel):
     jev_tier: dict[str, Any] | None = None
 
     world_view_hash: str
+    #: The per-faction policy overlay the engine was under (``faction_policy``): the hash of the
+    #: knobs last delivered for this faction, or the hash of ``{}`` under Thinker's defaults. A
+    #: deterministic-tier decision made under an agent's posture is not the same evidence as one
+    #: made under the defaults, and the record must say which (``seats-and-policy.md`` §4.3).
+    policy_hash: str | None = None
     action_space_size: int
     chosen: list[dict[str, Any]] = Field(default_factory=list)
     reason: str | None = None

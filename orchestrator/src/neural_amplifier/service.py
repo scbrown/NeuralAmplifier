@@ -28,6 +28,7 @@ from .coverage import report
 from .decisions import DecisionLog
 from .deferrals import DeferralSet
 from .directives import DirectiveStore, accept
+from .faction_policy import KnobError, PolicyStore, registry
 from .grounding_evidence import Cache as GroundingCache
 from .intents import IntentError, UnitIntent
 from .intents import validate as validate_intent
@@ -553,8 +554,14 @@ def create_app(
     turn_plan = PlanStore()
     app.state.turn_plan = turn_plan
 
+    # The per-faction policy overlay (aegis-8fye.6). Always built: an empty store delivers
+    # nothing, and the /turn reply is then exactly what it was before the store existed.
+    faction_policy = PolicyStore()
+    app.state.faction_policy = faction_policy
+
     orchestrator = Orchestrator(
         brain=brain or build_brain(config),
+        faction_policy=faction_policy,
         log=resolved_log,
         sinks=resolved_sinks,
         store=WorldViewStore(store_path) if store_path else None,
@@ -701,6 +708,37 @@ def create_app(
                     403,
                     f"{kind} {entity} is not in your seat's latest world view; not yours to order",
                 )
+
+    def _llm_factions() -> set[int]:
+        """Factions an LLM seat drives: the seat table, or in legacy mode those that posted."""
+        if router is not None:
+            return set(router.seats)
+        return set(posted_factions)
+
+    @app.get("/agent/policy")
+    def agent_policy(request: Request, faction_id: int | None = None) -> dict[str, object]:
+        """The knob registry, and the knobs THIS seat has set.
+
+        Write-only by design: what comes back is what the seat set, never what Thinker computed
+        from it. ``AIPlans`` sums every faction's units, so echoing it would be a fog leak.
+        """
+        fid = _faction(request, faction_id)
+        return {"faction_id": fid, "knobs": faction_policy.knobs(fid), "registry": registry()}
+
+    @app.post("/agent/policy")
+    def agent_set_policy(request: Request, body: dict[str, object]) -> dict[str, object]:
+        """Set (``value: null`` clears) one knob of this seat's standing posture.
+
+        Refused here, while the seat can still correct it: an unknown knob, an out-of-bounds
+        value, or a change with no reason. Takes effect at the next turn announcement.
+        """
+        fid = _faction(request, body.get("faction_id"))
+        try:
+            return faction_policy.set_policy(
+                fid, str(body.get("knob") or ""), body.get("value"), str(body.get("reason") or "")
+            )
+        except KnobError as exc:
+            raise HTTPException(422, str(exc)) from exc
 
     def _seat_intent(seat: int | None, raw: object) -> object:
         """Seat mode: an intent goes in the seat's own graph; a different faction is refused."""
@@ -1189,6 +1227,11 @@ def create_app(
         response: dict[str, object] = {"turn": body.turn, "expected": count}
         if callable(primer):
             response["grounding"] = grounding
+        # The policy overlay rides back to the engine here (seats-and-policy.md §4.2): the
+        # faction ids are the engine's own, it lands before this turn's decisions, and it costs
+        # no extra round trip. Only factions with an LLM seat; nothing at all when none has a
+        # knob set, so a fork that ignores the reply sees exactly the reply it always did.
+        response.update(faction_policy.reply(_llm_factions()))
         return response
 
     @app.get("/turn")
