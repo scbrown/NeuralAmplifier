@@ -436,7 +436,7 @@ class Orchestrator:
                 # same function scope, and shadowing it here is the closure-repointing shape
                 # that slice 2's queue/DecisionQueue bug already demonstrated.
                 miss_why = f"{planned.action_id} is no longer in the action space"
-                faction_id = _extra(world_view, "faction_id", int)
+                faction_id = world_view.faction_id
                 if faction_id is not None:
                     self.turn_plan.miss(faction_id, planned, miss_why)
                 world_view = world_view.model_copy(
@@ -836,7 +836,7 @@ class Orchestrator:
                 id=_deferral_id(world_view),
                 surface_id=world_view.surface_id or "",
                 turn=world_view.turn,
-                faction_id=_extra(world_view, "faction_id", int),
+                faction_id=world_view.faction_id,
                 faction=world_view.faction,
                 base_id=_extra(world_view, "base_id", int),
                 base=_extra(world_view, "base", str),
@@ -1003,6 +1003,12 @@ class Orchestrator:
         # and a mismatch here is reported by Yupana as `unresolved`, i.e. as broken evidence
         # rather than as the producer bug it would be.
         digest = world_view_hash(world_view.model_dump(mode="json"))
+        # Under a seat table the brain is a router, and what answered is the seat's own driver.
+        # Duck-typed so the orchestrator still never learns which brain it holds.
+        seat_for = getattr(self.brain, "seat_for", None)
+        seat = seat_for(world_view) if callable(seat_for) else None
+        driver_for = getattr(self.brain, "driver_for", None)
+        answered = (driver_for(world_view) if callable(driver_for) else None) or self.brain
         return DecisionRecord(
             trace_id=world_view.traceparent(),
             game_id=self.game_id,
@@ -1022,7 +1028,9 @@ class Orchestrator:
             degrade_reason=degrade_reason,
             fairness_profile=[h.id for h in fairness.handicaps] if fairness else [],
             # What answered, when the provider said; else what was configured; else the lane.
-            model=orders.served_model or getattr(self.brain, "model", None) or self.brain.name,
+            model=orders.served_model or getattr(answered, "model", None) or answered.name,
+            seat=seat.faction_id if seat is not None else None,
+            seat_principal=seat.principal if seat is not None else None,
             # What the call was actually billed for. Absent on a scripted or degraded decision,
             # where zeroes are the truth rather than a gap (na-6db: the field existed and was
             # structurally zero on every record, which reads as a measured "free").
@@ -1062,7 +1070,7 @@ class Orchestrator:
         lookup = getattr(self.retriever, "consultation_for", None)
         if not callable(lookup):
             return None
-        faction_id = getattr(world_view, "faction_id", None)
+        faction_id = world_view.faction_id
         consultation = lookup(world_view.turn, faction_id)
         if consultation is None:
             return None

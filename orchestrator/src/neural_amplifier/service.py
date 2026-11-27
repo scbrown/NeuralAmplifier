@@ -61,7 +61,14 @@ def build_brain(config: Config | None = None) -> Brain:
     ``brain.kind``. Reading the environment again here would give the env var two meanings that
     could disagree, with the file silently losing on one path and winning on the other.
     """
-    cfg = (config or load_config()).brain
+    full = config or load_config()
+    # A seat table replaces the single brain outright. `[brain]` still means what it always did
+    # when there is no table, and that path below is untouched (aegis-8fye.3.2).
+    if full.seats:
+        from .seats import SeatRouter
+
+        return SeatRouter(full.seats)
+    cfg = full.brain
     if cfg.kind == "agent":
         return AgentBrain()
     if cfg.kind == "claude-code":
