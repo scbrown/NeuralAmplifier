@@ -1,0 +1,144 @@
+# The campaign ledger and its SHACL shape: a strategist seat's memory across
+# reviews, docs/seats-and-policy.md §6, one ledger per seat identity.
+#
+# This file lives in this repository (the same in-repo ruling as na-skill):
+# orchestrator/src/neural_amplifier/ledger.py pins these exact bytes by sha256.
+# Editing this file means updating that pin.
+#
+# Every term is in the na: namespace, the same namespace as na-skill. Nothing
+# here aliases or reuses aegis:GitHubReview: na:Review is a strategic review of
+# a game seat, a different concept.
+#
+# The ledger is APPEND-ONLY and every write is one knot:
+# - na:Commitment is one immutable version of what the seat committed to, under
+#   a natural na:key. A later commitment with the same key na:supersedes the
+#   earlier one; the earlier one stays readable, and readers take the latest
+#   (highest na:tx) per key. Keeping or breaking a commitment is such a write.
+# - na:Review is one strategic review, written once when its outcome is known:
+#   acted (a directive, plan or policy write landed) or missed.
+# - na:LedgerState is the record of one write: whose ledger, which transaction,
+#   and the records it carried. The latest state is the ledger's head.
+
+@prefix na:   <http://neuralamplifier.local/ontology/skill/> .
+@prefix sh:   <http://www.w3.org/ns/shacl#> .
+@prefix xsd:  <http://www.w3.org/2001/XMLSchema#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix owl:  <http://www.w3.org/2002/07/owl#> .
+
+# --- vocabulary -------------------------------------------------------------
+
+na:Commitment a owl:Class ;
+    rdfs:comment "One version of a seat's standing commitment, by natural key: what, from when, until when or what." .
+
+na:Review a owl:Class ;
+    rdfs:comment "One strategic review of a seat: its turn, trigger, outcome and what it produced. Not aegis:GitHubReview." .
+
+na:LedgerState a owl:Class ;
+    rdfs:comment "One append to a seat's ledger: the seat identity, the transaction and the records it carried." .
+
+na:key        a owl:DatatypeProperty ; rdfs:domain na:Commitment ;
+    rdfs:comment "The commitment's natural key; a later version with the same key supersedes it." .
+na:text       a owl:DatatypeProperty ; rdfs:domain na:Commitment .
+na:fromTurn   a owl:DatatypeProperty ; rdfs:domain na:Commitment .
+na:untilTurn  a owl:DatatypeProperty ; rdfs:domain na:Commitment .
+na:condition  a owl:DatatypeProperty ; rdfs:domain na:Commitment ;
+    rdfs:comment "What ends the commitment, when it is not a turn." .
+na:attachedVia a owl:DatatypeProperty ; rdfs:domain na:Commitment ;
+    rdfs:comment "The route it came with: directive, plan or policy." .
+na:attachedRef a owl:DatatypeProperty ; rdfs:domain na:Commitment ;
+    rdfs:comment "The id of the directive, plan or policy change it came with." .
+na:seat       a owl:DatatypeProperty ;
+    rdfs:comment "The seat identity whose ledger holds the record." .
+na:reviewId   a owl:DatatypeProperty ; rdfs:domain na:Review .
+na:turn       a owl:DatatypeProperty ; rdfs:domain na:Review .
+na:trigger    a owl:DatatypeProperty ; rdfs:domain na:Review ;
+    rdfs:comment "cadence or discontinuity." .
+na:reason     a owl:DatatypeProperty ; rdfs:domain na:Review ;
+    rdfs:comment "The scheduler's reason: cadence, base_lost or war_declared." .
+na:outcome    a owl:DatatypeProperty ; rdfs:domain na:Review ;
+    rdfs:comment "acted or missed." .
+na:producedDirective    a owl:DatatypeProperty ; rdfs:domain na:Review .
+na:producedPlan         a owl:DatatypeProperty ; rdfs:domain na:Review .
+na:producedPolicyChange a owl:DatatypeProperty ; rdfs:domain na:Review .
+na:records    a owl:ObjectProperty ; rdfs:domain na:LedgerState .
+
+# --- shapes -----------------------------------------------------------------
+
+na:CommitmentShape a sh:NodeShape ;
+    sh:targetClass na:Commitment ;
+    # Every commitment says when it ends: a turn, a condition, or both.
+    sh:or ( [ sh:path na:untilTurn ; sh:minCount 1 ] [ sh:path na:condition ; sh:minCount 1 ] ) ;
+    sh:property [
+        sh:path na:key ; sh:datatype xsd:string ; sh:minCount 1 ; sh:maxCount 1 ;
+        sh:pattern "^[a-z][a-z0-9_.-]{0,63}$" ;
+    ] , [
+        sh:path na:text ; sh:datatype xsd:string ; sh:minCount 1 ; sh:maxCount 1 ;
+        sh:minLength 1 ;
+    ] , [
+        sh:path na:fromTurn ; sh:datatype xsd:integer ; sh:minCount 1 ; sh:maxCount 1 ;
+        sh:minInclusive 0 ;
+    ] , [
+        sh:path na:untilTurn ; sh:datatype xsd:integer ; sh:maxCount 1 ; sh:minInclusive 0 ;
+    ] , [
+        sh:path na:condition ; sh:datatype xsd:string ; sh:maxCount 1 ; sh:minLength 1 ;
+    ] , [
+        sh:path na:status ; sh:datatype xsd:string ; sh:minCount 1 ; sh:maxCount 1 ;
+        sh:in ( "open" "kept" "broken" "superseded" ) ;
+    ] , [
+        # It crosses transactions, so sh:nodeKind only (as na:SkillState's references do).
+        sh:path na:supersedes ; sh:nodeKind sh:IRI ; sh:maxCount 1 ;
+    ] , [
+        sh:path na:attachedVia ; sh:datatype xsd:string ; sh:maxCount 1 ;
+        sh:in ( "directive" "plan" "policy" ) ;
+    ] , [
+        sh:path na:attachedRef ; sh:datatype xsd:string ; sh:maxCount 1 ; sh:minLength 1 ;
+    ] , [
+        sh:path na:seat ; sh:datatype xsd:string ; sh:minCount 1 ; sh:maxCount 1 ;
+        sh:minLength 1 ;
+    ] , [
+        sh:path na:tx ; sh:datatype xsd:integer ; sh:minCount 1 ; sh:maxCount 1 ;
+        sh:minInclusive 1 ;
+    ] .
+
+na:ReviewShape a sh:NodeShape ;
+    sh:targetClass na:Review ;
+    sh:property [
+        sh:path na:reviewId ; sh:datatype xsd:string ; sh:minCount 1 ; sh:maxCount 1 ;
+        sh:minLength 1 ;
+    ] , [
+        sh:path na:turn ; sh:datatype xsd:integer ; sh:minCount 1 ; sh:maxCount 1 ;
+        sh:minInclusive 0 ;
+    ] , [
+        sh:path na:trigger ; sh:datatype xsd:string ; sh:minCount 1 ; sh:maxCount 1 ;
+        sh:in ( "cadence" "discontinuity" ) ;
+    ] , [
+        sh:path na:reason ; sh:datatype xsd:string ; sh:maxCount 1 ;
+        sh:in ( "cadence" "base_lost" "war_declared" ) ;
+    ] , [
+        sh:path na:outcome ; sh:datatype xsd:string ; sh:minCount 1 ; sh:maxCount 1 ;
+        sh:in ( "acted" "missed" ) ;
+    ] , [
+        sh:path na:producedDirective ; sh:datatype xsd:string ; sh:minLength 1 ;
+    ] , [
+        sh:path na:producedPlan ; sh:datatype xsd:string ; sh:minLength 1 ;
+    ] , [
+        sh:path na:producedPolicyChange ; sh:datatype xsd:string ; sh:minLength 1 ;
+    ] , [
+        sh:path na:seat ; sh:datatype xsd:string ; sh:minCount 1 ; sh:maxCount 1 ;
+        sh:minLength 1 ;
+    ] , [
+        sh:path na:tx ; sh:datatype xsd:integer ; sh:minCount 1 ; sh:maxCount 1 ;
+        sh:minInclusive 1 ;
+    ] .
+
+na:LedgerStateShape a sh:NodeShape ;
+    sh:targetClass na:LedgerState ;
+    sh:property [
+        sh:path na:seat ; sh:datatype xsd:string ; sh:minCount 1 ; sh:maxCount 1 ;
+        sh:minLength 1 ;
+    ] , [
+        sh:path na:tx ; sh:datatype xsd:integer ; sh:minCount 1 ; sh:maxCount 1 ;
+        sh:minInclusive 1 ;
+    ] , [
+        sh:path na:records ; sh:nodeKind sh:IRI ; sh:minCount 1 ;
+    ] .

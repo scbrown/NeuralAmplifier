@@ -16,6 +16,12 @@ the seat lands before the next review falls due, a ``review_missed`` event goes 
 own decision log, and the standing policy stays exactly as it was. Invariant 9 — the engine is
 never blocked on a model — holds for policy seats because a silent strategist is a recorded
 fact rather than a stall.
+
+**Every review lands in the seat's campaign ledger** (slice 2, ``ledger.py``) once its outcome
+is known: ``acted``, with the directive, plan and policy-change ids written while it was open, or
+``missed``. The ledger write runs on a daemon thread too, so a slow store never holds a turn.
+:meth:`ReviewScheduler.context` is what the strategist reads for a review (``GET /agent/review``):
+the open review, the seat's open commitments and its last five reviews.
 """
 
 from __future__ import annotations
@@ -23,7 +29,7 @@ from __future__ import annotations
 import logging
 import os
 import threading
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from typing import Literal
 
@@ -31,6 +37,7 @@ from .config import ConfigError, Seat
 from .contract import WorldView
 from .decisions import DecisionLog
 from .doorbell import Doorbell
+from .ledger import CONTEXT_REVIEWS, CampaignLedger
 
 log = logging.getLogger(__name__)
 
@@ -71,6 +78,11 @@ class Review:
     due_turn: int
     reason: Reason
     answered_by: WriteKind | None = None
+    #: The ids each write kind produced while the review was open, for the ledger's na:Review.
+    produced: dict[str, list[str]] = field(default_factory=dict)
+
+    def summary(self) -> dict[str, object]:
+        return {"id": self.id, "turn": self.turn, "due_turn": self.due_turn, "reason": self.reason}
 
 
 @dataclass
@@ -92,6 +104,7 @@ class ReviewScheduler:
         doorbell: Doorbell,
         log: DecisionLog | None = None,
         every: int = DEFAULT_EVERY,
+        ledger_for: Callable[[int], CampaignLedger | None] | None = None,
     ) -> None:
         if every < 1:
             raise ValueError("review cadence must be at least one turn")
@@ -100,6 +113,8 @@ class ReviewScheduler:
         self.doorbell = doorbell
         self.log = log
         self.every = every
+        #: The seat's campaign ledger, by faction id; None (or a None result) records nothing.
+        self.ledger_for = ledger_for
         self._state: dict[int, _SeatState] = {}
         self._counter = 0
         self._lock = threading.Lock()
@@ -167,6 +182,7 @@ class ReviewScheduler:
         if review is None or turn < review.due_turn:
             return
         state.open = None
+        self._record(fid, review)
         if review.answered_by is not None:
             return
         event: dict[str, object] = {
@@ -187,16 +203,64 @@ class ReviewScheduler:
             except OSError as exc:  # evidence degrades; it never fails the turn
                 log.warning("could not record review_missed for seat %s: %s", fid, exc)
 
+    def _record(self, fid: int, review: Review) -> None:
+        """Write the closed review to the seat's ledger, off the turn path."""
+        ledger = self.ledger_for(fid) if self.ledger_for is not None else None
+        if ledger is None:
+            return
+        outcome = "acted" if review.answered_by is not None else "missed"
+
+        def write() -> None:
+            try:
+                ledger.record_review(
+                    review.id,
+                    review.turn,
+                    review.reason,
+                    outcome,
+                    directives=review.produced.get("directive", ()),
+                    plans=review.produced.get("plan", ()),
+                    policy_changes=review.produced.get("policy", ()),
+                )
+            except Exception as exc:  # evidence degrades; it never fails the turn
+                log.warning(
+                    "could not record review %s in seat %s's ledger: %s", review.id, fid, exc
+                )
+
+        thread = threading.Thread(target=write, daemon=True, name=f"ledger-{review.id}")
+        self.threads.append(thread)
+        thread.start()
+
     # ------------------------------------------------------------------ write path
 
-    def note_write(self, faction_id: int | None, kind: WriteKind) -> None:
-        """A directive, plan or policy write landed for this seat: the open review is answered."""
+    def note_write(self, faction_id: int | None, kind: WriteKind, ref: str | None = None) -> None:
+        """A directive, plan or policy write landed for this seat: the open review is answered.
+
+        ``ref`` is the id the write produced (a directive id, a plan's turn, a policy change),
+        carried onto the review's ledger record.
+        """
         if faction_id is None:
             return
         with self._lock:
             state = self._state.get(faction_id)
-            if state is not None and state.open is not None and state.open.answered_by is None:
-                state.open.answered_by = kind
+            if state is not None and state.open is not None:
+                if state.open.answered_by is None:
+                    state.open.answered_by = kind
+                if ref:
+                    state.open.produced.setdefault(kind, []).append(ref)
+
+    def context(self, faction_id: int) -> dict[str, object]:
+        """A review's prompt context: the open review, open commitments, the last reviews."""
+        with self._lock:
+            state = self._state.get(faction_id)
+            review = state.open.summary() if state is not None and state.open else None
+        ledger = self.ledger_for(faction_id) if self.ledger_for is not None else None
+        body: dict[str, object] = {"review": review}
+        body.update(
+            ledger.context(CONTEXT_REVIEWS)
+            if ledger is not None
+            else {"open_commitments": [], "recent_reviews": []}
+        )
+        return body
 
     def status(self) -> dict[str, object]:
         """A summary for ``/health``: cadence, and each seat's open review and misses."""
