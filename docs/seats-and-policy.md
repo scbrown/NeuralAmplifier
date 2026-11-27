@@ -529,6 +529,9 @@ A crew member holding a seat is the planning occasion the build order has been m
 - **The doorbell becomes a command template.** Today it is `tmux send-keys` to a pane. For a
   crew member it is `st inbox -d <agent>`, which persists before it types. The rule in
   `doorbell.py` does not change: a fixed sentence and an id, no game data.
+- **Slice 1 is built** (`strategist.py`, `doorbell.py`): `NA_DOORBELL_CMD` is the template,
+  `NA_REVIEW_EVERY` the cadence (default 10), `base_count` falling or `factions_at_war` rising
+  the early triggers, and `review_missed` lands on `seat-<n>/decisions.jsonl` only.
 - **Chaski is the eventual owner of that nudge.** A rule over the seat's graph ("review due")
   emitting to an inbox is exactly its shape, and shantytown ships the bridge. Its emitter stage
   and that bridge are not production-enabled and its event poll floor is 60 s — fine for a

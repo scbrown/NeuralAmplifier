@@ -278,6 +278,19 @@ Optional nudge — only if the agent already has a pane:
 NA_TMUX_TARGET=smac:brain   # a pane the AGENT created, not one we create
 ```
 
+Or, instead of a pane, a command template: a JSON argv with exactly one `{message}`, run with
+no shell and a 5 s timeout. Setting both is refused at startup. The message is still a fixed
+sentence and an id, never game data.
+
+```bash
+NA_DOORBELL_CMD='["st", "inbox", "-d", "AGENT", "{message}"]'
+```
+
+A seat with a `strategist` is also rung for a review every `NA_REVIEW_EVERY` turns (default
+10), and early when `base_count` falls or `factions_at_war` rises. A review that sees no
+directive, plan or policy write before the next one is due is recorded as `review_missed` on the
+seat's own log; the standing policy holds (seats-and-policy.md §6).
+
 ## 7. Is the game still in the state the decision assumed?
 
 Blocking made one staleness problem go away and created two others.
