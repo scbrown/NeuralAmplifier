@@ -492,8 +492,8 @@ disabled, so it is not the host for this.
 - **Graph**, later: the seat's Quipu store through a server-side proxy of `/changes/stream`.
   Quipu's feeds are not authorised per graph, so a browser never talks to them directly.
 
-The game itself is a Wine window on `vati`'s display; the console sits beside it or on a second
-device at `vati.lan:8088`.
+The game itself is a Wine window on the game host's display; the console sits beside it or on a
+second device at port 8088 on that host.
 
 ## 8. Spend
 
