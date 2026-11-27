@@ -95,6 +95,9 @@ def _run(starlark: Any, request: dict[str, Any]) -> dict[str, Any]:
     def order(verb: object, *args: object) -> None:
         effects.append({"kind": "order", "verb": verb, "args": list(args)})
 
+    def set_policy(knob: object, value: object, reason: object = None) -> None:
+        effects.append({"kind": "policy", "knob": knob, "value": value, "reason": reason})
+
     options = starlark.EvalOptions(
         check_cancelled=check_cancelled, max_callstack_size=int(request["max_callstack"])
     )
@@ -102,6 +105,7 @@ def _run(starlark: Any, request: dict[str, Any]) -> dict[str, Any]:
     module.add_callable("choose", choose)
     module.add_callable("queue_answer", queue_answer)
     module.add_callable("order", order)
+    module.add_callable("set_policy", set_policy)
     try:
         ast = starlark.parse(request["name"] + ".star", request["code"])
         starlark.eval_with(options, module, ast, starlark.Globals.standard())
