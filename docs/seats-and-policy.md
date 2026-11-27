@@ -491,6 +491,15 @@ Ruled 2026-11-26: a skill book is private while a game is in progress and shared
 - **Status travels with the skill.** A `candidate` is published as a candidate. Sharing a skill
   does not verify it.
 
+`orchestrator/src/neural_amplifier/skill_quipu.py` implements this over a `SkillBackend` (the
+`qp` CLI, or an in-memory fake for CI). `QuipuSkillStore` is the `SkillStore` interface on Quipu,
+every write shape-checked (`qp knot --shapes`) and a refused write leaving nothing behind.
+`SkillLibrary` holds one book per seat identity, pins the commons to the game-start transaction
+(`qp read --tx`), hands a seat a `SeatSkills` view that cannot name another seat or write the
+commons, and `publish_at_game_end` copies a closed game's new or changed versions to the commons
+in one write with a publication record; open or abandoned games publish nothing, and a second
+publish is a no-op. Provisioning the databases themselves is infrastructure, not this module.
+
 ### 5.6 What does not carry over from Minecraft
 
 - **An opponent moves.** A Minecraft skill fails for reasons inside the skill. A skill here can

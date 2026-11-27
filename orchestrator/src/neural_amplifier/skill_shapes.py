@@ -13,7 +13,7 @@ module holds the three things the Quipu-backed store will need from it:
 - :func:`load_shapes` — **put the shape into a seat store** with ``qp shapes load``, as an argv
   list with no shell.
 
-The Quipu-backed ``SkillStore`` itself is the next step and is not here.
+The Quipu-backed store that uses all three is ``skill_quipu.py``.
 """
 
 from __future__ import annotations
