@@ -464,6 +464,17 @@ trials and `requires` on each local version: a new version is a `candidate`, pro
 out before it is offered. `on_turn` sets policy through the `faction_policy` registry; one
 refused knob fails the whole run closed with none of its effects applied.
 
+Each version may also carry its success check — metric (a `metrics.py` name only), comparator,
+target, `horizon_turns` — validated at save; a skill the practice loop authors is refused
+without one. `orchestrator/src/neural_amplifier/practice.py` is the loop of §5.2: an `Author`
+and a `TrialRunner` protocol, every seed trialled each round, script errors, refusals
+(validation, guard, order gate), order outcomes and the check verdict fed back as structured
+data, at most four rounds, then promote or shelve (every candidate it minted retired, reason
+recorded). Its `OfflineTrialRunner` trials over the captured world views with no game — a seed
+is a fixture crossed with a variant label — and judges the check on the board after the
+engine-stated immediate effects of the accepted actions; the horizon itself needs a game, which
+is the game-host runner's job.
+
 ### 5.5 Private during the game, shared after it
 
 Ruled 2026-11-26: a skill book is private while a game is in progress and shared once it ends.
