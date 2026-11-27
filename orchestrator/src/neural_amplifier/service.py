@@ -16,7 +16,7 @@ from pathlib import Path
 from typing import cast
 
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, StreamingResponse
 from pydantic import ValidationError
 
 from .agent_brain import AgentBrain
@@ -31,6 +31,7 @@ from .directives import DirectiveStore, accept
 from .grounding_evidence import Cache as GroundingCache
 from .intents import IntentError, UnitIntent
 from .intents import validate as validate_intent
+from .live import LiveStream, RunRecord, ViewerTokens
 from .memory import memory_scope
 from .orchestrator import Orchestrator
 from .orders import OrderChannel, build_command
@@ -39,7 +40,7 @@ from .pending import NotClaimable, Pending
 from .queued import Comparator, Predicate, QueuedAnswer, QueueError, QueueStore
 from .replay import WorldViewStore
 from .seats import SEAT_HEADER, SeatRouter, SeatTokens, seat_entities
-from .telemetry import OtelSink, Sink
+from .telemetry import OtelSink, Sink, sinks_for
 from .turnplan import PlanEntry, PlanError, PlanStore, TurnPlan
 from .turnplan import validate as validate_plan
 from .turns import TurnAnnouncement, TurnStore
@@ -510,7 +511,23 @@ def create_app(
 
     # Layer 2 is opt-in and loud: NA_OTEL=1 without the extra installed raises
     # at startup rather than serving a run with no live view (§3).
-    resolved_sinks = list(sinks) if sinks is not None else ([OtelSink()] if config.run.otel else [])
+    resolved_brain = brain or build_brain(config)
+    # The console's live stream (seats-and-policy §7). Registered after every other sink, and
+    # the Orchestrator puts the JSONL log ahead of all of them, so a viewer is never shown a
+    # decision the record of truth does not already hold.
+    live = LiveStream(
+        budgets=(
+            {fid: seat.budget_usd for fid, seat in resolved_brain.seats.items()}
+            if isinstance(resolved_brain, SeatRouter)
+            else None
+        )
+    )
+    app.state.live = live
+    resolved_sinks = list(
+        sinks_for(extra=[OtelSink()] if config.run.otel else [], live=live)
+        if sinks is None
+        else sinks_for(extra=sinks, live=live)
+    )
 
     # Without this a run's log references inputs nobody kept, and replay
     # (observability step 7) has nothing to feed back.
@@ -554,7 +571,7 @@ def create_app(
     app.state.turn_plan = turn_plan
 
     orchestrator = Orchestrator(
-        brain=brain or build_brain(config),
+        brain=resolved_brain,
         log=resolved_log,
         sinks=resolved_sinks,
         store=WorldViewStore(store_path) if store_path else None,
@@ -630,6 +647,15 @@ def create_app(
                 "seat mode with no run directory (NA_RUN_DIR): seat tokens are held in memory "
                 "only, so no seat's MCP server can read one, and no per-seat evidence is split out"
             )
+    # Who may open the live stream: each seat's own token (player view) or the spectator token,
+    # written to <run>/spectator/token at 0600. Opening the spectator view marks the run record.
+    viewers = ViewerTokens(seat_tokens, spectator=os.environ.get("NA_SPECTATOR_TOKEN") or None)
+    app.state.viewers = viewers
+    live_run_dir = _run_dir(config, resolved_log)
+    if live_run_dir is not None:
+        viewers.write(live_run_dir)
+    run_record = RunRecord(live_run_dir)
+    app.state.run_record = run_record
     #: Each seat's latest world view, as posted to /decide: what that seat may order.
     latest_view: dict[int, WorldView] = {}
     #: Factions that have posted a decision. In legacy mode the one that has is the agent's.
@@ -717,6 +743,31 @@ def create_app(
     def dashboard_page() -> str:
         return DASHBOARD_HTML
 
+    @app.get("/dashboard/api/events")
+    def dashboard_events(
+        request: Request, token: str | None = None, limit: int | None = None
+    ) -> StreamingResponse:
+        """The live console stream (Server-Sent Events), filtered here by the viewer's token.
+
+        A seat token (header or ``?token=``; a browser's EventSource cannot set headers) sees only
+        its own faction's events. The spectator token sees everything, and the first spectator
+        opening of a run writes ``observer_spoiled`` to the run record. No token: 401, no stream.
+        """
+        from .dashboard import event_stream
+
+        view = viewers.view_for(request.headers.get(SEAT_HEADER) or token)
+        if view is None:
+            raise HTTPException(401, "the live console needs a seat token or the spectator token")
+        kind, faction = view
+        if kind == "spectator":
+            run_record.spoil()
+        body = event_stream(live, live.subscribe(faction), kind, limit=limit)
+        return StreamingResponse(
+            body,
+            media_type="text/event-stream",
+            headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+        )
+
     @app.get("/dashboard/api/live")
     def dashboard_live() -> dict[str, object]:
         return dashboard.live_with_state()
@@ -799,6 +850,12 @@ def create_app(
                 "healthy": orchestrator.telemetry.healthy,
                 "failures": [f.error for f in orchestrator.telemetry.failures[-3:]],
             },
+            "live": {
+                "viewers": live.viewers,
+                "dropped": live.dropped,
+                "observer_spoiled": run_record.observer_spoiled_at is not None,
+                "observer_spoiled_at": run_record.observer_spoiled_at,
+            },
         }
 
     @app.post("/decide", response_model=Orders)
@@ -815,7 +872,11 @@ def create_app(
         if world_view.faction_id is not None:
             latest_view[world_view.faction_id] = world_view
             posted_factions.add(world_view.faction_id)
-        result = orchestrator.decide(world_view)
+        live.raised(world_view)
+        try:
+            result = orchestrator.decide(world_view)
+        finally:
+            live.settled()
         turn_store.note_answered(world_view)
         # Report back to whoever answered this, if anyone did. The agent asked for one thing;
         # validation and the policy guard sit between that and what ran, and an agent told its
@@ -896,6 +957,11 @@ def create_app(
 
             if pending is None:
                 return {"decision_id": None, "waiting": 0, **extra}
+            live.claimed(
+                pending.world_view.faction_id,
+                pending.world_view.surface_id,
+                f"seat-{seat}" if seat is not None else pending.claimed_by or "agent",
+            )
             return {
                 "decision_id": pending.id,
                 "surface_id": pending.world_view.surface_id,
@@ -1138,6 +1204,7 @@ def create_app(
         # Fold it onto the turn view too, so "what happened to everything I ordered this turn" is
         # one read rather than a join the caller has to do.
         turn_store.note_outcome(body)
+        live.outcome(body.traceparent, body.event, body.surface_id)
         return {"recorded": seq, "traceparent": body.traceparent}
 
     @app.get("/outcomes")
