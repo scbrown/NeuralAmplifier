@@ -514,6 +514,13 @@ disabled, so it is not the host for this.
 The game itself is a Wine window on the game host's display; the console sits beside it or on a
 second device at port 8088 on that host.
 
+**Shipped, slice 1 (aegis-8fye.4):** the live stream and the Now pane. `live.LiveStream` is the
+sink, registered last by `telemetry.sinks_for`. `GET /dashboard/api/events` is the stream and
+filters by token: a seat token gets its own faction, the spectator token (`<run>/spectator/token`)
+gets every faction, and no token gets 401. The first spectator connection writes
+`observer_spoiled` and `observer_spoiled_at` to `<run>/run.json`. Seats, Policy, Copilot and
+Graph are later slices.
+
 ## 8. Spend
 
 Ruling 3: any budget is fine for interactive play, and it is still counted. `claude -p` reports

@@ -44,7 +44,8 @@ def test_health_exposes_telemetry_state(tmp_path: Path) -> None:
     client = TestClient(create_app(brain=ScriptedBrain(), log=log, sinks=[]))
     telemetry = client.get("/health").json()["telemetry"]
 
-    assert telemetry["sinks"] == ["DecisionLog"]
+    # The console stream is always last: it may lag the record of truth, never lead it.
+    assert telemetry["sinks"] == ["DecisionLog", "LiveStream"]
     assert telemetry["healthy"] is True
 
 

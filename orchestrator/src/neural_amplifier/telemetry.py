@@ -324,14 +324,21 @@ def sinks_for(
     log: Sink | None = None,
     extra: Sequence[Sink] = (),
     otel: bool = False,
+    live: Sink | None = None,
 ) -> tuple[Sink, ...]:
     """Assemble a sink list, record of truth first.
 
     ``otel=True`` raises if the dependency is absent rather than degrading
     quietly — asking for the live view and not getting it should be loud.
+
+    ``live`` (the console's :class:`~.live.LiveStream`) goes **last**: a viewer is
+    shown a decision only after the JSONL line for it is written, so the stream
+    can lag the record of truth but never disagree with it.
     """
     out: list[Sink] = [log] if log is not None else []
     if otel:
         out.append(OtelSink())
     out.extend(extra)
+    if live is not None:
+        out.append(live)
     return tuple(out)
