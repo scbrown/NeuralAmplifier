@@ -120,7 +120,7 @@ class PlanStore:
         were made against a board that no longer exists; silence here is what re-raises the
         decision to the agent, which is the honest fallback.
         """
-        faction_id = _extra(world_view, "faction_id", int)
+        faction_id = world_view.faction_id
         if faction_id is None or world_view.turn is None:
             return None
         with self._lock:

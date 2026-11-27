@@ -138,7 +138,7 @@ class QueuedAnswer:
         """
         from .turns import _extra
 
-        if _extra(world_view, "faction_id", int) != self.faction_id:
+        if world_view.faction_id != self.faction_id:
             return False
         if (world_view.surface_id or "") != self.surface_id:
             return False
