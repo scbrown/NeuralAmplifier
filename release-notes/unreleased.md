@@ -30,6 +30,27 @@ below against the code it ships.
   and existing readers work as before. A decision the seat table cannot place
   (an unseated faction, or a world view without `faction_id`) goes to the
   merged view only. Without `[seats]`, no `seat-*` directories are created.
+- **Live console, first slice.** The dashboard has a Server-Sent Events stream
+  at `GET /dashboard/api/events` and a **Now** pane fed by it: what is waiting
+  for an answer and for how long, which seat claimed it and how long it has been
+  thinking, and a per-seat spend meter when decisions record `cost_usd` or a
+  seat has `budget_usd`. Events are `raised`, `claimed` (with the seat),
+  `answered`, `guard` (the policy guard's verdict), and `applied` or `diverged`
+  from the engine's outcome reports. The stream is one more decision-log sink,
+  written after the JSONL log, so it can lag the log but never contradict it. A
+  slow viewer cannot hold up a decision: each viewer has a bounded queue that
+  drops its oldest events and counts the drops (`/health` → `live.dropped`).
+  - Filtering is done by the service. A seat token (`X-NA-Seat`, or `?token=`
+    because a browser's EventSource cannot set headers) sees its own faction
+    only. The spectator token, written to `<run>/spectator/token` (mode 0600)
+    or set with `NA_SPECTATOR_TOKEN`, sees every faction. A missing or unknown
+    token gets 401 and no stream.
+  - The first spectator connection during a run writes
+    `observer_spoiled: true` and `observer_spoiled_at` to `<run>/run.json`,
+    keeping any fields already in that file. Later spectator connections
+    leave it unchanged.
+  - Open the page as `/dashboard#token=<token>` to fill the Now pane. Without a
+    token, the rest of the dashboard works as before.
 
 ## Not tested for this release
 
@@ -40,3 +61,6 @@ below against the code it ships.
   the other seats' token files and the run directory. Process and store
   isolation are later work.
 - No game was played with two or more seats, and no model calls were made.
+- The live console was tested with in-process services only. It was not opened
+  in a browser against a running game, and the Policy, Copilot and Graph panes
+  from design §7 do not exist yet.
