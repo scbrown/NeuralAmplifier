@@ -157,10 +157,20 @@ Answering — the three moments of a decision, plus a plan that outlives the tur
 | `submit_orders(decision_id, action_id, reason, cited, followed, overrode)` | Answer it, choosing from the action space |
 | `decisions_waiting()` | What is outstanding — for re-orienting after a reconnect or compaction |
 | `issue_directive(...)` | Set a standing plan later decisions will be shown. Call before submitting |
-| `turn_forecast(faction_id, turn?)` | Every decision the turn is expected to raise, scoped to your faction — step one of bulk-turn mode (raw HTTP: `POST /agent/turn`) |
-| `submit_turn_plan(faction_id, turn, entries)` | Bulk-turn mode: install a table of answers for exactly one turn. Covered decisions are answered in milliseconds at tier `plan`; you are woken only for what the table does not cover |
-| `turn_plan_status(faction_id)` | What your table answered and what it missed (raw HTTP: `GET /agent/plan`) |
-| `deferred_decisions(faction_id, full?)` | The decisions you parked with `defer` and have not swept yet (raw HTTP: `GET /agent/pending`) |
+| `turn_forecast(turn?)` | Every decision the turn is expected to raise, scoped to your faction — step one of bulk-turn mode (raw HTTP: `POST /agent/turn`) |
+| `submit_turn_plan(turn, entries)` | Bulk-turn mode: install a table of answers for exactly one turn. Covered decisions are answered in milliseconds at tier `plan`; you are woken only for what the table does not cover |
+| `turn_plan_status()` | What your table answered and what it missed (raw HTTP: `GET /agent/plan`) |
+| `deferred_decisions(full?)` | The decisions you parked with `defer` and have not swept yet (raw HTTP: `GET /agent/pending`) |
+
+**No tool takes a `faction_id`** (aegis-8fye.3, slice C). Under a `[seats]` table the
+orchestrator mints one token per seat at start and writes it to `<run>/seat-<n>/token` (mode
+0600; `<run>` is `run.run_dir` / `NA_RUN_DIR`, else the directory above the decision log's
+`orch/`). Start each seat's MCP server with `neural-amplifier mcp --seat-token <token>` (or
+`NA_SEAT_TOKEN`); it sends the token as `X-NA-Seat` on every call, and the service derives the
+faction from it. In seat mode a missing or unknown token is 401, a seat claims and answers only
+its own decisions, and `issue_order(s)` refuses a unit or base id that is not in that seat's
+latest world view. Without `[seats]` (legacy) the faction is the one LLM faction that has posted
+a decision; if none or several have, the call is refused with 422 `configure [seats]`.
 
 **Bulk-turn mode** (na-7bk) is the answer to per-decision latency: ~30–60 seconds of wake,
 reason and submit per decision makes a six-faction AI round painfully slow, and door 1 blocks

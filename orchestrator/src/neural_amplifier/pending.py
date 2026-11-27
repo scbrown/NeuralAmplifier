@@ -270,10 +270,17 @@ class DecisionQueue:
                 raise Unanswered(pending.reason or "abandoned")
             return pending.orders
 
-    def abandon(self, decision_id: str, reason: str) -> None:
-        """Give up on a decision from the game side, releasing any waiter."""
+    def abandon(self, decision_id: str, reason: str, seat: int | None = None) -> None:
+        """Give up on a decision, releasing any waiter.
+
+        ``seat`` is for a seated caller giving up on its own decision: another seat's is refused
+        with :class:`NotClaimable`, worded as an unknown id so it names no other chair. The game
+        side passes no seat and may abandon anything.
+        """
         with self._lock:
             pending = self._by_id.get(decision_id)
+            if pending is not None and not _seated(pending, seat):
+                raise NotClaimable(_unknown(decision_id))
             if pending is None or pending.status == "answered":
                 return
             pending.status = "abandoned"
@@ -283,19 +290,25 @@ class DecisionQueue:
 
     # --------------------------------------------------------------- agent side
 
-    def claim(self, agent: str = "agent", wait: float = 0.0) -> Pending | None:
+    def claim(
+        self, agent: str = "agent", wait: float = 0.0, seat: int | None = None
+    ) -> Pending | None:
         """Take the oldest unclaimed decision, or ``None`` if there is none.
 
         ``wait`` lets a client without a doorbell block for one instead of spinning. With the
         tmux nudge wired up a decision is normally already waiting by the time this is called,
         so the default returns immediately.
+
+        ``seat`` scopes the claim to one chair (aegis-8fye.3, slice C): only decisions whose
+        world view names that faction are eligible. ``None`` is the legacy single-agent queue,
+        where every pending decision is the one agent's.
         """
         deadline = time.monotonic() + wait
         with self._lock:
             while True:
                 for decision_id in self._order:
                     pending = self._by_id[decision_id]
-                    if pending.status == "pending":
+                    if pending.status == "pending" and _seated(pending, seat):
                         pending.status = "claimed"
                         pending.claimed_by = agent
                         return pending
@@ -304,23 +317,25 @@ class DecisionQueue:
                     return None
                 self._arrived.wait(remaining)
 
-    def answer(self, decision_id: str, orders: Orders) -> Pending:
+    def answer(self, decision_id: str, orders: Orders, seat: int | None = None) -> Pending:
         """Submit orders for a claimed decision and release the waiting game thread.
 
         Rejects an unknown, already-answered or abandoned id with :class:`NotClaimable`, and the
         message goes back to the model. That is deliberate: an agent answering a decision the
         game has already moved past needs to be told so it can re-read the board, and silently
         accepting the orders would apply a stale choice to a live turn.
+
+        With ``seat`` set, another seat's decision is refused exactly as an unknown id is. The
+        message must not name the chair that owns it: "that belongs to seat 5" is itself a fact
+        about the other faction's turn.
         """
         with self._lock:
             pending = self._by_id.get(decision_id)
+            if pending is not None and not _seated(pending, seat):
+                raise NotClaimable(_unknown(decision_id))
             if pending is None:
                 why = self._settled.get(decision_id)
-                raise NotClaimable(
-                    f"{decision_id} {why}"
-                    if why
-                    else f"no decision {decision_id!r} — it may have already closed"
-                )
+                raise NotClaimable(f"{decision_id} {why}" if why else _unknown(decision_id))
             if pending.status == "answered":
                 raise NotClaimable(f"{decision_id} was already answered")
             if pending.status == "abandoned":
@@ -350,13 +365,18 @@ class DecisionQueue:
         with self._lock:
             return self._by_id.get(decision_id)
 
-    def waiting(self) -> list[Pending]:
-        """Every decision still awaiting an answer, oldest first."""
+    def peek_for(self, decision_id: str, seat: int | None) -> Pending | None:
+        """``peek``, but another seat's decision reads as absent."""
+        pending = self.peek(decision_id)
+        return pending if pending is not None and _seated(pending, seat) else None
+
+    def waiting(self, seat: int | None = None) -> list[Pending]:
+        """Every decision still awaiting an answer, oldest first; one seat's when ``seat``."""
         with self._lock:
             return [
                 self._by_id[i]
                 for i in self._order
-                if self._by_id[i].status in ("pending", "claimed")
+                if self._by_id[i].status in ("pending", "claimed") and _seated(self._by_id[i], seat)
             ]
 
     def _forget(self, decision_id: str) -> None:
@@ -377,6 +397,15 @@ class DecisionQueue:
             )
             while len(self._settled) > SETTLED_MEMORY:
                 self._settled.popitem(last=False)
+
+
+def _seated(pending: Pending, seat: int | None) -> bool:
+    """Whether ``seat`` may see this decision. ``None`` is the unseated (legacy) caller."""
+    return seat is None or pending.world_view.faction_id == seat
+
+
+def _unknown(decision_id: str) -> str:
+    return f"no decision {decision_id!r} — it may have already closed"
 
 
 class QueueFull(RuntimeError):

@@ -15,7 +15,7 @@ from collections.abc import Sequence
 from pathlib import Path
 from typing import cast
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse
 from pydantic import ValidationError
 
@@ -38,6 +38,7 @@ from .outcomes import EngineOutcome, OutcomeStore
 from .pending import NotClaimable, Pending
 from .queued import Comparator, Predicate, QueuedAnswer, QueueError, QueueStore
 from .replay import WorldViewStore
+from .seats import SEAT_HEADER, SeatRouter, SeatTokens, seat_entities
 from .telemetry import OtelSink, Sink
 from .turnplan import PlanEntry, PlanError, PlanStore, TurnPlan
 from .turnplan import validate as validate_plan
@@ -65,8 +66,6 @@ def build_brain(config: Config | None = None) -> Brain:
     # A seat table replaces the single brain outright. `[brain]` still means what it always did
     # when there is no table, and that path below is untouched (aegis-8fye.3.2).
     if full.seats:
-        from .seats import SeatRouter
-
         return SeatRouter(full.seats)
     cfg = full.brain
     if cfg.kind == "agent":
@@ -157,6 +156,16 @@ def _write_intent(
         }
     store.write_intent(intent, memory_scope(str(game_id), faction_id))
     return {"recorded": True, "intent": intent.summary()}
+
+
+def _run_dir(config: Config, log: DecisionLog | None) -> Path | None:
+    """Where ``seat-<n>/token`` goes: ``run.run_dir`` / NA_RUN_DIR, else the run directory the
+    decision log's ``<run>/orch/`` layout implies (the same inference the dashboard makes)."""
+    if config.run.run_dir:
+        return Path(config.run.run_dir)
+    if log is not None and log.path.parent.name == "orch":
+        return log.path.parent.parent
+    return None
 
 
 def _as_int(value: object, field: str) -> int:
@@ -598,6 +607,106 @@ def create_app(
     )
     app.state.dashboard = dashboard
 
+    # ---------------------------------------------------------------- seats (slice C)
+    #
+    # Under a seat table every agent-facing call carries a seat token, and the faction is the
+    # token's — never an argument. One token per seat, minted here and written to
+    # <run>/seat-<n>/token at 0600 for that seat's MCP server (``--seat-token``/NA_SEAT_TOKEN).
+    router = orchestrator.brain if isinstance(orchestrator.brain, SeatRouter) else None
+    seat_tokens = SeatTokens(router.seats) if router is not None else None
+    app.state.seat_tokens = seat_tokens
+    if seat_tokens is not None:
+        run_dir = _run_dir(config, resolved_log)
+        if run_dir is not None:
+            seat_tokens.write(run_dir)
+        else:
+            logging.getLogger(__name__).warning(
+                "seat mode with no run directory (NA_RUN_DIR): seat tokens are held in memory "
+                "only, so no seat's MCP server can read one"
+            )
+    #: Each seat's latest world view, as posted to /decide: what that seat may order.
+    latest_view: dict[int, WorldView] = {}
+    #: Factions that have posted a decision. In legacy mode the one that has is the agent's.
+    posted_factions: set[int] = set()
+    app.state.latest_view = latest_view
+
+    def _seat(request: Request) -> int | None:
+        """The calling seat in seat mode (401 without a known token); None in legacy mode."""
+        if seat_tokens is None:
+            return None
+        fid = seat_tokens.faction_for(request.headers.get(SEAT_HEADER))
+        if fid is None:
+            raise HTTPException(
+                401,
+                f"seat mode: send this seat's token as {SEAT_HEADER} "
+                "(neural-amplifier mcp --seat-token, or NA_SEAT_TOKEN)",
+            )
+        return fid
+
+    def _faction(request: Request, explicit: object = None) -> int:
+        """The faction an agent call is for: the seat's, or in legacy mode the one that posted.
+
+        An explicit ``faction_id`` is still accepted from a raw-HTTP caller in legacy mode. In
+        seat mode it must match the seat, and a mismatch is refused without saying whose it is.
+        """
+        seat = _seat(request)
+        given = None if explicit in (None, "") else _as_int(explicit, "faction_id")
+        if seat is not None:
+            if given is not None and given != seat:
+                raise HTTPException(403, "faction_id is not your seat's; the seat token decides")
+            return seat
+        if given is not None:
+            return given
+        if len(posted_factions) == 1:
+            return next(iter(posted_factions))
+        raise HTTPException(
+            422,
+            "configure [seats]: no single LLM faction has posted a decision, so the faction "
+            "this call is for cannot be derived"
+            + (f" (posted: {sorted(posted_factions)})" if posted_factions else ""),
+        )
+
+    def _scope(request: Request, faction_id: int | None, mine: bool) -> int | None:
+        """A read's faction scope. Seat mode always scopes to the seat; legacy ``mine=true``
+        (what the MCP tools send) derives it; otherwise an absent id is the operator's read."""
+        if seat_tokens is not None or mine:
+            return _faction(request, faction_id)
+        return faction_id
+
+    def _check_orderable(seat: int | None, lines: list[str]) -> None:
+        """Seat mode: refuse any order naming an entity outside the seat's latest world view.
+
+        Checked before anything is issued, so a refused batch commands nothing.
+        """
+        if seat is None:
+            return
+        units, bases = seat_entities(latest_view.get(seat))
+        for line in lines:
+            parts = line.split()
+            if len(parts) < 2:
+                raise HTTPException(422, f"order {line!r} names no entity")
+            try:
+                entity = int(parts[1])
+            except ValueError as exc:
+                raise HTTPException(422, f"order {line!r}: entity id must be an integer") from exc
+            kind, known = ("base", bases) if parts[0].lower() == "build" else ("unit", units)
+            if entity not in known:
+                raise HTTPException(
+                    403,
+                    f"{kind} {entity} is not in your seat's latest world view; not yours to order",
+                )
+
+    def _seat_intent(seat: int | None, raw: object) -> object:
+        """Seat mode: an intent goes in the seat's own graph; a different faction is refused."""
+        if seat is None or not isinstance(raw, dict):
+            return raw
+        given = raw.get("faction_id")
+        if given in (None, ""):
+            return {**raw, "faction_id": seat}
+        if _as_int(given, "intent.faction_id") != seat:
+            raise HTTPException(403, "intent.faction_id is not your seat's")
+        return raw
+
     @app.get("/dashboard", response_class=HTMLResponse)
     def dashboard_page() -> str:
         return DASHBOARD_HTML
@@ -697,6 +806,9 @@ def create_app(
         # recording it as a resolution would be a lie about which board it was made on.
         _expire_deferrals(deferrals, world_view.turn)
         turn_store.note_raised(world_view)
+        if world_view.faction_id is not None:
+            latest_view[world_view.faction_id] = world_view
+            posted_factions.add(world_view.faction_id)
         result = orchestrator.decide(world_view)
         turn_store.note_answered(world_view)
         # Report back to whoever answered this, if anyone did. The agent asked for one thing;
@@ -722,11 +834,20 @@ def create_app(
     # Present only when the brain is an AgentBrain. Mounting them unconditionally would
     # advertise a queue nothing is filling, and an agent that connects to a scripted run
     # would sit at `next_decision` forever with no way to tell why.
-    if isinstance(orchestrator.brain, AgentBrain):
-        queue = orchestrator.brain.queue
+    agent_queue = (
+        orchestrator.brain.queue
+        if isinstance(orchestrator.brain, AgentBrain)
+        else router.agent_queue
+        if router is not None
+        else None
+    )
+    if agent_queue is not None:
+        queue = agent_queue
 
         @app.post("/agent/next")
-        def agent_next(body: dict[str, object] | None = None) -> dict[str, object]:
+        def agent_next(
+            request: Request, body: dict[str, object] | None = None
+        ) -> dict[str, object]:
             """Claim the oldest decision waiting for an answer.
 
             Returns the world view the brain would have seen — grounded, with directives and
@@ -749,6 +870,7 @@ def create_app(
             # blocked the full 8s. The cost was not a confusing API — it was a delegated
             # decision loop burning through its 30-empty-polls exit condition in 68 seconds
             # and abandoning a game that was blocked, waiting, and visible in this very queue.
+            seat = _seat(request)
             body = body or {}
             raw_wait: object = 0
             for name in ("wait", "wait_seconds"):
@@ -756,7 +878,7 @@ def create_app(
                     raw_wait = body[name] or 0
                     break
             wait = float(raw_wait) if isinstance(raw_wait, int | float | str) else 0.0
-            pending = queue.claim(wait=min(wait, 110.0))
+            pending = queue.claim(wait=min(wait, 110.0), seat=seat)
 
             # The other half of the same bug, and the half that generalises: silence. An
             # unknown key is still not a 422 — the reasoning above has not changed, and a
@@ -776,7 +898,7 @@ def create_app(
             }
 
         @app.post("/agent/directive")
-        def agent_directive(body: dict[str, object]) -> dict[str, object]:
+        def agent_directive(request: Request, body: dict[str, object]) -> dict[str, object]:
             """Attach a standing directive to a decision, before answering it.
 
             Validated here rather than at submit time, and that is the whole point: a directive
@@ -786,7 +908,7 @@ def create_app(
             gap.
             """
             decision_id = str(body.get("decision_id") or "")
-            pending = queue.peek(decision_id)
+            pending = queue.peek_for(decision_id, _seat(request))
             if pending is None:
                 raise HTTPException(409, f"no open decision {decision_id!r} to attach a plan to")
             try:
@@ -808,7 +930,7 @@ def create_app(
             }
 
         @app.post("/agent/submit")
-        def agent_submit(body: dict[str, object]) -> dict[str, object]:
+        def agent_submit(request: Request, body: dict[str, object]) -> dict[str, object]:
             """Answer a claimed decision.
 
             The orders are handed to the waiting ``AgentBrain.decide``, which returns them into
@@ -818,10 +940,11 @@ def create_app(
             decision_id = str(body.get("decision_id") or "")
             action_id = str(body.get("action_id") or "")
             reason = body.get("reason")
+            seat = _seat(request)
             if not decision_id or not action_id:
                 raise HTTPException(422, "decision_id and action_id are both required")
 
-            pending = queue.peek(decision_id)
+            pending = queue.peek_for(decision_id, seat)
             if pending is not None:
                 # Checked here as well as downstream so the *agent* is told, in the tool result
                 # it is already reading, that it named something the engine never offered. The
@@ -853,6 +976,7 @@ def create_app(
                         overrode=_ids("overrode"),
                         directives=list(pending.proposed_directives) if pending else [],
                     ),
+                    seat=seat,
                 )
             except NotClaimable as exc:
                 raise HTTPException(409, str(exc)) from exc
@@ -891,13 +1015,16 @@ def create_app(
             }
 
         @app.post("/agent/outcomes")
-        def agent_outcomes(body: dict[str, object] | None = None) -> dict[str, object]:
+        def agent_outcomes(
+            request: Request, body: dict[str, object] | None = None
+        ) -> dict[str, object]:
             """Did the orders I gave actually happen?
 
             An agent knows what it submitted and what the orchestrator applied. Neither answers
             whether the ENGINE kept it — see outcomes.py. This is the only way to find out, and
             an unreported decision comes back `unknown` rather than being assumed fine.
             """
+            _seat(request)
             raw = (body or {}).get("cursor", 0) or 0
             cursor = int(raw) if isinstance(raw, int | float | str) and str(raw).isdigit() else 0
             raw_limit = (body or {}).get("limit", 50) or 50
@@ -910,7 +1037,9 @@ def create_app(
             }
 
         @app.post("/agent/turn")
-        def agent_turn(body: dict[str, object] | None = None) -> dict[str, object]:
+        def agent_turn(
+            request: Request, body: dict[str, object] | None = None
+        ) -> dict[str, object]:
             """The whole turn, for an agent deciding where to spend a limited pool.
 
             `{"faction_id": 3}`, optionally with `{"turn": 103}` for a turn other than the
@@ -934,20 +1063,16 @@ def create_app(
             slice-1 ruling made `recall()` fail-closed to prevent. `GET /turn` remains the
             unscoped OBSERVER read; it is a different route because it is a different job.
             """
-            raw_faction = (body or {}).get("faction_id")
-            if raw_faction in (None, ""):
-                raise HTTPException(
-                    422,
-                    "faction_id is required — the turn view is faction-scoped, and an "
-                    "unscoped read would show you the other factions' bases",
-                )
-            faction_id = _as_int(raw_faction, "faction_id")
+            # Derived, never defaulted to "all": the seat's faction, or in legacy mode the one
+            # LLM faction that has posted, else 422 naming [seats] (slice C).
+            faction_id = _faction(request, (body or {}).get("faction_id"))
             raw = (body or {}).get("turn")
             turn = int(raw) if isinstance(raw, int) else None
             return turn_view_payload(turn, faction_id=faction_id)
 
         @app.post("/agent/waiting")
-        def agent_waiting() -> dict[str, object]:
+        def agent_waiting(request: Request) -> dict[str, object]:
+            seat = _seat(request)
             return {
                 "waiting": [
                     {
@@ -957,12 +1082,12 @@ def create_app(
                         "status": p.status,
                         "age_seconds": round(p.age_seconds(), 1),
                     }
-                    for p in queue.waiting()
+                    for p in queue.waiting(seat)
                 ]
             }
 
         @app.post("/agent/whatif")
-        def agent_whatif(body: dict[str, object]) -> dict[str, object]:
+        def agent_whatif(request: Request, body: dict[str, object]) -> dict[str, object]:
             """Speculatively apply one offered action and report what it reaches.
 
             Read-only on the game and on the queue: it neither answers the decision nor claims
@@ -976,7 +1101,7 @@ def create_app(
             """
             decision_id = str(body.get("decision_id") or "")
             action_id = str(body.get("action_id") or "")
-            pending = queue.peek(decision_id)
+            pending = queue.peek_for(decision_id, _seat(request))
             if pending is None:
                 raise HTTPException(status_code=404, detail=f"no decision {decision_id!r}")
 
@@ -1086,7 +1211,7 @@ def create_app(
     # Issuing, as opposed to answering. Mounted in every mode for the same reason /outcome is:
     # this is about the adapter and the game, not about which brain is attached.
     @app.post("/order")
-    def order(body: dict[str, object]) -> dict[str, object]:
+    def order(request: Request, body: dict[str, object]) -> dict[str, object]:
         """Command a unit or base directly, without waiting for the engine to ask.
 
         `{"verb": "move", "args": [12, 40, 21]}` or `{"command": "move 12 40 21"}`, or a batch:
@@ -1102,6 +1227,7 @@ def create_app(
         A `status` of `unknown` means exactly that: the order may or may not have happened. It is
         never reported as applied on the strength of not having heard otherwise.
         """
+        seat = _seat(request)
         # A batch: [{"verb": ..., "args": [...], "intent": {...}?}, ...] or ["move 1 2 3", ...]
         raw_orders = body.get("orders")
         if isinstance(raw_orders, list) and raw_orders:
@@ -1137,7 +1263,8 @@ def create_app(
                     raise HTTPException(422, str(exc)) from exc
                 # Validated NOW, before anything is issued: a bad intent must refuse the whole
                 # batch while the agent still holds it, not surface after half the army moved.
-                intents.append(_parse_intent(entry.get("intent"), lines[-1]))
+                intents.append(_parse_intent(_seat_intent(seat, entry.get("intent")), lines[-1]))
+            _check_orderable(seat, lines)
             raw_timeout_b = body.get("timeout_s")
             timeout_b = float(raw_timeout_b) if isinstance(raw_timeout_b, int | float) else None
             batch = order_channel.issue_batch(lines, timeout_s=timeout_b)
@@ -1201,7 +1328,8 @@ def create_app(
         # An intent, if the caller attached one (na-7bk slice 3) — validated BEFORE the order is
         # issued, so a refusal reaches the agent while it still holds the whole act, and a
         # confirmed order's outcome is never thrown away by a 422 about its annotation.
-        parsed_intent = _parse_intent(body.get("intent"), command)
+        parsed_intent = _parse_intent(_seat_intent(seat, body.get("intent")), command)
+        _check_orderable(seat, [command])
 
         raw_timeout = body.get("timeout_s")
         timeout_s = float(raw_timeout) if isinstance(raw_timeout, int | float) else None
@@ -1231,7 +1359,7 @@ def create_app(
         return outcome
 
     @app.post("/agent/queue")
-    def agent_queue_install(body: dict[str, object]) -> dict[str, object]:
+    def agent_queue_install(request: Request, body: dict[str, object]) -> dict[str, object]:
         """Queue a standing answer, with the conditions under which it stops standing.
 
         `{"faction_id": 2, "surface_id": "base.production", "base_id": 7,
@@ -1245,10 +1373,10 @@ def create_app(
         condition can never fire is a script, and a script keeps building Recycling Tanks through
         a drone riot.
         """
-        for required in ("faction_id", "surface_id", "action_id"):
+        for required in ("surface_id", "action_id"):
             if body.get(required) in (None, ""):
                 raise HTTPException(422, f"{required} is required")
-        faction_id = _as_int(body["faction_id"], "faction_id")
+        faction_id = _faction(request, body.get("faction_id"))
         surface_id = str(body["surface_id"])
         action_id = str(body["action_id"])
 
@@ -1291,14 +1419,16 @@ def create_app(
         return {"queued": answer.summary()}
 
     @app.get("/agent/queue")
-    def agent_queue_list(faction_id: int | None = None) -> dict[str, object]:
+    def agent_queue_list(
+        request: Request, faction_id: int | None = None, mine: bool = False
+    ) -> dict[str, object]:
         """Standing answers, and the ones the board has already overtaken.
 
         `retired` is the more interesting half: each entry is a moment when something the agent
         said in advance would matter actually happened. A queue that never retires anything is
         either a very quiet game or a set of predicates that cannot fire.
         """
-        standing = answer_queue.standing(faction_id)
+        standing = answer_queue.standing(_scope(request, faction_id, mine))
         return {
             "standing": [a.summary() for a in standing],
             "count": len(standing),
@@ -1306,7 +1436,7 @@ def create_app(
         }
 
     @app.post("/agent/plan")
-    def agent_plan_install(body: dict[str, object]) -> dict[str, object]:
+    def agent_plan_install(request: Request, body: dict[str, object]) -> dict[str, object]:
         """Install a faction's decision table for ONE turn — bulk-turn mode (na-7bk).
 
         `{"faction_id": 2, "turn": 43, "entries": [
@@ -1322,14 +1452,14 @@ def create_app(
         against a board that no longer exists. An empty `entries` list is a legitimate install
         meaning "wake me for everything".
         """
-        for required in ("faction_id", "turn"):
-            if body.get(required) in (None, ""):
-                raise HTTPException(
-                    422,
-                    f"{required} is required — a plan is faction-private and lives exactly one "
-                    "turn, so both are part of its identity",
-                )
-        faction_id = _as_int(body["faction_id"], "faction_id")
+        if body.get("turn") in (None, ""):
+            raise HTTPException(
+                422,
+                "turn is required — a plan is faction-private and lives exactly one turn, so "
+                "both are part of its identity",
+            )
+        # The faction half of that identity is derived, not sent (slice C).
+        faction_id = _faction(request, body.get("faction_id"))
         turn = _as_int(body["turn"], "turn")
 
         raw_entries = body.get("entries")
@@ -1359,14 +1489,16 @@ def create_app(
         return {"plan": installed.summary()}
 
     @app.get("/agent/plan")
-    def agent_plan_list(faction_id: int | None = None) -> dict[str, object]:
+    def agent_plan_list(
+        request: Request, faction_id: int | None = None, mine: bool = False
+    ) -> dict[str, object]:
         """The installed tables, what each entry has answered, and what missed.
 
         `missed` is the health signal: each entry there named an action that had left the space
         by the time its decision arrived, so the plan was written against a board that changed
         before the engine asked. A table that misses often is strategy set too early.
         """
-        plans = turn_plan.plans(faction_id)
+        plans = turn_plan.plans(_scope(request, faction_id, mine))
         return {
             "plans": [p.summary() for p in plans],
             "count": len(plans),
@@ -1374,7 +1506,9 @@ def create_app(
         }
 
     @app.get("/agent/pending")
-    def agent_pending(full: bool = False, faction_id: int | None = None) -> dict[str, object]:
+    def agent_pending(
+        request: Request, full: bool = False, faction_id: int | None = None, mine: bool = False
+    ) -> dict[str, object]:
         """Decisions the agent parked, and has not come back to yet (na-7bk).
 
         Mounted whatever the brain is, unlike the `/agent/*` endpoints above. Those are gated on
@@ -1396,7 +1530,7 @@ def create_app(
         difference here is that this route is mounted whatever the brain is, so the scope is a
         parameter rather than a separate route.
         """
-        items = deferrals.pending(faction_id)
+        items = deferrals.pending(_scope(request, faction_id, mine))
         return {
             "pending": [
                 ({**d.summary(), "world_view": d.world_view} if full else d.summary())

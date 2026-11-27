@@ -32,9 +32,9 @@ class FakeClient(OrchestratorClient):
         self.extras: list[dict[str, Any]] = []
         self.directives: list[dict[str, Any]] = []
         self.orders: list[dict[str, Any]] = []
-        self.turn_reads: list[tuple[int, int | None]] = []
-        self.plan_reads: list[int] = []
-        self.pending_reads: list[tuple[int, bool]] = []
+        self.turn_reads: list[int | None] = []
+        self.plan_reads: list[bool] = []
+        self.pending_reads: list[bool] = []
         self.raises: Exception | None = None
 
     def order(self, payload: dict[str, Any]) -> dict[str, Any]:
@@ -81,16 +81,16 @@ class FakeClient(OrchestratorClient):
     def waiting(self) -> dict[str, Any]:
         return {"waiting": []}
 
-    def turn(self, faction_id: int, turn: int | None = None) -> dict[str, Any]:
-        self.turn_reads.append((faction_id, turn))
-        return {"turn": turn or 103, "faction_id": faction_id, "decisions": [], "unraised": []}
+    def turn(self, turn: int | None = None) -> dict[str, Any]:
+        self.turn_reads.append(turn)
+        return {"turn": turn or 103, "decisions": [], "unraised": []}
 
-    def plan_status(self, faction_id: int) -> dict[str, Any]:
-        self.plan_reads.append(faction_id)
+    def plan_status(self) -> dict[str, Any]:
+        self.plan_reads.append(True)
         return {"plans": [], "count": 0, "missed": []}
 
-    def pending(self, faction_id: int, full: bool = False) -> dict[str, Any]:
-        self.pending_reads.append((faction_id, full))
+    def pending(self, full: bool = False) -> dict[str, Any]:
+        self.pending_reads.append(full)
         return {"pending": [], "count": 0}
 
 
@@ -197,30 +197,60 @@ def test_no_tool_offers_to_read_game_state() -> None:
     assert not (set(named) & set(forbidden))
 
 
-def test_the_turn_reads_are_faction_scoped_at_the_tool_signature() -> None:
-    """Fog is a REQUIRED argument on every bulk-turn read, not a filter the model may omit.
+def test_no_tool_takes_a_faction_id_the_seat_decides() -> None:
+    """The faction is derived from the seat token by the service, never passed (slice C).
 
-    The store behind these holds all six factions' decisions in one keyspace — base ids are a
-    single engine-wide sequence — and each slot carries its base's NAME. So an unscoped read is
-    the adapter's own "information cheat" arriving by a second door. Measured on a live
-    orchestrator before this was closed: a read made for one faction returned 49 of another
-    faction's base names.
-
-    Asserted on the tool SCHEMA rather than on behaviour, because behaviour cannot catch the
-    failure that matters. An optional `faction_id` would work perfectly in every test that
-    passes one; the leak is the call that omits it, and a model omits an optional argument for
-    the same reason anyone does — nothing said it was load-bearing.
+    Before slice C four tools took `faction_id` (turn_forecast, turn_plan_status,
+    deferred_decisions, submit_turn_plan). A required argument was the old fog gate, and it
+    still let a model NAME another faction; the token cannot be named. Asserted on the schema of
+    every tool, so a fifth tool growing the argument fails here too.
     """
     named = tools(build_server(FakeClient()))
-    for tool in ("turn_forecast", "turn_plan_status", "deferred_decisions"):
-        # The SDK spells this `input_schema` now and `inputSchema` before 2.0; the same version
-        # drift `call()` above absorbs. Reading whichever exists keeps the assertion about the
-        # schema rather than about the SDK release.
-        entry = named[tool]
+    carrying = []
+    for name, entry in named.items():
         schema = getattr(entry, "input_schema", None) or getattr(entry, "inputSchema", None)
-        assert schema, f"{tool}: no input schema to check"
-        assert "faction_id" in schema.get("properties", {}), tool
-        assert "faction_id" in schema.get("required", []), f"{tool}: faction_id must be required"
+        assert schema, f"{name}: no input schema to check"
+        if "faction_id" in schema.get("properties", {}):
+            carrying.append(name)
+    assert carrying == []
+
+
+def test_no_server_tool_function_has_a_faction_id_parameter_in_source() -> None:
+    """The grep the slice names: 0 `@server.tool()` functions with a `faction_id` parameter."""
+    import re
+    from pathlib import Path
+
+    import neural_amplifier.mcp_server as module
+
+    source = Path(module.__file__).read_text()
+    signatures = re.findall(r"@server\.tool\(\)\s*\n\s*def \w+\(([^)]*)\)", source)
+    assert len(signatures) == len(tools(build_server(FakeClient())))
+    assert [sig for sig in signatures if "faction_id" in sig] == []
+
+
+def test_the_seat_token_travels_as_a_header_on_every_call() -> None:
+    from urllib import request
+
+    sent: list[request.Request] = []
+
+    class Capturing(OrchestratorClient):
+        def _send(self, req: request.Request) -> dict[str, Any]:
+            sent.append(req)
+            return {}
+
+    seated = Capturing("http://fake", seat_token="tok-3")
+    seated.turn(5)
+    seated.plan_status()
+    seated.pending(full=True)
+    seated.next_decision(0)
+    seated.order({"verb": "skip", "args": [1]})
+    assert [r.get_header("X-na-seat") for r in sent] == ["tok-3"] * 5
+    assert all(b"faction_id" not in (r.data or b"") for r in sent)
+    assert all("faction_id" not in r.full_url for r in sent)
+
+    sent.clear()
+    Capturing("http://fake").turn()
+    assert sent[0].get_header("X-na-seat") is None
 
 
 def test_tool_descriptions_state_the_legality_rule() -> None:
@@ -375,21 +405,16 @@ def test_submit_says_what_cited_is_for() -> None:
     assert "cited" in described
 
 
-def test_the_bulk_turn_reads_carry_the_faction_through_to_the_orchestrator() -> None:
-    """The scope has to reach the HTTP call, not merely appear in the signature.
-
-    A tool that accepts `faction_id` and then asks unscoped is the worst of both: the schema
-    says the boundary is enforced and nothing enforces it. That is strictly worse than no
-    argument at all, because it stops anyone looking.
-    """
+def test_the_bulk_turn_reads_reach_the_orchestrator_without_a_faction() -> None:
+    """The reads still reach their routes; the scope is the service's to derive (slice C)."""
     client = FakeClient()
     server = build_server(client)
-    call(server, "turn_forecast", faction_id=3, turn=103)
-    call(server, "turn_plan_status", faction_id=3)
-    call(server, "deferred_decisions", faction_id=3, full=True)
-    assert client.turn_reads == [(3, 103)]
-    assert client.plan_reads == [3]
-    assert client.pending_reads == [(3, True)]
+    call(server, "turn_forecast", turn=103)
+    call(server, "turn_plan_status")
+    call(server, "deferred_decisions", full=True)
+    assert client.turn_reads == [103]
+    assert client.plan_reads == [True]
+    assert client.pending_reads == [True]
 
 
 def test_the_forecast_tool_names_the_next_step() -> None:

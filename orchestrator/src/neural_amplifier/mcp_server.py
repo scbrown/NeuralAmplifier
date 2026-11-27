@@ -12,8 +12,11 @@ right side of that line, and the distinction is worth stating because it is easy
 They report the ORCHESTRATOR'S OWN RECORD of its decisions — what it was told to expect, what it
 answered from a table, what it parked — not the game's board. Nothing in them exists that the
 adapter did not already send. And each is scoped to the deciding faction, because the store
-behind them holds all six factions together: `POST /agent/turn` refuses to run without a
-faction, precisely so that a forgotten argument cannot read like a deliberate one.
+behind them holds all six factions together. The scope is NOT an argument (aegis-8fye.3,
+slice C): the service derives it from this server's seat token (``--seat-token`` /
+``NA_SEAT_TOKEN``, sent as ``X-NA-Seat``), or in a legacy single-faction run from the one LLM
+faction that has posted. A model cannot forget a faction it is never asked for, nor name
+someone else's.
 
 Without them the loop this surface exists to serve was unreachable from it. `submit_turn_plan`
 told the model to "read the turn forecast first (`POST /agent/turn`)" — an instruction an MCP
@@ -47,6 +50,10 @@ from urllib import error, parse, request
 #: waiting for, and a turn can take a while.
 HTTP_TIMEOUT = 120.0
 
+#: The header a seat's token travels in. Must match ``seats.SEAT_HEADER``; spelled here so this
+#: process imports nothing from the orchestrator it talks to.
+SEAT_HEADER = "X-NA-Seat"
+
 
 class OrchestratorClient:
     """A thin HTTP client for the agent-facing endpoints.
@@ -56,15 +63,23 @@ class OrchestratorClient:
     into the runtime path of a game.
     """
 
-    def __init__(self, url: str) -> None:
+    def __init__(self, url: str, seat_token: str | None = None) -> None:
         self.url = url.rstrip("/")
+        #: This seat's bearer token, sent on every call. None in a legacy (unseated) run.
+        self.seat_token = seat_token or None
+
+    def _headers(self, **extra: str) -> dict[str, str]:
+        headers = dict(extra)
+        if self.seat_token:
+            headers[SEAT_HEADER] = self.seat_token
+        return headers
 
     def _call(self, path: str, payload: dict[str, Any] | None = None) -> dict[str, Any]:
         body = json.dumps(payload or {}).encode()
         req = request.Request(
             f"{self.url}{path}",
             data=body,
-            headers={"Content-Type": "application/json"},
+            headers=self._headers(**{"Content-Type": "application/json"}),
             method="POST",
         )
         return self._send(req)
@@ -83,7 +98,9 @@ class OrchestratorClient:
             live = {k: v for k, v in params.items() if v is not None}
             if live:
                 query = "?" + parse.urlencode(live)
-        return self._send(request.Request(f"{self.url}{path}{query}", method="GET"))
+        return self._send(
+            request.Request(f"{self.url}{path}{query}", headers=self._headers(), method="GET")
+        )
 
     def _send(self, req: request.Request) -> dict[str, Any]:
         try:
@@ -137,16 +154,16 @@ class OrchestratorClient:
     def plan(self, payload: dict[str, Any]) -> dict[str, Any]:
         return self._call("/agent/plan", payload)
 
-    def turn(self, faction_id: int, turn: int | None = None) -> dict[str, Any]:
-        return self._call("/agent/turn", {"faction_id": faction_id, "turn": turn})
+    # The faction is the seat's, derived by the service — never sent. `mine=true` asks for that
+    # derived scope on the reads whose unscoped form is the operator's whole-run view.
+    def turn(self, turn: int | None = None) -> dict[str, Any]:
+        return self._call("/agent/turn", {"turn": turn})
 
-    def plan_status(self, faction_id: int) -> dict[str, Any]:
-        return self._get("/agent/plan", {"faction_id": faction_id})
+    def plan_status(self) -> dict[str, Any]:
+        return self._get("/agent/plan", {"mine": "true"})
 
-    def pending(self, faction_id: int, full: bool = False) -> dict[str, Any]:
-        return self._get(
-            "/agent/pending", {"faction_id": faction_id, "full": "true" if full else None}
-        )
+    def pending(self, full: bool = False) -> dict[str, Any]:
+        return self._get("/agent/pending", {"mine": "true", "full": "true" if full else None})
 
 
 class AgentError(RuntimeError):
@@ -343,7 +360,7 @@ def build_server(client: OrchestratorClient) -> Any:
         graph, and recall puts it in front of any later decision naming that unit.
 
             issue_order("move", [12, 40, 21], intent={
-                "faction_id": 2, "unit_id": 12,
+                "unit_id": 12,
                 "goal": "hold the land bridge", "until_turn": 60,
                 "triggers": [{"metric": "military_units",
                               "comparator": "at_least", "target": 4}]})
@@ -380,7 +397,7 @@ def build_server(client: OrchestratorClient) -> Any:
         return json.dumps(client.order({"orders": orders}), indent=2)
 
     @server.tool()
-    def turn_forecast(faction_id: int, turn: int | None = None) -> str:
+    def turn_forecast(turn: int | None = None) -> str:
         """Every decision your faction's turn is expected to raise — read this before planning.
 
         `next_decision` hands you one decision at a time, in the engine's order, and that is
@@ -397,13 +414,13 @@ def build_server(client: OrchestratorClient) -> Any:
         raises the decision it was expected to. Planning an entry for one is harmless — it
         simply never fires — but waiting for one is a wait that never ends.
 
-        `faction_id` is required and it is not paperwork: the turn is scoped to you, and an
-        unscoped read would show you the other factions' bases by name.
+        The turn is scoped to your faction by the service, from your seat — there is no faction
+        to pass, and no way to read another faction's bases from here.
         """
-        return json.dumps(client.turn(faction_id, turn), indent=2)
+        return json.dumps(client.turn(turn), indent=2)
 
     @server.tool()
-    def turn_plan_status(faction_id: int) -> str:
+    def turn_plan_status() -> str:
         """Did your turn plan actually answer anything — and what did it miss?
 
         `applied` per entry counts the decisions that entry answered. It is legitimately more
@@ -417,10 +434,10 @@ def build_server(client: OrchestratorClient) -> Any:
         An entry with `applied: 0` and no miss simply never came up. Compare it against
         `unraised` in `turn_forecast` before treating it as a fault.
         """
-        return json.dumps(client.plan_status(faction_id), indent=2)
+        return json.dumps(client.plan_status(), indent=2)
 
     @server.tool()
-    def deferred_decisions(faction_id: int, full: bool = False) -> str:
+    def deferred_decisions(full: bool = False) -> str:
         """The decisions you parked with `defer`, and have not come back to yet.
 
         Deferring answered the engine immediately with its own pick, so the game never blocked
@@ -435,16 +452,16 @@ def build_server(client: OrchestratorClient) -> Any:
         closes the matching deferral and names it in that order's response. Unresolved by the
         next turn the deferral expires, honestly recorded, with the engine's choice standing.
         """
-        return json.dumps(client.pending(faction_id, full), indent=2)
+        return json.dumps(client.pending(full), indent=2)
 
     @server.tool()
-    def submit_turn_plan(faction_id: int, turn: int, entries: list[dict[str, Any]]) -> str:
+    def submit_turn_plan(turn: int, entries: list[dict[str, Any]]) -> str:
         """Set your whole turn's answers at once — bulk-turn mode.
 
-        Read the turn forecast first (`turn_forecast(faction_id, turn)` — it lists every decision
-        the turn is expected to raise), decide them all at your own pace, then install the table:
+        Read the turn forecast first (`turn_forecast(turn)` — it lists every decision the turn is
+        expected to raise), decide them all at your own pace, then install the table:
 
-            submit_turn_plan(faction_id=2, turn=43, entries=[
+            submit_turn_plan(turn=43, entries=[
                 {"surface_id": "base.production", "base_id": 7,
                  "action_id": "facility:4", "reason": "finish the Tanks"},
                 {"surface_id": "faction.se", "action_id": "se:no-change"}])
@@ -455,11 +472,11 @@ def build_server(client: OrchestratorClient) -> Any:
         you state and replaces your previous one whole — install a new table each turn, and an
         empty `entries` list means "wake me for everything".
 
-        `turn_plan_status(faction_id)` afterwards says what answered and what missed.
+        The table is your faction's: the service derives that from your seat.
+
+        `turn_plan_status()` afterwards says what answered and what missed.
         """
-        return json.dumps(
-            client.plan({"faction_id": faction_id, "turn": turn, "entries": entries}), indent=2
-        )
+        return json.dumps(client.plan({"turn": turn, "entries": entries}), indent=2)
 
     @server.tool()
     def order_outcomes(cursor: int = 0) -> str:
@@ -478,8 +495,13 @@ def build_server(client: OrchestratorClient) -> Any:
     return server
 
 
-def main(url: str | None = None) -> int:
-    """Entry point for ``neural-amplifier mcp``."""
+def main(url: str | None = None, seat_token: str | None = None) -> int:
+    """Entry point for ``neural-amplifier mcp``.
+
+    ``seat_token`` (``--seat-token``, else ``NA_SEAT_TOKEN``) is this seat's token, read from
+    ``<run>/seat-<n>/token``; required in seat mode, where a call without it is 401.
+    """
     endpoint = url or os.environ.get("NA_URL", "http://127.0.0.1:8000")
-    build_server(OrchestratorClient(endpoint)).run()
+    token = seat_token or os.environ.get("NA_SEAT_TOKEN") or None
+    build_server(OrchestratorClient(endpoint, seat_token=token)).run()
     return 0

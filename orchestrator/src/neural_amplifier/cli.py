@@ -58,6 +58,12 @@ def main(argv: list[str] | None = None) -> int:
         default=None,
         help="running orchestrator to attach to (default $NA_URL or http://127.0.0.1:8000)",
     )
+    mcp.add_argument(
+        "--seat-token",
+        default=None,
+        help="this seat's token from <run>/seat-<n>/token (default $NA_SEAT_TOKEN); "
+        "required when the orchestrator runs a [seats] table",
+    )
 
     learn = sub.add_parser(
         "learn",
@@ -140,7 +146,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.command == "mcp":
         from .mcp_server import main as mcp_main
 
-        return mcp_main(args.url)
+        return mcp_main(args.url, seat_token=args.seat_token)
 
     if args.command == "learn":
         from .memory import MemoryStore, episodes

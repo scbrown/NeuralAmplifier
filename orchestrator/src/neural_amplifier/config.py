@@ -115,6 +115,10 @@ class Run:
     #: orchestrator must share a filesystem with the game. Stated here because nothing else in
     #: this config implies co-location, and a remote orchestrator will silently order nothing.
     game_dir: str | None = None
+    #: The run's own directory. Under a seat table each seat's token is written to
+    #: ``<run_dir>/seat-<n>/token`` (aegis-8fye.3, slice C). Absent, the service infers it from a
+    #: decision log at ``<run>/orch/...``.
+    run_dir: str | None = None
 
 
 #: Faction ids a seat can name. 0 is the native-life "faction" and never a player.
@@ -268,6 +272,7 @@ def load(path: Path | None = None) -> Config:
             plan=_text(env("NA_PLAN"), run.get("plan"), None),
             otel=_flag(env("NA_OTEL"), run.get("otel"), False),
             game_dir=_text(env("NA_GAME_DIR"), run.get("game_dir"), None),
+            run_dir=_text(env("NA_RUN_DIR"), run.get("run_dir"), None),
         ),
         surfaces=parse_surfaces(_table(data, "surfaces"), data.get("surface_default"), source),
         seats=parse_seats(_table(data, "seats")),
