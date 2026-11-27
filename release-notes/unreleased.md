@@ -75,8 +75,12 @@ below against the code it ships.
   hard-coded faction, base or unit ids. The store is versioned, and retrieval
   matches skill descriptions. Skill primitives are `choose`, `queue_answer` and
   `order`. Needs the new `skills` extra (`starlark-pyo3`, pinned exactly) and a
-  Linux host. The proposed `na:Skill` shape is in
-  `docs/proposals/na-skill-shape.ttl`.
+  Linux host. The `na:Skill` SHACL shape is in `shapes/na-skill.shapes.ttl`
+  and matches `skills.py`: trials carry seed, a `pass`/`fail` verdict and metric
+  deltas; `requires` knob ids are checked; the success check is optional and,
+  when present, names a vocabulary metric. `skill_shapes.py` pins the file by
+  sha256, serialises a skill version to Turtle and loads the shape into a seat
+  store with `qp shapes load`. The Quipu-backed skill store is not built yet.
 
 ## Not tested for this release
 

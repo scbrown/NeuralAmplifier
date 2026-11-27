@@ -8,7 +8,7 @@ Three parts, each owning one rule:
 - :class:`SkillStore` — **a rewrite is a new version.** Saving under an existing name appends a
   version that ``supersedes`` the previous content hash; the old one stays readable. Retrieval is
   by description, as Voyager's is. This is the local stand-in for the Quipu library of §5.4,
-  which goes through the governed ontology process (``docs/proposals/na-skill-shape.ttl``).
+  whose shape is ``shapes/na-skill.shapes.ttl`` (pinned and loaded by ``skill_shapes.py``).
 - :class:`SkillBrain` — **a skill is a Brain.** Its answer is returned as ordinary
   :class:`Orders`, so it passes validation, the guard and the record exactly as a model's would,
   and it cannot name an action the engine did not offer. No matching skill, or every match
