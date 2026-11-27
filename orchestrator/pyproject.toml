@@ -20,6 +20,10 @@ otel = ["opentelemetry-sdk>=1.27"]
 # The MCP surface an agent plays through (`neural-amplifier mcp`). Optional because a
 # scripted or Claude-brain run never starts it; the orchestrator itself needs nothing.
 mcp = ["mcp>=1.2"]
+# Skills (docs/seats-and-policy.md §5): the Starlark interpreter a stored skill runs in. Pinned
+# exactly, because "same input, same output" is the property a replay diff depends on, and an
+# interpreter upgrade is a change to every skill's behaviour that must be made deliberately.
+skills = ["starlark-pyo3==2026.1.3"]
 
 [project.scripts]
 neural-amplifier = "neural_amplifier.cli:main"
@@ -39,6 +43,8 @@ dev = [
     # actually played now, and an agent surface nobody tests is one that breaks silently
     # at the moment a session starts.
     "mcp>=1.2",
+    # In dev so skills are tested in the default lane; same exact pin as the `skills` extra.
+    "starlark-pyo3==2026.1.3",
 ]
 
 [build-system]
