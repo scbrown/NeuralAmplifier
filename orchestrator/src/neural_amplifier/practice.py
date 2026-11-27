@@ -260,6 +260,15 @@ def loop(
         except LintError as exc:
             history.append(RoundFeedback(number, None, save_refusal=Refusal("save", str(exc))))
             continue
+        if skill.status == "retired":
+            # Identical code and check to a version already retired (a shelved earlier run):
+            # the store hands that version back, and a retired version can never be promoted.
+            # Tell the author instead of trialling it.
+            why = f"identical to retired {skill.ref}" + (
+                f" ({skill.retired_reason})" if skill.retired_reason else ""
+            )
+            history.append(RoundFeedback(number, None, save_refusal=Refusal("save", why)))
+            continue
         last = skill
         if skill.version not in minted and skill.status == "candidate":
             minted.append(skill.version)

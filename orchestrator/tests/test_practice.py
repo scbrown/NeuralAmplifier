@@ -267,3 +267,23 @@ def test_seeds_are_distinct_and_unknown_labels_and_metrics_are_refused(
         trials.world_view(Seed("base_production_turn42", "nope"))
     with pytest.raises(ValueError, match="unknown metric"):
         OfflineTrialRunner(runner=trials.runner, variants={"x": {"bases": 1}})
+
+
+def test_a_draft_identical_to_a_retired_version_is_refused_not_promoted(
+    trials: OfflineTrialRunner,
+) -> None:
+    store = SkillStore()
+    old = store.save(
+        GOAL.name, GOAL.description, EXPAND, surfaces=GOAL.surfaces, check=CHECK, require_check=True
+    )
+    store.retire(GOAL.name, old.version, "shelved by an earlier run")
+    author = ScriptedAuthor([Draft(EXPAND, CHECK), Draft(EXPAND + "\n# revised\n", CHECK)])
+    result = loop(GOAL, author, trials, SEEDS, store=store)
+    first = result.rounds[0]
+    assert first.skill is None and first.save_refusal is not None
+    assert "identical to retired" in first.save_refusal.detail
+    assert "shelved by an earlier run" in first.save_refusal.detail
+    retired = store.get(GOAL.name, old.version)
+    assert retired is not None and retired.status == "retired" and retired.trials == ()
+    assert result.outcome == "admitted" and result.skill is not None
+    assert result.skill.version == old.version + 1
