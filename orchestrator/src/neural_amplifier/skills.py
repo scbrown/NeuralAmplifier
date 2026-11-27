@@ -35,6 +35,11 @@ with ``verified`` skills; a practice brain (fixtures, offline trials) also uses 
 
 **Requires** (§5.4). The knob ids a skill touches. Retrieval drops a skill needing a knob the
 running engine lacks, and a skill that sets a knob it did not declare fails closed.
+
+**Success check** (§5.2). What success means, declared before the skill runs: a metric from the
+measured vocabulary (``metrics.py``), a comparator, a target and a horizon in turns. The game is
+the critic, so a check naming anything outside the vocabulary is refused at save time, and a
+skill authored by the practice loop (``practice.py``) without one is refused outright.
 """
 
 from __future__ import annotations
@@ -42,6 +47,7 @@ from __future__ import annotations
 import hashlib
 import io
 import json
+import math
 import re
 import threading
 import tokenize
@@ -54,8 +60,9 @@ from .brain import Brain, BrainError
 from .contract import Choice, Orders, WorldView
 from .faction_policy import FACTION_IDS, KNOBS, KnobError, PolicyStore
 from .faction_policy import validate as validate_knob
+from .metrics import VOCABULARY
 from .orders import OrderChannel, build_command
-from .queued import Predicate, QueuedAnswer, QueueError, QueueStore
+from .queued import COMPARATORS, Predicate, QueuedAnswer, QueueError, QueueStore
 from .queued import validate as validate_predicates
 from .skill_runner import RunResult, SkillRunner
 
@@ -71,6 +78,25 @@ DEFAULT_MIN_VERIFIED_SEEDS = 3
 
 class SkillError(BrainError):
     """A skill could not answer. A BrainError, so the orchestrator degrades safely."""
+
+
+class SkillRunFailed(SkillError):
+    """The script itself failed: a budget breach, a crash, a Starlark error."""
+
+    def __init__(self, message: str, failure: str | None, detail: str) -> None:
+        super().__init__(message)
+        self.failure = failure
+        self.detail = detail
+
+
+class SkillEffectRefused(SkillError):
+    """The script ran, but one of its effects was refused; none of them were applied."""
+
+    def __init__(self, message: str, kind: str, detail: str) -> None:
+        super().__init__(message)
+        #: The refused effect's kind: ``queue``, ``order``, ``policy`` or what the script sent.
+        self.kind = kind
+        self.detail = detail
 
 
 class LintError(ValueError):
@@ -224,6 +250,81 @@ class Trial:
 
 
 @dataclass(frozen=True)
+class SuccessCheck:
+    """What success means for a skill, in numbers the engine reports (§5.2, §5.4).
+
+    "``base_count`` at_least 6 within 25 turns". The comparator grammar is the one queued-answer
+    predicates and directives use, so one grammar covers every checkable claim about the board.
+    """
+
+    metric: str
+    comparator: str
+    target: float
+    horizon_turns: int
+
+    def validate(self) -> None:
+        """Refuse a check the game cannot settle; ``LintError`` says why."""
+        if self.metric not in VOCABULARY:
+            raise LintError(
+                f"success check names unknown metric {self.metric!r}; use one of "
+                f"{', '.join(sorted(VOCABULARY))}"
+            )
+        if self.comparator not in COMPARATORS:
+            raise LintError(
+                f"success check comparator {self.comparator!r}; use one of {', '.join(COMPARATORS)}"
+            )
+        if (
+            isinstance(self.target, bool)
+            or not isinstance(self.target, int | float)
+            or not math.isfinite(self.target)
+        ):
+            raise LintError(f"success check target must be a finite number, not {self.target!r}")
+        if (
+            isinstance(self.horizon_turns, bool)
+            or not isinstance(self.horizon_turns, int)
+            or self.horizon_turns < 1
+        ):
+            raise LintError(
+                f"success check horizon_turns must be a whole number of turns >= 1, not "
+                f"{self.horizon_turns!r}"
+            )
+
+    def describe(self) -> str:
+        return (
+            f"{self.metric} {self.comparator.replace('_', ' ')} {self.target:g} "
+            f"within {self.horizon_turns} turn(s)"
+        )
+
+    def judge(self, measurements: dict[str, float]) -> tuple[bool, float | None, str]:
+        """Pass or fail against ``measurements``, the observed value, and a sentence.
+
+        A metric the measurements omit fails: an unread instrument is not a met target.
+        """
+        predicate = Predicate(self.metric, self.comparator, float(self.target))  # type: ignore[arg-type]
+        ok, detail = predicate.check(measurements)
+        observed = measurements.get(self.metric)
+        return ok, None if observed is None else float(observed), detail
+
+
+def _check_from(value: SuccessCheck | dict[str, Any] | None) -> SuccessCheck | None:
+    if value is None or isinstance(value, SuccessCheck):
+        return value
+    if not isinstance(value, dict):
+        raise LintError(
+            f"a success check is metric, comparator, target, horizon_turns; got {value!r}"
+        )
+    try:
+        return SuccessCheck(
+            metric=value["metric"],
+            comparator=value["comparator"],
+            target=value["target"],
+            horizon_turns=value["horizon_turns"],
+        )
+    except KeyError as exc:
+        raise LintError(f"success check is missing {exc.args[0]!r}") from exc
+
+
+@dataclass(frozen=True)
 class Skill:
     """One version of one skill. Immutable: a change is a new version."""
 
@@ -244,6 +345,10 @@ class Skill:
     status: Status = "candidate"
     #: Every recorded run of THIS version. A new version starts with none.
     trials: tuple[Trial, ...] = ()
+    #: What success means for this version, or ``None`` for a hand-written skill without one.
+    check: SuccessCheck | None = None
+    #: Why this version was retired, when it was given one (a shelved practice run records it).
+    retired_reason: str | None = None
 
     @property
     def ref(self) -> str:
@@ -269,6 +374,7 @@ def _skill_from_json(data: dict[str, Any]) -> Skill:
     data["surfaces"] = tuple(data.get("surfaces") or ())
     data["requires"] = tuple(data.get("requires") or ())
     data["trials"] = tuple(Trial(**t) for t in data.get("trials") or ())
+    data["check"] = _check_from(data.get("check"))
     data.setdefault("status", "candidate")
     if data["status"] not in STATUSES:
         raise ValueError(f"unknown skill status {data['status']!r}")
@@ -280,6 +386,7 @@ def _skill_to_json(skill: Skill) -> dict[str, Any]:
     data["surfaces"] = list(skill.surfaces)
     data["requires"] = list(skill.requires)
     data["trials"] = [asdict(t) for t in skill.trials]
+    data["check"] = None if skill.check is None else asdict(skill.check)
     return data
 
 
@@ -336,13 +443,17 @@ class SkillStore:
         surfaces: Iterable[str] = (),
         params: dict[str, Any] | None = None,
         requires: Iterable[str] = (),
+        check: SuccessCheck | dict[str, Any] | None = None,
+        require_check: bool = False,
     ) -> Skill:
         """Lint, parse and store ``code`` as the next version of ``name``.
 
         Refused (``LintError``) if the name is malformed, the description empty, a required
-        knob id malformed, the code hard-codes an id, does not parse as Starlark, or defines no
-        ``on_decision``. Saving code identical to the current version returns that version
-        rather than minting a new one. A new version is always a ``candidate``.
+        knob id malformed, the success check names a metric outside the vocabulary (or is
+        absent when ``require_check`` — the practice loop's rule), the code hard-codes an id,
+        does not parse as Starlark, or defines no ``on_decision``. Saving code and check
+        identical to the current version returns that version rather than minting a new one.
+        A new version is always a ``candidate``.
         """
         if not _NAME.match(name):
             raise LintError(f"skill name {name!r} must be lower_snake_case, at most 64 chars")
@@ -352,6 +463,14 @@ class SkillStore:
         bad = [k for k in needs if not isinstance(k, str) or not _KNOB_ID.match(k)]
         if bad:
             raise LintError(f"requires names knob ids like 'focus.fight', not {bad!r}")
+        success = _check_from(check)
+        if success is None and require_check:
+            raise LintError(
+                "a practice-authored skill needs a success check (metric, comparator, target, "
+                "horizon_turns); a skill with no checkable outcome cannot be admitted"
+            )
+        if success is not None:
+            success.validate()
         problems = lint(code)
         if problems:
             raise LintError("; ".join(problems))
@@ -359,7 +478,7 @@ class SkillStore:
         digest = content_hash(code)
         with self._lock:
             versions = self._versions.setdefault(name, [])
-            if versions and versions[-1].hash == digest:
+            if versions and versions[-1].hash == digest and versions[-1].check == success:
                 return versions[-1]
             skill = Skill(
                 name=name,
@@ -371,6 +490,7 @@ class SkillStore:
                 params=dict(params or {}),
                 supersedes=versions[-1].hash if versions else None,
                 requires=needs,
+                check=success,
             )
             versions.append(skill)
             self._write(skill)
@@ -437,11 +557,14 @@ class SkillStore:
                 return current
             return self._replace(name, version, status="verified")
 
-    def retire(self, name: str, version: int) -> Skill:
-        """Mark ``name@v<version>`` retired. It is never retrieved again."""
+    def retire(self, name: str, version: int, reason: str | None = None) -> Skill:
+        """Mark ``name@v<version>`` retired, with ``reason`` if given. Never retrieved again."""
         with self._lock:
-            self._get(name, version)
-            return self._replace(name, version, status="retired")
+            current = self._get(name, version)
+            why = reason.strip() if isinstance(reason, str) and reason.strip() else None
+            return self._replace(
+                name, version, status="retired", retired_reason=why or current.retired_reason
+            )
 
     def _get(self, name: str, version: int) -> Skill:
         found = next((s for s in self._versions.get(name) or [] if s.version == version), None)
@@ -614,13 +737,31 @@ class SkillBrain:
         if candidates:
             view = world_view.model_dump(mode="json", exclude_none=True)
             for skill in candidates:
-                result = self._run(skill, ENTRY_DECISION, view)
-                self._apply_effects(skill, result, world_view, allow_policy=False)
-                orders = _orders_from(skill, result.answer)
+                orders = self._decide_with(skill, world_view, view)
                 if orders is not None:
-                    self.last_skill = skill
                     return orders
         return self.fallback.decide(world_view)
+
+    def run_skill(self, skill: Skill, world_view: WorldView) -> Orders | None:
+        """Run one named skill's ``on_decision``, skipping retrieval; ``None`` if it falls through.
+
+        Same checks and effects as :meth:`decide`, for a caller that already chose the skill —
+        a practice trial runs exactly the candidate under test, whatever its description says.
+        """
+        self.last_skill = None
+        self.last_effects = []
+        view = world_view.model_dump(mode="json", exclude_none=True)
+        return self._decide_with(skill, world_view, view)
+
+    def _decide_with(
+        self, skill: Skill, world_view: WorldView, view: dict[str, Any]
+    ) -> Orders | None:
+        result = self._run(skill, ENTRY_DECISION, view)
+        self._apply_effects(skill, result, world_view, allow_policy=False)
+        orders = _orders_from(skill, result.answer)
+        if orders is not None:
+            self.last_skill = skill
+        return orders
 
     def on_turn(self, world_view: WorldView, names: Iterable[str] | None = None) -> None:
         """Run ``on_turn`` of each eligible skill that defines one, in name order.
@@ -653,7 +794,11 @@ class SkillBrain:
     def _run(self, skill: Skill, entry: str, view: dict[str, Any]) -> RunResult:
         result = self.runner.run(skill.name, skill.code, entry, view, skill.params)
         if not result.ok:
-            raise SkillError(f"skill {skill.ref} failed closed ({result.failure}): {result.detail}")
+            raise SkillRunFailed(
+                f"skill {skill.ref} failed closed ({result.failure}): {result.detail}",
+                result.failure,
+                result.detail,
+            )
         return result
 
     def _apply_effects(
@@ -661,6 +806,7 @@ class SkillBrain:
     ) -> None:
         converted: list[Effect] = []
         for effect in result.effects:
+            kind = str(effect.get("kind"))
             try:
                 if effect.get("kind") == "queue":
                     converted.append(_queued_from(skill, effect, world_view))
@@ -676,7 +822,9 @@ class SkillBrain:
                 else:
                     raise ValueError(f"unknown effect {effect.get('kind')!r}")
             except (ValueError, QueueError, TypeError) as exc:  # KnobError is a ValueError
-                raise SkillError(f"skill {skill.ref} produced an invalid effect: {exc}") from exc
+                raise SkillEffectRefused(
+                    f"skill {skill.ref} produced an invalid effect: {exc}", kind, str(exc)
+                ) from exc
         self.last_effects.extend(converted)
         for item in converted:
             if isinstance(item, QueuedAnswer) and self.queue is not None:
