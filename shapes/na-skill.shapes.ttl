@@ -1,14 +1,15 @@
-# PROPOSAL — not loaded by anything in this repository.
+# The na:Skill vocabulary and its SHACL shape: the skill library of
+# docs/seats-and-policy.md §5.4-5.5, one seat book per Quipu store.
 #
-# The na:Skill vocabulary and its SHACL shape for the skill library of
-# docs/seats-and-policy.md §5.4. Adopting it is a governed ontology change made
-# outside this repository; this file is the text proposed for that review.
+# This file lives in this repository (ruled option (b)): it is loaded into a
+# seat's own store by orchestrator/src/neural_amplifier/skill_shapes.py, which
+# pins these exact bytes by sha256. Editing this file means updating that pin.
 #
+# It matches orchestrator/src/neural_amplifier/skills.py: what skills.py
+# accepts, this shape accepts, and what skills.py refuses, this shape refuses.
 # One na:Skill node per VERSION. A rewrite is a new node that na:supersedes the
 # old one, so the library as it stood at any earlier moment stays readable.
-# Property names follow the local store (orchestrator/src/neural_amplifier/
-# skills.py): name, version, description, code, contentHash, surfaces (as
-# na:requiresSurface), supersedes.
+# skill_shapes.to_turtle() is the serialisation this shape is tested against.
 
 @prefix na:   <http://neuralamplifier.local/ontology/skill/> .
 @prefix sh:   <http://www.w3.org/ns/shacl#> .
@@ -23,7 +24,7 @@ na:Skill a owl:Class ;
     rdfs:comment "One immutable version of a deterministic Starlark script that answers decisions." .
 
 na:Trial a owl:Class ;
-    rdfs:comment "One run of a skill version from a game or a fixture, with its verdict." .
+    rdfs:comment "One run of a skill version from a game or a fixture, with its verdict and metric deltas." .
 
 na:SuccessCheck a owl:Class ;
     rdfs:comment "What success means for a skill, in the metric vocabulary: metric, comparator, target, horizon." .
@@ -35,13 +36,19 @@ na:description     a owl:DatatypeProperty ; rdfs:domain na:Skill ;
 na:code            a owl:DatatypeProperty ; rdfs:domain na:Skill .
 na:contentHash     a owl:DatatypeProperty ; rdfs:domain na:Skill ;
     rdfs:comment "sha256 of na:code, hex. What a decision record cites." .
+na:params          a owl:DatatypeProperty ; rdfs:domain na:Skill ;
+    rdfs:comment "Default parameters passed to every entry point, as one JSON object (sorted keys)." .
 na:status          a owl:DatatypeProperty ; rdfs:domain na:Skill ;
     rdfs:comment "candidate, verified or retired. Only verified skills answer in a live game." .
-na:supersedes      a owl:ObjectProperty ; rdfs:domain na:Skill ; rdfs:range na:Skill .
+na:retiredReason   a owl:DatatypeProperty ; rdfs:domain na:Skill ;
+    rdfs:comment "Why a version was retired, when it was." .
+na:supersedes      a owl:ObjectProperty ; rdfs:domain na:Skill ;
+    rdfs:comment "The version this one replaces, named by its content hash." .
 na:calls           a owl:ObjectProperty ; rdfs:domain na:Skill ; rdfs:range na:Skill .
 na:requiresSurface a owl:DatatypeProperty ; rdfs:domain na:Skill ;
     rdfs:comment "A surface id (surfaces.py) the skill applies to. None means any." .
-na:requiresKnob    a owl:DatatypeProperty ; rdfs:domain na:Skill .
+na:requiresKnob    a owl:DatatypeProperty ; rdfs:domain na:Skill ;
+    rdfs:comment "A knob id (faction_policy.py) the skill touches, such as focus.fight." .
 na:engine          a owl:DatatypeProperty ; rdfs:domain na:Skill .
 na:successCheck    a owl:ObjectProperty ; rdfs:domain na:Skill ; rdfs:range na:SuccessCheck .
 na:trial           a owl:ObjectProperty ; rdfs:domain na:Skill ; rdfs:range na:Trial .
@@ -51,7 +58,8 @@ na:authoredInGame  a owl:DatatypeProperty ; rdfs:domain na:Skill .
 na:authoredAtTurn  a owl:DatatypeProperty ; rdfs:domain na:Skill .
 na:authoredWithModel a owl:DatatypeProperty ; rdfs:domain na:Skill .
 
-na:metric     a owl:DatatypeProperty ; rdfs:domain na:SuccessCheck .
+na:metric     a owl:DatatypeProperty ;
+    rdfs:comment "A metric name: of a success check, or of one trial delta." .
 na:comparator a owl:DatatypeProperty ; rdfs:domain na:SuccessCheck .
 na:target     a owl:DatatypeProperty ; rdfs:domain na:SuccessCheck .
 na:horizonTurns a owl:DatatypeProperty ; rdfs:domain na:SuccessCheck .
@@ -60,6 +68,10 @@ na:source   a owl:DatatypeProperty ; rdfs:domain na:Trial ;
     rdfs:comment "The game id or fixture name the trial ran from." .
 na:seed     a owl:DatatypeProperty ; rdfs:domain na:Trial .
 na:verdict  a owl:DatatypeProperty ; rdfs:domain na:Trial .
+na:delta    a owl:ObjectProperty ; rdfs:domain na:Trial ;
+    rdfs:comment "One metric's change over the trial: a node with na:metric and na:value." .
+na:value    a owl:DatatypeProperty ;
+    rdfs:comment "The change in na:metric over a trial." .
 
 # --- shapes -----------------------------------------------------------------
 
@@ -83,39 +95,50 @@ na:SkillShape a sh:NodeShape ;
         sh:minCount 1 ; sh:maxCount 1 ;
         sh:pattern "^[0-9a-f]{64}$" ;
     ] , [
-        sh:path na:status ;
+        sh:path na:params ; sh:datatype xsd:string ;
+        sh:minCount 1 ; sh:maxCount 1 ;
+        sh:pattern "^\\{.*\\}$" ;
+    ] , [
+        sh:path na:status ; sh:datatype xsd:string ;
         sh:minCount 1 ; sh:maxCount 1 ;
         sh:in ( "candidate" "verified" "retired" ) ;
     ] , [
-        sh:path na:supersedes ; sh:class na:Skill ; sh:maxCount 1 ;
+        sh:path na:retiredReason ; sh:datatype xsd:string ;
+        sh:maxCount 1 ; sh:minLength 1 ;
+    ] , [
+        sh:path na:supersedes ; sh:nodeKind sh:IRI ; sh:maxCount 1 ;
     ] , [
         sh:path na:calls ; sh:class na:Skill ;
     ] , [
-        sh:path na:requiresSurface ; sh:datatype xsd:string ;
-        sh:pattern "^[a-z_]+\\.[a-z_.]+$" ;
+        sh:path na:requiresSurface ; sh:datatype xsd:string ; sh:minLength 1 ;
     ] , [
         sh:path na:requiresKnob ; sh:datatype xsd:string ;
+        sh:pattern "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)+$" ;
     ] , [
-        sh:path na:engine ; sh:in ( "thinker" "glsmac" ) ;
+        sh:path na:engine ; sh:datatype xsd:string ; sh:in ( "thinker" "glsmac" ) ;
     ] , [
-        # §5.2: a skill with no checkable outcome is refused at authoring time.
         sh:path na:successCheck ; sh:class na:SuccessCheck ;
-        sh:minCount 1 ;
+        sh:maxCount 1 ;
     ] , [
         sh:path na:trial ; sh:class na:Trial ;
     ] , [
-        sh:path na:authoredBy ; sh:datatype xsd:string ;
-        sh:minCount 1 ; sh:maxCount 1 ;
+        sh:path na:authoredBy ; sh:datatype xsd:string ; sh:maxCount 1 ;
     ] .
 
+# metric: exactly metrics.VOCABULARY, sorted. A test keeps the two equal.
 na:SuccessCheckShape a sh:NodeShape ;
     sh:targetClass na:SuccessCheck ;
     sh:property [
         sh:path na:metric ; sh:datatype xsd:string ; sh:minCount 1 ; sh:maxCount 1 ;
+        sh:in ( "base_count" "drone_total" "energy_income" "energy_reserves"
+                "factions_at_war" "labs_output" "military_units" "mineral_surplus"
+                "minerals_remaining" "pop_size" "pop_total" "turns_to_completion"
+                "units_in_foreign_territory" ) ;
     ] , [
-        sh:path na:comparator ; sh:minCount 1 ; sh:maxCount 1 ;
+        sh:path na:comparator ; sh:datatype xsd:string ; sh:minCount 1 ; sh:maxCount 1 ;
         sh:in ( "at_least" "at_most" ) ;
     ] , [
+        # xsd:decimal has no NaN or infinity, so a conforming target is finite.
         sh:path na:target ; sh:datatype xsd:decimal ; sh:minCount 1 ; sh:maxCount 1 ;
     ] , [
         sh:path na:horizonTurns ; sh:datatype xsd:integer ;
@@ -126,9 +149,19 @@ na:TrialShape a sh:NodeShape ;
     sh:targetClass na:Trial ;
     sh:property [
         sh:path na:source ; sh:datatype xsd:string ; sh:minCount 1 ; sh:maxCount 1 ;
+        sh:minLength 1 ;
     ] , [
-        sh:path na:seed ; sh:datatype xsd:integer ; sh:maxCount 1 ;
+        sh:path na:seed ; sh:datatype xsd:integer ; sh:minCount 1 ; sh:maxCount 1 ;
     ] , [
-        sh:path na:verdict ; sh:minCount 1 ; sh:maxCount 1 ;
-        sh:in ( "pass" "fail" "error" ) ;
+        sh:path na:verdict ; sh:datatype xsd:string ; sh:minCount 1 ; sh:maxCount 1 ;
+        sh:in ( "pass" "fail" ) ;
+    ] , [
+        sh:path na:delta ; sh:node na:DeltaShape ;
+    ] .
+
+na:DeltaShape a sh:NodeShape ;
+    sh:property [
+        sh:path na:metric ; sh:datatype xsd:string ; sh:minCount 1 ; sh:maxCount 1 ;
+    ] , [
+        sh:path na:value ; sh:datatype xsd:decimal ; sh:minCount 1 ; sh:maxCount 1 ;
     ] .
