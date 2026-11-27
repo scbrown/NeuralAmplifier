@@ -4,8 +4,8 @@ Source-grounded reference for the **Thinker adapter** (Track A / near-term). Ver
 the fork at `scbrown/thinker` (paths are `src/...`; `file:line` cited). For the overall
 dual-engine design and shared contract, see [VISION.md](https://github.com/scbrown/NeuralAmplifier/blob/main/VISION.md) and [contract.md](contract.md).
 
-**Citations re-verified against upstream Thinker v5.5** (fork branch
-`claude/thinker-upstream-sync-us8srt`). v5.5 extracted the whole turn loop out of `game.cpp`
+**Citations re-verified against upstream Thinker v5.6** (fork branch
+`claude/thinker-upstream-sync-us8srt` at `b00a933`; earlier pass: v5.5). v5.5 extracted the whole turn loop out of `game.cpp`
 into a new **`gameturn.cpp`** and dropped the `mod_` prefix from those functions
 (`mod_faction_upkeep` → `faction_upkeep`, and likewise for `turn_upkeep`, `repair_phase`,
 `production_phase`, `allocate_energy`). Every `file:line` below was re-resolved against the
@@ -25,16 +25,16 @@ attribution; our adapter is a fork of / addition to Thinker.
 
 - Ships as **`thinker.dll`** injected into 32-bit `terranx.exe` (v2.0 GOG). `DllMain`
   → `DLL_PROCESS_ATTACH` parses `thinker.ini` then calls **`patch_setup(&conf)`**
-  (`main.cpp:656`), which installs every hook. `ThinkerModule()` (`main.cpp:622`) is an
+  (`main.cpp:652`), which installs every hook. `ThinkerModule()` (`main.cpp:618`) is an
   export stub the patched import table points at.
 - **Two hook primitives** (`patch.cpp`, declared `patch.h:15-23`), both verify the original
   bytes and abort on mismatch (binary-compat guard):
-  - `write_jump(addr, func)` (`patch.cpp:192`) — overwrite a function prologue with a jump →
-    **replace a whole engine function**. The ~200-entry table starts at `patch.cpp:463`.
-  - `write_call(addr, func)` (`patch.cpp:224`) — rewrite one call-site → **intercept a single
+  - `write_jump(addr, func)` (`patch.cpp:181`) — overwrite a function prologue with a jump →
+    **replace a whole engine function**. The ~200-entry table starts at `patch.cpp:468`.
+  - `write_call(addr, func)` (`patch.cpp:213`) — rewrite one call-site → **intercept a single
     call**.
 - **Loading:** the `thinker.exe` launcher does remote-thread injection into a suspended
-  `terranx.exe` (`launch.cpp:46-93`: `CreateProcess(SUSPENDED)` → `WriteProcessMemory` →
+  `terranx.exe` (`launch.cpp:46-110`: `CreateProcess(SUSPENDED)` → `WriteProcessMemory` →
   `CreateRemoteThread(LoadLibraryA)` → `ResumeThread`), or an import-table hex patch auto-loads
   it. `terranx.exe` on disk is never modified — all patches are applied in memory at attach.
 - **To add/override a decision:** write a `__cdecl`/`__thiscall` replacement matching the
@@ -48,24 +48,24 @@ Claude's choice. Map them directly to the [contract](contract.md)'s `scope`:
 
 | Contract scope | Thinker hook | Returns | file:line | Cleanliness |
 | --- | --- | --- | --- | --- |
-| **turn** (whole faction) | `faction_upkeep(faction_id)` | — (runs the faction's whole turn) | `gameturn.cpp:1568` (hook `patch.cpp:516`) | ★ cleanest handoff |
-| **base** (production) | `mod_base_build(base_id, has_gov)` | build item id (facility / unit / special) | `base.cpp:1249` (picker `select_build` `build.cpp:1385`) | ★ clean, self-contained |
-| **unit** (orders) | `mod_enemy_move(veh_id)` | order/sync code | `veh_turn.cpp:137` (hook `patch.cpp:702`) | ★ clean (dispatches by type) |
-| research | `mod_tech_ai(faction_id)` | tech id | `tech.cpp:629` (hook `patch.cpp:840`) | clean |
-| social engineering | `mod_social_ai(faction_id, …)` | sets SE model | `faction.cpp:1500` | clean |
+| **turn** (whole faction) | `faction_upkeep(faction_id)` | — (runs the faction's whole turn) | `gameturn.cpp:2228` (hook `patch.cpp:526`) | ★ cleanest handoff |
+| **base** (production) | `mod_base_build(base_id, has_gov)` | build item id (facility / unit / special) | `base.cpp:1217` (picker `select_build` `build.cpp:1472`) | ★ clean, self-contained |
+| **unit** (orders) | `mod_enemy_move(veh_id)` | order/sync code | `veh_turn.cpp:138` (hook `patch.cpp:761`) | ★ clean (dispatches by type) |
+| research | `mod_tech_ai(faction_id)` | tech id | `tech.cpp:637` (hook `patch.cpp:896`) | clean |
+| social engineering | `mod_social_ai(faction_id, …)` | sets SE model | `faction.cpp:1560` | clean |
 | unit design | `design_units(faction_id)` | — | `plan.cpp:174` | clean per-faction |
 | strategy pass | `plans_upkeep(faction_id)` | — (builds `AIPlans`) | `plan.cpp:503` | faction-level |
-| diplomacy | `enemy_diplomacy(faction_id)` + many `net_*`/`mod_tech_val` | — | `gameturn.cpp:1585`, `patch.cpp:514-545` | diffuse |
+| diplomacy | `enemy_diplomacy(faction_id)` + many `net_*`/`mod_tech_val` | — | `gameturn.cpp:2245`, `patch.cpp:575-600` | diffuse |
 
 > **The turn row changed shape in v5.5, not just address.** `faction_upkeep` is now installed
-> with **`write_jump(0x527290)`** (`patch.cpp:516`) — the whole engine function is replaced —
+> with **`write_jump(0x527290)`** (`patch.cpp:526`) — the whole engine function is replaced —
 > where it used to be a `write_call` intercepting one site. That is why the adapter's
 > turn-level seams must live inside `gameturn.cpp`'s body and nowhere else: there is no
 > surviving call site left to wrap.
 
 **The per-faction switch (where "LLM controls faction N" plugs in):**
-`thinker_enabled(faction_id)` (`faction.cpp:152`) / `thinker_move_upkeep(faction_id)`
-(`faction.cpp:176`) gate
+`thinker_enabled(faction_id)` (`faction.cpp:162`) / `thinker_move_upkeep(faction_id)`
+(`faction.cpp:186`) gate
 whether Thinker's AI (vs. legacy) runs, driven by `conf.factions_enabled` etc. Our adapter adds
 a parallel gate: for LLM-routed factions, a hook serializes state + action space, asks the
 orchestrator, and applies the result; otherwise it falls through to Thinker's native decision
@@ -73,23 +73,23 @@ orchestrator, and applies the result; otherwise it falls through to Thinker's na
 
 ## 3. Reading state → the world view
 
-Engine globals (`extern` in `engine.h:489-495`): `Factions`, `MFactions`, `Bases`, `Units`,
+Engine globals (`extern` in `engine.h:572-578`): `Factions`, `MFactions`, `Bases`, `Units`,
 `Vehs`, `MapTiles`; counts `*BaseCount` (`engine.h:297`), `*VehCount` (`:298`), `*CurrentTurn`
-(`:43`); tile accessor `mapsq(x,y)` (`map.h:14`). Thinker's own per-faction strategy lives in
-`AIPlans plans[]` (`main.h:581`).
+(`:43`); tile accessor `mapsq(x,y)` (`map.h:6`). Thinker's own per-faction strategy lives in
+`AIPlans plans[]` (`main.h:395`).
 
 Key structs (packed):
 
 | Struct | World-view fields | file:line |
 | -------- | ------------------- | ----------- |
 | `MAP` (tile) | `climate`, `contour`, `owner`, `items`/`landmarks` bitmasks, `region`, **`visibility`** (per-faction) | `engine_types.h:6` |
-| `VEH` (unit) | `x,y`, `unit_id`, `faction_id`, `state`, `order`, `morale`, `moves_spent`, `damage_taken`, `home_base_id`; helpers `triad()`, `is_colony()`, `is_former()` | `engine_veh.h:482` |
-| `BASE` | `x,y`, `faction_id`, `pop_size`, `name`, `queue_items[10]`, `facilities_built[12]`, worked tiles, `nutrient/mineral/energy_intake/_surplus` | `engine_base.h:148` |
-| `Faction` | `energy_credits`, `SE_Politics/Economics/Values/Future`, `tech_research_id`, `tech_achieved`, `labs_total`, `diplo_status[8]`, `base_count` | `engine_types.h:293` |
+| `VEH` (unit) | `x,y`, `unit_id`, `faction_id`, `state`, `order`, `morale`, `moves_spent`, `damage_taken`, `home_base_id`; helpers `triad()`, `is_colony()`, `is_former()` | `engine_veh.h:484` |
+| `BASE` | `x,y`, `faction_id`, `pop_size`, `name`, `queue_items[10]`, `facilities_built[12]`, worked tiles, `nutrient/mineral/energy_intake/_surplus` | `engine_base.h:142` |
+| `Faction` | `energy_credits`, `SE_Politics/Economics/Values/Future`, `tech_research_id`, `tech_achieved`, `labs_total`, `diplo_status[8]`, `base_count` | `engine_types.h:275` |
 
 **Fog-of-war is real and per-faction** — filter the world view to what a faction can see:
 `MAP::visibility` bitfield → `is_visible(faction_id)` / `is_known(faction_id)`
-(`engine_types.h:47-52`); units also carry `VEH::visibility` (`engine_veh.h:500`). So the Thinker
+(`engine_types.h:47-52`); units also carry `VEH::visibility` (`engine_veh.h:502`). So the Thinker
 world view is **fair from day one** (`contract` `map.fog: true`) — unlike GLSMAC today.
 
 **Enumeration:** `for i in 0..*BaseCount: Bases[i]` (filter `faction_id`); same for `Vehs[]`;
@@ -97,7 +97,7 @@ tiles via `mapsq(x,y)` gated on `is_known(faction_id)`. Economy/tech/SE read off
 
 ## 4. The per-faction AI turn (the handoff pipeline)
 
-`faction_upkeep(faction_id)` (`gameturn.cpp:1568-1686`, replacing the engine's own at
+`faction_upkeep(faction_id)` (`gameturn.cpp:2228-2346`, replacing the engine's own at
 `0x527290`) runs, in order: `init_save_game` → `plans_upkeep` → `reset_netmsg_status` →
 `social_upkeep` → `repair_phase` → `production_phase` (loops bases → `mod_base_build`) → then,
 **only when `full_game_turn()`**, `allocate_energy` → `enemy_diplomacy` → `enemy_strategy` →
@@ -119,7 +119,7 @@ orders** live in `mod_enemy_move` — matching our two-tier + drill-down model e
 ### 5.0 Which slot Claude occupies (decide this first)
 
 Everything below depends on one bit: `is_human(faction_id)` — `FactionStatus[0] & (1 << faction_id)`
-(`faction.cpp:110`). It selects not just the UI but **which rules the faction plays under**.
+(`faction.cpp:120`). It selects not just the UI but **which rules the faction plays under**.
 Three viable configurations:
 
 | | **Mode A — AI slot** | **Mode B — human slot** | **Mode B+ — human slot, managed** |
@@ -131,13 +131,13 @@ Three viable configurations:
 | Good for | unattended autonomous runs | copilot (S3) | **autonomous, fair** |
 
 **Mode A's problem is not cosmetic.** Non-human factions get a systematic handicap layer, not a
-single branch: unit support (`base.cpp:1763`), facility maintenance (`base.cpp:3093-3095`), tech
-cost (`tech.cpp:1175`), terraform speed (`veh_action.cpp:210`), mind-control cost
-(`probe.cpp:713`), combat (`veh_combat.cpp:1558-1567`), content population
-(`content_pop_player` vs `content_pop_computer`, `base.cpp:4411-4424`), starting units
-(`faction.cpp:1826-1827, 2276-2277`). Two are outright rule differences: **AI factions pay no
-retool penalty at all** (`base.cpp:1149`, `build.cpp:12`), and AI factions below Transcend
-**do not accumulate global warming** (`base.cpp:3336` — the `*ClimateLevel` increment is gated
+single branch: unit support (`base.cpp:1734`), facility maintenance (`base.cpp:3059-3061`), tech
+cost (`tech.cpp:1182`), terraform speed (`veh_action.cpp:210`), mind-control cost
+(`probe.cpp:707`), combat (`veh_combat.cpp:1558-1567`), content population
+(`content_pop_player` vs `content_pop_computer`, `base.cpp:4390-4405`), starting units
+(`faction.cpp:2472-2473`). Two are outright rule differences: **AI factions pay no
+retool penalty at all** (`base.cpp:1123`, `build.cpp:18`), and AI factions below Transcend
+**do not accumulate global warming** (`base.cpp:3310` — the `*ClimateLevel` increment is gated
 on `is_human(faction_id) || *DiffLevel >= 4`).
 
 Project policy is to **record these, not patch them out** ([game-surface.md](game-surface.md)
@@ -148,22 +148,22 @@ profile.
 **Mode B+ is the resolution.** Two config switches let a *human* faction borrow Thinker's AI
 brain while keeping human rules:
 
-- `conf.manage_player_bases` (`main.h:170`) — routes human bases through `mod_base_build` /
-  `mod_base_hurry` instead of the engine's `base_reset` (`base.cpp:1081`, `build.cpp:69`).
-- `conf.manage_player_units` (`main.h:171`) — lets Thinker drive human units, but only those the
-  player has set to *automated* (`veh->order_auto_type`, `move.cpp:2090-2094`).
+- `conf.manage_player_bases` (`main.h:156`) — routes human bases through `mod_base_build` /
+  `mod_base_hurry` instead of the engine's `base_reset` (`base.cpp:1060`, `build.cpp:101`).
+- `conf.manage_player_units` (`main.h:157`) — lets Thinker drive human units, but only those the
+  player has set to *automated* (`veh->order_auto_type`, `veh_turn.cpp:162`).
 
 So Mode B+ gives fair rules **and** a deterministic tier. Two gaps remain, and the LLM tier must
 own them outright because no AI path executes for a human faction:
 
-- **Energy allocation** — `allocate_energy` returns early for humans (`gameturn.cpp:1971`, inside
-  the `is_human(faction_id)` block opened at `:1959`); the AI heuristic at
-  `gameturn.cpp:2042-2110` exists but never runs. Port it or let Claude decide. Re-verified
+- **Energy allocation** — `allocate_energy` returns early for humans (`gameturn.cpp:2634`, inside
+  the `is_human(faction_id)` block opened at `:2622`); the AI heuristic at
+  `gameturn.cpp:2661-2729` exists but never runs. Port it or let Claude decide. Re-verified
   against v5.5: the early return survived the rewrite.
-- **Social engineering** — `mod_social_ai` hard-returns for humans at `faction.cpp:1505-1507`
+- **Social engineering** — `mod_social_ai` hard-returns for humans at `faction.cpp:1565-1567`
   (`is_human(faction_id) || !is_alive(faction_id)`); `conf.social_ai` applies to AI factions only.
 
-Also note `BASE::gov_config()` (`engine_base.h:248`) returns `~0u` for AI but only the ticked
+Also note `BASE::gov_config()` (`engine_base.h:242`) returns `~0u` for AI but only the ticked
 bits for humans — so in Mode B/B+ the 21 governor permission flags become a real, recurring
 decision surface with **no AI policy to copy**.
 
@@ -173,8 +173,8 @@ but is where the gate was *first* added (tip `62b0b7b`, 2026-07-29) and is now w
 `master` (`f10683f`, 2026-08-16); read `master`, and current upstream-sync work is on
 `claude/thinker-upstream-sync-us8srt`. `Config.llm_factions` is a
 bitmask over faction slots (default `0` = stock Thinker, no bridge), `llm_endpoint` is the
-orchestrator base URL, and `llm_enabled(faction_id)` (`faction.cpp:171`) sits alongside
-`thinker_enabled` (`faction.cpp:152`) rather than
+orchestrator base URL, and `llm_enabled(faction_id)` (`faction.cpp:181`) sits alongside
+`thinker_enabled` (`faction.cpp:162`) rather than
 replacing it — a faction that is not LLM-routed falls through to Thinker's own choice, and that
 fall-through *is* the deterministic tier. Both options are documented in `docs/thinker.ini` at
 the point of use. No decision is intercepted yet; that is A1.
@@ -205,7 +205,7 @@ surface consequences in [game-surface.md](game-surface.md); dialog handling in
 - **Transport from inside the DLL.** The hook runs in `terranx.exe`'s 32-bit address space, so
   the HTTP call to the orchestrator uses **WinHTTP/WinINet** (or a helper thread/process). It
   **must not block the message pump** for long — Thinker already installs a low-CPU idle hook
-  `ModPeekMessage` (`patch.cpp:110`); do the request on a worker thread and apply the result
+  `ModPeekMessage` (`patch.cpp:100`); do the request on a worker thread and apply the result
   when the hook next runs, or bound the synchronous wait tightly. Keep the DLL **thin**: all
   reusable logic lives in the orchestrator (which is unit-testable); the DLL just serializes
   state and applies the choice.
@@ -230,7 +230,7 @@ Checked against every other candidate; none has both halves:
 
 | Seam host | Why the table cannot take it |
 | --- | --- |
-| `mod_base_build` | **Not in the patch table at all** — reached only from `mod_base_reset` (`base.cpp:1094`). No entry to re-point. |
+| `mod_base_build` | **Not in the patch table at all** — reached only from `mod_base_reset` (`base.cpp:1068`). No entry to re-point. |
 | `mod_tech_selection` | Seam must precede the `tech_research_id` assignment; a wrapper runs after it, and the world view would report the question as already settled. |
 | `mod_social_ai` | Needs the locals `sf`, `sm2`, `soc`. |
 | `move_upkeep` | Needs loop locals (`value`, cohort size) that only exist mid-iteration. |
@@ -268,17 +268,24 @@ seams to be re-placed by hand, because git happily takes a deletion of code you 
 seam guard exists precisely for that gap — run `python3 tests/check_seams.py` after resolving,
 before believing the build.
 
+**The v5.6 sync, for calibration:** 5 textual conflicts; 18 seam rows moved into
+`faction_talk.cpp`, where v5.6 moved the diplomacy code; 6 renames applied to `neural.cpp`; and 7
+`na_outcome_*` seams that were in the tree but missing from `tests/na_seams.tsv` are now tracked.
+The build then found two more errors that neither the merge nor grep could show: a renamed local
+in `mod_base_production` (`item_id` → `unit_id`) and the `fp_none` third argument of
+`FBasePop_exec_3`, both taken at upstream's name.
+
 ## 6. Build & config
 
 - **Toolchain:** 32-bit **MinGW** (i686), C++11 — *not* MSVC. `CMakeLists.txt:16-18` pins
   `i686-w64-mingw32-g++`. Deps: `apt install build-essential cmake g++-mingw-w64-i686-posix`
   (Technical.md:160). Build: `cmake --preset develop && cmake --build --preset develop`
   (presets in `CMakePresets.json`). Targets: `thinker.dll` + `thinker.exe` launcher
-  (`CMakeLists.txt:61-81`). Runs on Windows or under **Wine**. Note `CMakeLists.txt` globs
+  (`CMakeLists.txt:61-100`). Runs on Windows or under **Wine**. Note `CMakeLists.txt` globs
   `src/*.cpp` at **configure** time, so a merge that adds a source file (v5.5 added
   `gameturn.cpp`) needs `cmake --preset …` re-run before it will link.
-- **Config:** `thinker.ini` `[thinker]`, parsed by `option_handler` (`main.cpp:21`) into
-  `struct Config` (`main.h:150`). v5.5 rewrote `config.cpp` but left `option_handler` as the
+- **Config:** `thinker.ini` `[thinker]`, parsed by `option_handler` (`main.cpp:22`) into
+  `struct Config` (`main.h:136`). v5.5 rewrote `config.cpp` but left `option_handler` as the
   `thinker.ini` parser, so all 23 `llm_*`/`na_*` options still route through it. Three settings
   drive the bridge:
 
@@ -353,7 +360,7 @@ gives up on its own deadline rather than the server's.
 ## 8. One decision per base-turn
 
 `mod_base_build` fires **more than once per base per turn** — `mod_base_reset` is hooked at
-**twenty** engine call sites (`patch.cpp:883-902`: four `BaseWin::*`, `bases_reset`, seven
+**twenty** engine call sites (`patch.cpp:943-962`: four `BaseWin::*`, `bases_reset`, seven
 `base_production`, `drone_riot`, `base_drones`, two `battle_fight_2`, `capture_base`, two
 `enemy_strategy`, `time_warp`) and each one applies its own answer, so the last caller wins.
 Measured in real play: 21 of 24 base-turns fired twice, and 11 of those pairs *disagreed*.
