@@ -117,6 +117,91 @@ class Run:
     game_dir: str | None = None
 
 
+#: Faction ids a seat can name. 0 is the native-life "faction" and never a player.
+SEAT_IDS = range(1, 8)
+SEAT_KEYS = {"principal", "strategist", "reflex", "model", "budget_usd"}
+STRATEGISTS = {"agent", "human", "none"}
+REFLEXES = {"scripted", "claude", "claude-code", "agent"}
+#: Reflex kinds the design names but no slice has built yet. Refused rather than accepted as a
+#: label that routes nothing, and the message names the slice that builds each (aegis-8fye.3).
+UNBUILT_REFLEXES = {"skills": "aegis-8fye.5", "policy": "aegis-8fye.6", "copilot": "aegis-8fye.4"}
+
+
+@dataclass(frozen=True)
+class Seat:
+    """Who sits in one faction's chair: an accountable principal, an optional strategist, and
+    the reflex that answers each decision. One ``[seats.<faction_id>]`` table."""
+
+    faction_id: int
+    principal: str
+    reflex: str
+    strategist: str = "none"
+    model: str | None = None
+    budget_usd: float | None = None
+
+
+def _seat_id(key: str) -> int:
+    try:
+        fid = int(key)
+    except ValueError as exc:
+        raise ConfigError(f"[seats.{key}]: a seat key is a faction id 1..7") from exc
+    if fid not in SEAT_IDS:
+        raise ConfigError(f"[seats.{key}]: faction id must be 1..7 (0 is native life)")
+    return fid
+
+
+def _seat(key: str, fid: int, body: object) -> Seat:
+    where = f"[seats.{key}]"
+    if not isinstance(body, dict):
+        raise ConfigError(f"{where} must be a table")
+    unknown = sorted(set(body) - SEAT_KEYS)
+    if unknown:
+        raise ConfigError(
+            f"{where}: unknown key(s) {', '.join(unknown)}; allowed: {', '.join(sorted(SEAT_KEYS))}"
+        )
+    principal = body.get("principal")
+    if not isinstance(principal, str) or not principal.strip():
+        raise ConfigError(f"{where}: principal is required (a nonempty string)")
+    reflex = body.get("reflex")
+    if reflex is None:
+        raise ConfigError(f"{where}: reflex is required ({'|'.join(sorted(REFLEXES))})")
+    if reflex in UNBUILT_REFLEXES:
+        raise ConfigError(
+            f"{where}: reflex = {reflex!r} is not built yet; {UNBUILT_REFLEXES[reflex]} builds it"
+        )
+    if reflex not in REFLEXES:
+        raise ConfigError(f"{where}: reflex must be one of {'|'.join(sorted(REFLEXES))}")
+    strategist = body.get("strategist", "none")
+    if strategist not in STRATEGISTS:
+        raise ConfigError(f"{where}: strategist must be one of {'|'.join(sorted(STRATEGISTS))}")
+    model = body.get("model")
+    if model is not None and not isinstance(model, str):
+        raise ConfigError(f"{where}: model must be a string")
+    budget = body.get("budget_usd")
+    if budget is not None:
+        if isinstance(budget, bool) or not isinstance(budget, int | float) or budget < 0:
+            raise ConfigError(f"{where}: budget_usd must be a number >= 0")
+        budget = float(budget)
+    return Seat(fid, principal, reflex, strategist, model, budget)
+
+
+def parse_seats(table: dict[str, Any]) -> dict[int, Seat]:
+    """Build ``Config.seats`` from the ``[seats]`` table. Absent or empty means legacy: no seat
+    table, and nothing anywhere changes."""
+    seats: dict[int, Seat] = {}
+    for key, body in table.items():
+        fid = _seat_id(key)
+        if fid in seats:
+            raise ConfigError(f"[seats.{key}]: faction {fid} is seated twice")
+        seats[fid] = _seat(key, fid, body)
+    return seats
+
+
+def llm_factions(seats: dict[int, Seat]) -> int:
+    """The thinker.ini ``llm_factions`` bitmask the seat table implies: bit N = faction N."""
+    return sum(1 << fid for fid in seats)
+
+
 @dataclass(frozen=True)
 class Config:
     """The whole configuration, already resolved against the environment."""
@@ -125,6 +210,8 @@ class Config:
     knowledge: Knowledge = field(default_factory=Knowledge)
     run: Run = field(default_factory=Run)
     surfaces: SurfacePolicy = field(default_factory=SurfacePolicy)
+    #: ``[seats.<faction_id>]``. Empty means legacy: no seat table was configured.
+    seats: dict[int, Seat] = field(default_factory=dict)
     #: None when no file was found. Distinguishes "nothing configured" from "configured empty",
     #: which the surface policy in particular has to tell apart.
     source: Path | None = None
@@ -183,5 +270,30 @@ def load(path: Path | None = None) -> Config:
             game_dir=_text(env("NA_GAME_DIR"), run.get("game_dir"), None),
         ),
         surfaces=parse_surfaces(_table(data, "surfaces"), data.get("surface_default"), source),
+        seats=parse_seats(_table(data, "seats")),
         source=source,
     )
+
+
+def main(argv: list[str] | None = None) -> int:
+    """``python -m neural_amplifier.config llm-factions``: print the bitmask the seat table
+    implies, or nothing when there is no ``[seats]`` table (legacy: leave thinker.ini alone).
+    Exit 2 with the reason on a config that does not load."""
+    import sys
+
+    args = sys.argv[1:] if argv is None else argv
+    if args != ["llm-factions"]:
+        print("usage: python -m neural_amplifier.config llm-factions", file=sys.stderr)
+        return 64
+    try:
+        cfg = load()
+    except ConfigError as exc:
+        print(f"config: {exc}", file=sys.stderr)
+        return 2
+    if cfg.seats:
+        print(llm_factions(cfg.seats))
+    return 0
+
+
+if __name__ == "__main__":  # pragma: no cover
+    raise SystemExit(main())

@@ -273,6 +273,31 @@ fi
 # unconfigured ini means "nothing to see" rather than an error. Add it if absent
 # and leave any existing value alone — the operator's choice wins.
 INI="$PLAY_DIR/thinker.ini"
+
+# A [seats] table in na.toml (aegis-8fye.3) DERIVES llm_factions: the seated faction
+# ids are the bitmask. Written when absent; a different hand-set value is a refusal,
+# because two sources disagreeing about who the LLM plays is not something to guess
+# at. No [seats] table prints nothing, and everything below is unchanged.
+# The grep is only a cheap gate so a legacy run never needs uv; config.py is the parser.
+_na_toml="${NA_CONFIG:-$REPO_ROOT/na.toml}"
+_seat_mask=""
+if [ -f "$_na_toml" ] && grep -q '^[[:space:]]*\[seats' "$_na_toml"; then
+    _seat_mask="$(_abs="$(realpath "$_na_toml")" && cd "$REPO_ROOT/orchestrator" && NA_CONFIG="$_abs" uv run --quiet python -m neural_amplifier.config llm-factions)" \
+        || die "$_na_toml did not load, so its [seats] table cannot be read (see above)"
+fi
+if [ -n "$_seat_mask" ] && [ -f "$INI" ]; then
+    _ini_mask="$(sed -n 's/^llm_factions[[:space:]]*=[[:space:]]*\([0-9]*\).*/\1/p' "$INI" | head -n1)"
+    if [ -z "$_ini_mask" ] && ! grep -q '^llm_factions' "$INI"; then
+        printf '\n; ****** Neural Amplifier ******\n; Bitmask of faction ids routed to the LLM orchestrator (bit N = faction N).\n; Derived from na.toml [seats].\nllm_factions=%s\nllm_endpoint=http://127.0.0.1:8000\n' "$_seat_mask" >> "$INI"
+        log "added llm_factions=$_seat_mask to thinker.ini (from na.toml [seats])"
+    elif [ "$_ini_mask" != "$_seat_mask" ]; then
+        die "$(printf '%s\n' \
+            "thinker.ini sets $(grep -m1 '^llm_factions' "$INI"), but na.toml [seats] derives llm_factions=$_seat_mask." \
+            "  Two sources disagree about which factions the LLM plays." \
+            "  fix: remove llm_factions from $INI to let [seats] write it, or edit [seats] to match.")"
+    fi
+fi
+
 if [ -f "$INI" ] && ! grep -q '^llm_factions' "$INI"; then
     printf '\n; ****** Neural Amplifier ******\n; Bitmask of faction ids routed to the LLM orchestrator (bit N = faction N).\nllm_factions=254\nllm_endpoint=http://127.0.0.1:8000\n' >> "$INI"
     log "added llm_factions=254 to thinker.ini"
