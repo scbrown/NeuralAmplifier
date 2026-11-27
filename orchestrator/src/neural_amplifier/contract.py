@@ -7,9 +7,12 @@ almost everything outside the core four is optional.
 
 from __future__ import annotations
 
+import logging
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+_log = logging.getLogger(__name__)
 
 SCHEMA_VERSION = "0.1"
 
@@ -310,6 +313,29 @@ class WorldView(_Model):
     #: is not on the contract arrives as an extra the parser drops — the attribute reads ``None``
     #: forever and nothing reports that it never came.
     run_id: str | None = None
+
+    #: Which faction's chair this decision is for: the engine's faction number, 1..7 for a
+    #: player (0 is native life). The key the seat table routes on (aegis-8fye.3), and the fog
+    #: boundary every per-faction store already keys by.
+    #:
+    #: Typed for the reason the three fields above are: the orchestrator reads it by name, and it
+    #: was read as an extra through ``turns._extra`` until a seat router made it load-bearing.
+    #: Lenient on purpose, to keep exactly that reader's behaviour: a present-but-wrong-typed
+    #: value is logged and read as absent rather than rejecting the whole world view. A world
+    #: view is the game's turn; a malformed id must cost the seat routing, never the decision.
+    faction_id: int | None = None
+
+    @field_validator("faction_id", mode="before")
+    @classmethod
+    def _lenient_faction_id(cls, value: object) -> object:
+        # `bool` passes isinstance(int), as it did through `_extra`; preserved, not endorsed.
+        if value is None or isinstance(value, int):
+            return value
+        _log.warning(
+            "world_view faction_id is %s, expected int — treating as absent",
+            type(value).__name__,
+        )
+        return None
 
     year: int | None = None
     fairness: Fairness | None = None

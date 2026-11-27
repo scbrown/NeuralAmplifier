@@ -380,7 +380,7 @@ class QuipuRetriever:
         unasked = labels[self.query_labels :]
         if not asked:
             return Grounding()
-        faction_id = getattr(world_view, "faction_id", None)
+        faction_id = world_view.faction_id
         with self._turn_lock:
             primed = (
                 None if faction_id is None else self._turn_rows.get((world_view.turn, faction_id))

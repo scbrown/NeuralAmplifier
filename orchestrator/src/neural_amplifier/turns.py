@@ -216,7 +216,7 @@ class TurnStore:
             if slot is None:
                 slot = DecisionSlot(
                     surface_id=key[0],
-                    faction_id=_extra(world_view, "faction_id", int),
+                    faction_id=world_view.faction_id,
                     base_id=key[1],
                     base=_extra(world_view, "base", str),
                 )

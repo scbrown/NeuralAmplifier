@@ -254,6 +254,14 @@ class DecisionRecord(BaseModel):
     #: What the standing plan contributed (``directives.py``).
     plan: PlanBlock = Field(default_factory=lambda: PlanBlock())
 
+    #: The seat that answered: its faction id, from ``[seats.<faction_id>]``. ``None`` when no
+    #: seat table is configured, and also when the table could not place this decision (an
+    #: unseated faction or a world view with no ``faction_id``) — that record is degraded, and
+    #: ``degrade_reason`` names which. Recorded so a seated run can be split by chair.
+    seat: int | None = None
+    #: The accountable principal of that seat, as the table named it.
+    seat_principal: str | None = None
+
     model: str | None = None
     tokens: Tokens = Field(default_factory=Tokens)
     latency_ms: int | None = None
