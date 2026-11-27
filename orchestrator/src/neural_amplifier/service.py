@@ -619,10 +619,16 @@ def create_app(
         run_dir = _run_dir(config, resolved_log)
         if run_dir is not None:
             seat_tokens.write(run_dir)
+            # Per-seat evidence (slice D): each seat's decisions and inputs ALSO land under
+            # <run>/seat-<n>/. The run-level log and store stay the operator's merged view.
+            if resolved_log is not None:
+                resolved_log.split_by_seat(run_dir)
+            if orchestrator.store is not None and router is not None:
+                orchestrator.store.split_by_seat(run_dir, router.seats)
         else:
             logging.getLogger(__name__).warning(
                 "seat mode with no run directory (NA_RUN_DIR): seat tokens are held in memory "
-                "only, so no seat's MCP server can read one"
+                "only, so no seat's MCP server can read one, and no per-seat evidence is split out"
             )
     #: Each seat's latest world view, as posted to /decide: what that seat may order.
     latest_view: dict[int, WorldView] = {}

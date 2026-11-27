@@ -270,14 +270,38 @@ class DecisionRecord(BaseModel):
 class DecisionLog:
     """Append-only JSONL writer — the record of truth for a run."""
 
-    def __init__(self, path: Path | str) -> None:
+    def __init__(self, path: Path | str, seat_root: Path | str | None = None) -> None:
         self.path = Path(path)
         self.path.parent.mkdir(parents=True, exist_ok=True)
+        #: In seat mode, the run directory under which each seated record is ALSO appended to
+        #: ``seat-<n>/decisions.jsonl`` (aegis-8fye.3, slice D). ``self.path`` stays the operator's
+        #: merged view, byte-for-byte what it was, so every existing reader works unchanged.
+        self.seat_root: Path | None = Path(seat_root) if seat_root is not None else None
+
+    def split_by_seat(self, run_dir: Path | str) -> None:
+        """Also write each seated record to ``<run_dir>/seat-<n>/decisions.jsonl``."""
+        self.seat_root = Path(run_dir)
+
+    def seat_path(self, seat: int) -> Path | None:
+        """Where seat ``seat``'s own log goes, or None outside seat mode."""
+        return (
+            None if self.seat_root is None else self.seat_root / f"seat-{seat}" / "decisions.jsonl"
+        )
 
     def write(self, record: DecisionRecord) -> None:
         line = record.model_dump_json(exclude_none=False)
+        # Merged view first: it is the record of truth, and a failing seat mirror must not cost it.
         with self.path.open("a", encoding="utf-8") as fh:
             fh.write(line + "\n")
+        # Keyed on the record's own ``seat``, which the orchestrator sets only when the seat table
+        # placed the decision. An unplaceable decision (unseated faction, no ``faction_id``) has
+        # ``seat=None`` and goes to the merged view alone: copying it into some seat's log would
+        # put one faction's evidence in another faction's chair.
+        seat_path = self.seat_path(record.seat) if record.seat is not None else None
+        if seat_path is not None:
+            seat_path.parent.mkdir(parents=True, exist_ok=True)
+            with seat_path.open("a", encoding="utf-8") as fh:
+                fh.write(line + "\n")
 
     def read(self) -> Iterator[DecisionRecord]:
         if not self.path.exists():
