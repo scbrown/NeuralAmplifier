@@ -39,17 +39,46 @@ class WorldViewStore:
     def __init__(self, root: Path | str) -> None:
         self.root = Path(root)
         self.root.mkdir(parents=True, exist_ok=True)
+        #: In seat mode, the run directory under which each seated faction's views are ALSO kept
+        #: in ``seat-<n>/worldviews/`` (aegis-8fye.3, slice D), and the factions that are seated.
+        #: ``self.root`` stays the operator's merged store, unchanged.
+        self.seat_root: Path | None = None
+        self.seats: frozenset[int] = frozenset()
+
+    def split_by_seat(self, run_dir: Path | str, seats: Iterable[int]) -> None:
+        """Also store each seated faction's views under ``<run_dir>/seat-<n>/worldviews/``."""
+        self.seat_root = Path(run_dir)
+        self.seats = frozenset(seats)
+
+    def seat_root_for(self, faction_id: int) -> Path | None:
+        """Seat ``faction_id``'s own world-view directory, or None when it is not seated."""
+        if self.seat_root is None or faction_id not in self.seats:
+            return None
+        return self.seat_root / f"seat-{faction_id}" / "worldviews"
+
+    @staticmethod
+    def _file(root: Path, digest: str) -> Path:
+        # "sha256:abc…" is not a legal filename on every platform.
+        return root / f"{digest.replace(':', '-')}.json"
 
     def _path(self, digest: str) -> Path:
-        # "sha256:abc…" is not a legal filename on every platform.
-        return self.root / f"{digest.replace(':', '-')}.json"
+        return self._file(self.root, digest)
 
     def put(self, world_view: WorldView) -> str:
         payload = world_view.model_dump(mode="json")
         digest = world_view_hash(payload)
-        path = self._path(digest)
-        if not path.exists():  # content-addressed: identical input, identical file
-            path.write_text(json.dumps(payload, sort_keys=True, indent=2), encoding="utf-8")
+        body = json.dumps(payload, sort_keys=True, indent=2)
+        targets = [self._path(digest)]
+        # Only a seated faction's view is mirrored, so an unseated or unlabelled view never lands
+        # in a seat's directory — the same fog boundary the seat router draws.
+        fid = world_view.faction_id
+        seat_dir = self.seat_root_for(fid) if fid is not None else None
+        if seat_dir is not None:
+            seat_dir.mkdir(parents=True, exist_ok=True)
+            targets.append(self._file(seat_dir, digest))
+        for path in targets:
+            if not path.exists():  # content-addressed: identical input, identical file
+                path.write_text(body, encoding="utf-8")
         return digest
 
     def get(self, digest: str) -> WorldView | None:

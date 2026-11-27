@@ -22,6 +22,14 @@ below against the code it ships.
   Without `[seats]`, the faction is the one LLM faction that has posted a
   decision; if none or several have, the call is refused with 422 `configure
   [seats]`.
+- **Per-seat evidence.** In seat mode, with a run directory (`NA_RUN_DIR`, or
+  the `<run>/orch/` layout of the decision log), each seated decision is also
+  appended to `<run>/seat-<n>/decisions.jsonl` and its world view is also stored
+  in `<run>/seat-<n>/worldviews/`. The run-level decision log and world-view
+  store are unchanged and remain the operator's merged view, so the dashboard
+  and existing readers work as before. A decision the seat table cannot place
+  (an unseated faction, or a world view without `faction_id`) goes to the
+  merged view only. Without `[seats]`, no `seat-*` directories are created.
 
 ## Not tested for this release
 
@@ -31,6 +39,4 @@ below against the code it ships.
   runs as the same OS user as the orchestrator, so a seat with a shell can read
   the other seats' token files and the run directory. Process and store
   isolation are later work.
-- Per-seat decision logs and world-view stores are not in this change. The run
-  still writes one shared decision log and one world-view store.
 - No game was played with two or more seats, and no model calls were made.
