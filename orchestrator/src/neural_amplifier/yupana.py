@@ -61,6 +61,31 @@ VOCAB = "smac:"
 FACTION_NODE = "faction:self"
 
 
+def seat_tenant(seat: int) -> str:
+    """The yupana tenant for one seat, derived from the seat and nothing an agent supplies.
+
+    Tier 3 of ``docs/seats-and-policy.md`` §3.2: only the orchestrator calls yupana, and the
+    tenant is the seat token's. An agent never holds a yupana URL and never names a tenant; the
+    orchestrator resolves the token to a seat and the seat to this string.
+    """
+    return f"seat-{int(seat)}"
+
+
+def tenant(world_view: WorldView, seat: int | None = None, seated: bool = False) -> str | None:
+    """Which yupana faction tenant a call is for.
+
+    ``seat`` is the caller's seat as the orchestrator derived it from a seat token. ``seated``
+    says the run has a seat table, so even the orchestrator's own guard call (no token in hand)
+    keys the tenant on the engine-stated ``faction_id`` the same way. Legacy runs keep the
+    faction name, which is what every board ingested before seats was filed under.
+    """
+    if seat is not None:
+        return seat_tenant(seat)
+    if seated and isinstance(world_view.faction_id, int):
+        return seat_tenant(world_view.faction_id)
+    return world_view.faction
+
+
 class YupanaError(RuntimeError):
     """Yupana could not be reached or refused the call. Always degrades, never propagates."""
 
@@ -338,6 +363,9 @@ class YupanaGuard:
         #: governance while looking current.
         self.policies = policies if policies is not None else []
         self.game_id = game_id
+        #: Set by the service under a ``[seats]`` table: the tenant is then the seat's, never
+        #: the faction name, so the guard and ``what_if`` file one seat under one tenant.
+        self.seated = False
         self.client = client or (McpClient(f"{self.url}/mcp", timeout) if self.url else None)
 
     def rule(self, orders: Orders, world_view: WorldView) -> Ruling:
@@ -353,7 +381,7 @@ class YupanaGuard:
                 "yupana_ingest",
                 {
                     "game_id": self.game_id,
-                    "faction_id": world_view.faction,
+                    "faction_id": tenant(world_view, seated=self.seated),
                     # Private, always. This faction's own view of the board is not the game's
                     # common knowledge, and a shared write carrying a faction is a fog leak —
                     # yupana refuses and counts it, which is a control we should never trip.
@@ -374,7 +402,7 @@ class YupanaGuard:
                 "yupana_guard",
                 {
                     "game_id": self.game_id,
-                    "faction_id": world_view.faction,
+                    "faction_id": tenant(world_view, seated=self.seated),
                     "policies": self.policies,
                     "orders": proposed(orders, world_view),
                 },
@@ -460,7 +488,9 @@ def _lit(row: dict[str, Any], key: str) -> str:
     return str(row.get(key, "")).strip('"')
 
 
-def what_if(guard: YupanaGuard, world_view: WorldView, action_id: str) -> dict[str, Any]:
+def what_if(
+    guard: YupanaGuard, world_view: WorldView, action_id: str, seat: int | None = None
+) -> dict[str, Any]:
     """What would this action change, and what do those changes reach — Hank role (e).
 
     The question the guard cannot answer. A guard says "this breaks a rule"; this says "here is
@@ -485,13 +515,19 @@ def what_if(guard: YupanaGuard, world_view: WorldView, action_id: str) -> dict[s
         # offered would answer a question about a move that cannot be made.
         return {"unavailable": f"{action_id!r} is not in this decision's action space"}
 
+    if seat is not None and world_view.faction_id != seat:
+        # The queue already scopes a seat's peek to its own decisions; this is the second lock.
+        # A tenant derived from the token must never be filled with another faction's board.
+        return {"unavailable": "this decision is not your seat's"}
+
     orders = proposed(Orders(choices=[Choice(action_id=action_id)]), world_view)
+    who = tenant(world_view, seat=seat, seated=guard.seated)
     try:
         guard.client.call(
             "yupana_ingest",
             {
                 "game_id": guard.game_id,
-                "faction_id": world_view.faction,
+                "faction_id": who,
                 "visibility": "private",
                 # Same reason as the guard's, and here it is load-bearing for a different
                 # rule: `what_if` may only ever speak about entities THIS world view carried,
@@ -507,7 +543,7 @@ def what_if(guard: YupanaGuard, world_view: WorldView, action_id: str) -> dict[s
             "yupana_whatif",
             {
                 "game_id": guard.game_id,
-                "faction_id": world_view.faction,
+                "faction_id": who,
                 "orders": orders,
             },
         )

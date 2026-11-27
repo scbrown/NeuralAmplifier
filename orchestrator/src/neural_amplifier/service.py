@@ -640,6 +640,11 @@ def create_app(
     seat_tokens = SeatTokens(router.seats) if router is not None else None
     app.state.seat_tokens = seat_tokens
     if seat_tokens is not None:
+        # The board guard files each seat under the seat's tenant, the same one /agent/whatif
+        # derives from the token, so no seat's board is keyed by anything an agent supplied.
+        for g in getattr(orchestrator.guard, "guards", [orchestrator.guard]):
+            if hasattr(g, "seated"):
+                g.seated = True
         run_dir = _run_dir(config, resolved_log)
         if run_dir is not None:
             seat_tokens.write(run_dir)
@@ -1211,17 +1216,21 @@ def create_app(
             """
             decision_id = str(body.get("decision_id") or "")
             action_id = str(body.get("action_id") or "")
-            pending = queue.peek_for(decision_id, _seat(request))
+            seat = _seat(request)
+            pending = queue.peek_for(decision_id, seat)
             if pending is None:
                 raise HTTPException(status_code=404, detail=f"no decision {decision_id!r}")
 
             from .yupana import YupanaGuard, what_if
 
+            # Only the orchestrator calls yupana, and in seat mode the tenant is the token's
+            # seat (docs/seats-and-policy.md §3.2, tier 3). The agent named neither.
             guard = YupanaGuard(policies=load_policies(), game_id=orchestrator.game_id)
+            guard.seated = seat_tokens is not None
             return {
                 "decision_id": decision_id,
                 "action_id": action_id,
-                "whatif": what_if(guard, pending.world_view, action_id),
+                "whatif": what_if(guard, pending.world_view, action_id, seat=seat),
             }
 
     # ---------------------------------------------------------------- engine outcomes

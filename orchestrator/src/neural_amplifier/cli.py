@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -63,6 +64,26 @@ def main(argv: list[str] | None = None) -> int:
         default=None,
         help="this seat's token from <run>/seat-<n>/token (default $NA_SEAT_TOKEN); "
         "required when the orchestrator runs a [seats] table",
+    )
+
+    prof = sub.add_parser(
+        "seat-profile",
+        help="write a seat's harness profile: its MCP server and nothing that reads the run",
+    )
+    prof.add_argument("--seat", type=int, required=True, help="the seat's faction id")
+    prof.add_argument("--run-dir", type=Path, required=True, help="the run (holds seat-<n>/token)")
+    prof.add_argument("--out", type=Path, required=True, help="where to write (outside the run)")
+    prof.add_argument(
+        "--url",
+        default=None,
+        help="orchestrator the seat attaches to (default $NA_URL or http://127.0.0.1:8000)",
+    )
+    prof.add_argument(
+        "--protect",
+        type=Path,
+        action="append",
+        default=[],
+        help="another path the seat must not read (repeatable), e.g. the game's saves",
     )
 
     learn = sub.add_parser(
@@ -147,6 +168,22 @@ def main(argv: list[str] | None = None) -> int:
         from .mcp_server import main as mcp_main
 
         return mcp_main(args.url, seat_token=args.seat_token)
+
+    if args.command == "seat-profile":
+        import shlex
+
+        from .seat_profile import ProfileError, build
+
+        url = args.url or os.environ.get("NA_URL", "http://127.0.0.1:8000")
+        try:
+            profile = build(args.seat, args.run_dir, url, protect=tuple(args.protect))
+            settings_path, mcp_path = profile.write(args.out)
+        except (OSError, ProfileError) as exc:
+            print(f"FAIL: {exc}", file=sys.stderr)
+            return 2
+        print(f"wrote {settings_path} and {mcp_path} (0600)")
+        print(shlex.join(profile.argv(settings_path, mcp_path)))
+        return 0
 
     if args.command == "learn":
         from .memory import MemoryStore, episodes

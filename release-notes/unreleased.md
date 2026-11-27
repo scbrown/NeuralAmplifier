@@ -6,6 +6,12 @@ below against the code it ships.
 
 ## Changes
 
+- **Seat isolation, tiers 2 and 3.** `neural-amplifier seat-profile` writes an
+  attached seat's harness profile: no built-in tools, no shell, only its own MCP
+  server, and deny rules on the run directory. A leak-probe test checks that a
+  seat cannot read a sibling's log through the harness or through any route its
+  MCP server reaches. In seat mode the Yupana tenant is `seat-<n>`, derived by
+  the orchestrator from the seat token and never supplied by an agent.
 - **OpenSMAC eval adapter.** A third adapter, for eval and research only, beside
   Thinker: `adapters/opensmac/` carries patch files plus a build script for
   OpenSMAC at a pinned commit (no fork). Four decision hooks (`base_build`,
