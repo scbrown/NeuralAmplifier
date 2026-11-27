@@ -14,7 +14,8 @@ smac := env_var_or_default("SMAC_DIR", "../smac")
 thinker := env_var_or_default("THINKER_DIR", "../thinker")
 
 # Pinned, and it must match the rev in .pre-commit-config.yaml. `just docs` and the
-# pre-commit hook lint the same files with the same config, so a version skew between
+# pre-commit hook lint with the same config (the hook only the staged files, via
+# --no-globs; this recipe and CI the whole tree), so a version skew between
 # them means one gate passes and the other fails on a tree nobody changed — which is
 # exactly what an unpinned `npx` did here: it floated to 0.23.2, picked up the new
 # MD060, and left `just docs check` red against a green `just check` (na-hn6).
