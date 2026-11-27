@@ -456,6 +456,14 @@ Retrieval is Quipu's hybrid search over descriptions, filtered by applicability 
 the strategist chooses, parameterises and composes. That is where the model's judgement goes:
 *which* skills, for *this* board.
 
+Until the library moves to Quipu, `orchestrator/src/neural_amplifier/skills.py` keeps status,
+trials and `requires` on each local version: a new version is a `candidate`, promotion to
+`verified` needs passing trials from at least three distinct seeds (configurable), a live
+`SkillBrain` answers only from `verified` versions (a practice brain also uses candidates),
+`retired` is never retrieved, and a skill requiring a knob the running engine lacks is filtered
+out before it is offered. `on_turn` sets policy through the `faction_policy` registry; one
+refused knob fails the whole run closed with none of its effects applied.
+
 ### 5.5 Private during the game, shared after it
 
 Ruled 2026-11-26: a skill book is private while a game is in progress and shared once it ends.
