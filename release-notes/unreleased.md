@@ -59,8 +59,26 @@ below against the code it ships.
     leave it unchanged.
   - Open the page as `/dashboard#token=<token>` to fill the Now pane. Without a
     token, the rest of the dashboard works as before.
+- **Skills, slice 1.** `SkillBrain` (`skills.py`) answers a decision from a
+  library of stored Starlark scripts and otherwise hands it to a fallback brain
+  unchanged. A skill's answer is ordinary orders, so validation and the guard
+  apply as for any brain. Skills run in a separate worker process
+  (`skill_runner.py`) with no file, network, clock or randomness access, a
+  deterministic step budget and an address-space limit. A budget breach, error
+  or bad answer fails closed and the decision degrades. Saving a skill refuses
+  hard-coded faction, base or unit ids. The store is versioned, and retrieval
+  matches skill descriptions. Skill primitives are `choose`, `queue_answer` and
+  `order`. Needs the new `skills` extra (`starlark-pyo3`, pinned exactly) and a
+  Linux host. The proposed `na:Skill` shape is in
+  `docs/proposals/na-skill-shape.ttl`.
 
 ## Not tested for this release
+
+- Skills are tested against captured world views only, not in a running game.
+  `SkillBrain` is not yet selectable through `NA_BRAIN` or `na.toml`, and its
+  decisions are recorded at the brain tier (`llm`), not a separate `skill`
+  tier. The skill's name, version and content hash are in the choice reason
+  and the orders' notes. Retrieval is lexical, not Quipu hybrid search.
 
 - Seat isolation is enforced at the orchestrator's API only, and that is what
   the tests cover: one seat's token cannot claim, answer, forecast or order for
