@@ -206,7 +206,7 @@ def test_turtle_round_trips_the_fields(tmp_path: Path) -> None:
     assert json.loads(str(graph.value(node, NA.params))) == skill.params
     assert {str(k) for k in graph.objects(node, NA.requiresKnob)} == set(skill.requires)
     assert graph.value(node, NA.supersedes) == URIRef(
-        f"{skill_shapes.SKILL_BASE}{skill.name}/{skill.supersedes}"
+        skill_shapes.version_iri(skill.name, skill.version - 1)
     )
     deltas = {
         str(graph.value(d, NA.metric)): graph.value(d, NA.value).toPython()

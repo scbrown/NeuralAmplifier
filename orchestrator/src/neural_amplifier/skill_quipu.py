@@ -7,18 +7,23 @@
   shape on the way in. A refused write raises :class:`SkillWriteRefused` and leaves nothing
   behind. Two implementations: :class:`QpBackend` drives the ``qp`` CLI (an argv list, no
   shell, always ``--db``), and :class:`FakeBackend` is an in-memory stand-in for CI with the
-  same transaction and refusal semantics.
-- :class:`QuipuSkillStore` — **the same store, on Quipu.** It is a
-  :class:`~neural_amplifier.skills.SkillStore` with the same interface and behaviour: the
-  in-memory index is loaded from the backend and every change is written through. A read-only
-  store opened at a transaction is the commons as a game sees it.
+  same transaction and refusal semantics, checking the merged post-write state as ``qp`` does.
+- :class:`QuipuSkillStore` — **the same store, on Quipu, append-only.** It is a
+  :class:`~neural_amplifier.skills.SkillStore` with the same interface and behaviour. A version
+  is the node ``skill/<name>/v<version>`` (the content hash is a property), written once; a
+  trial, promotion or retirement is a new immutable ``na:SkillState``, and readers take the
+  latest state per version. Every write is one knot and nothing is retracted.
+- :class:`CommonsView` — **the commons as a game sees it**: read-only, pinned to a transaction,
+  entries keyed by ``(seat, name, version)`` and resolved deterministically (verified first, then
+  the latest publication, then seat id). Only states a committed ``na:Publication`` carries count.
 - :class:`SkillLibrary` — **one book per seat identity, one commons for everyone.** A game pins
   the commons to the transaction current when it started; a seat's :class:`SeatSkills` reads its
   own book and that pinned commons, writes only its own book, and has no way to name another
   seat's book.
 - :meth:`SkillLibrary.publish_at_game_end` — **sharing is a recorded step.** When a game is
-  closed, the seat's new or changed versions are copied to the commons in one write, with a
-  publication record. An open or abandoned game publishes nothing; publishing twice is a no-op.
+  closed, the seat's new versions and changed states go to the commons in one knot, with the
+  publication record that lists exactly those states. An open or abandoned game publishes
+  nothing; publishing twice is a no-op.
 
 Retrieval filters by status, required knobs and applicability first, then ranks by description:
 the backend's search when it has one, otherwise the lexical rank of ``skills.py``.
@@ -26,6 +31,7 @@ the backend's search when it has one, otherwise the lexical rank of ``skills.py`
 
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 import re
@@ -38,7 +44,16 @@ from pathlib import Path
 from typing import Any, Literal, Protocol, runtime_checkable
 from urllib.parse import quote, unquote
 
-from .skill_shapes import NA, SHAPES_PATH, SKILL_BASE, shapes_bytes, to_turtle
+from .skill_shapes import (
+    NA,
+    PREFIX,
+    SHAPES_PATH,
+    SKILL_BASE,
+    shapes_bytes,
+    to_turtle,
+    trial_turtle,
+    version_iri,
+)
 from .skills import (
     DEFAULT_MIN_VERIFIED_SEEDS,
     STATUSES,
@@ -73,16 +88,17 @@ class CommonsReadOnly(PermissionError):
 
 @runtime_checkable
 class SkillBackend(Protocol):
-    """The four operations a Quipu-backed store needs. Transactions are opaque increasing ints."""
+    """The four operations a Quipu-backed store needs. Transactions are opaque increasing ints.
+
+    There is no retract: the store is append-only (``qp knot`` cannot retract and assert in one
+    transaction, so a retract-then-assert could never be one recorded step).
+    """
 
     def validate(self, turtle: str) -> None:
         """Raise :class:`SkillWriteRefused` if ``turtle`` fails the shape. Writes nothing."""
 
     def knot(self, turtle: str) -> int:
         """Assert ``turtle``, shape-checked, as one transaction; refused writes leave nothing."""
-
-    def retract(self, iri: str) -> int:
-        """Retract every fact whose subject is ``iri``."""
 
     def triples(self, tx: int | None = None) -> list[Triple]:
         """Every fact under :data:`BASE`, at head or as of transaction ``tx``."""
@@ -171,13 +187,6 @@ class QpBackend:
             raise self._refusal("knot", done)
         return self._tx_of(done)
 
-    def retract(self, iri: str) -> int:
-        done = self._call("retract", iri)
-        if done.returncode != 0:
-            raise SkillWriteRefused(f"qp retract exited {done.returncode}")
-        found = _TX.search(done.stdout or "")
-        return int(found.group(1)) if found else self.head()
-
     def _tx_of(self, done: subprocess.CompletedProcess[str]) -> int:
         found = _TX.search(done.stdout or "")
         return int(found.group(1)) if found else self.head()
@@ -215,7 +224,8 @@ class QpBackend:
         return out
 
 
-# A tokenizer for the Turtle this module writes: to_turtle's output and the publication record.
+# A tokenizer for the Turtle this module writes: to_turtle's output and the state and publication
+# records.
 _TOKEN = re.compile(
     r"""\s*(?:
         (?P<prefix>@prefix\s+\w*:\s*<[^>]*>\s*\.)
@@ -229,12 +239,13 @@ _TOKEN = re.compile(
 )
 
 Kind = Literal["iri", "str", "int", "dec"]
+Fact = tuple[str, str, str, Kind]
 
 
-def _parse_turtle(text: str) -> list[tuple[str, str, str, Kind]]:
+def _parse_turtle(text: str) -> list[Fact]:
     """Parse the restricted Turtle this module writes into typed triples. Raises on anything else."""
     prefixes: dict[str, str] = {}
-    out: list[tuple[str, str, str, Kind]] = []
+    out: list[Fact] = []
     pos, terms = 0, []
     while pos < len(text):
         if not text[pos:].strip():
@@ -300,8 +311,11 @@ _METRICS = {
     "pop_total", "turns_to_completion", "units_in_foreign_territory",
 }  # fmt: skip
 
-# (predicate, kind, (min, max), check) per class: the constraints of na-skill.shapes.ttl.
-_RULES: dict[str, list[tuple[str, Kind, tuple[int, int | None], Callable[[str], bool]]]] = {
+Rule = tuple[str, Kind, tuple[int, int | None], Callable[[str], bool]]
+
+# (predicate, kind, (min, max), check) per class: the constraints of na-skill.shapes.ttl. "Delta"
+# is the sh:node shape of a trial's na:delta objects rather than a target class.
+_RULES: dict[str, list[Rule]] = {
     "Skill": [
         ("name", "str", _ONE, lambda v: bool(_SKILL_NAME.match(v))),
         ("version", "int", _ONE, lambda v: int(v) >= 1),
@@ -329,67 +343,96 @@ _RULES: dict[str, list[tuple[str, Kind, tuple[int, int | None], Callable[[str], 
         ("seed", "int", _ONE, lambda v: True),
         ("verdict", "str", _ONE, lambda v: v in ("pass", "fail")),
     ],
+    "Delta": [
+        ("metric", "str", _ONE, lambda v: True),
+        ("value", "dec", _ONE, lambda v: True),
+    ],
+    "SkillState": [
+        ("ofVersion", "iri", _ONE, lambda v: True),
+        ("status", "str", _ONE, lambda v: v in STATUSES),
+        ("retiredReason", "str", _OPT, lambda v: len(v) >= 1),
+        ("trial", "iri", _ANY, lambda v: True),
+        ("tx", "int", _ONE, lambda v: int(v) >= 1),
+    ],
+    "Publication": [
+        ("publishedBy", "str", _ONE, lambda v: len(v) >= 1),
+        ("game", "str", _ONE, lambda v: len(v) >= 1),
+        ("tx", "int", _ONE, lambda v: int(v) >= 1),
+        ("carriesState", "iri", _ANY, lambda v: True),
+    ],
+}
+
+#: sh:class constraints: (class, predicate) -> the class every object must have. A state's and a
+#: publication's references cross transactions, so the shape gives them sh:nodeKind only.
+_CLASSES = {
+    ("Skill", "successCheck"): "SuccessCheck",
+    ("Skill", "trial"): "Trial",
 }
 
 
-def fake_validate(turtle: str) -> None:
-    """The fake lane's shape check: the ``na-skill`` constraints, applied in Python.
+def check_facts(facts: Iterable[Fact]) -> None:
+    """Apply the ``na-skill`` constraints to a whole graph of typed facts, as SHACL would.
 
-    The qp lane is the authority (it runs the real SHACL shape); this mirrors it closely enough
-    that CI refuses the same bad instances without ``qp`` installed.
+    Run over a submitted document, it is ``qp``'s shape check; run over the MERGED state (what
+    a store would hold after the write), it catches a second value knotted onto an existing
+    node, which ``qp`` refuses at ingest.
     """
-    facts = _parse_turtle(turtle)
     by_subject: dict[str, list[tuple[str, str, Kind]]] = {}
     for s, p, v, k in facts:
         by_subject.setdefault(s, []).append((p, v, k))
+    types = {s: {v for p, v, _ in props if p == RDF_TYPE} for s, props in by_subject.items()}
+    deltas = {v for props in by_subject.values() for p, v, _ in props if p == f"{NA}delta"}
     problems: list[str] = []
     for s, props in by_subject.items():
-        types = {v for p, v, _ in props if p == RDF_TYPE}
-        for cls, rules in _RULES.items():
-            if f"{NA}{cls}" not in types:
-                continue
-            for pred, kind, (lo, hi), ok in rules:
+        classes = {cls for cls in _RULES if f"{NA}{cls}" in types[s]}
+        if s in deltas:
+            classes.add("Delta")
+        for cls in sorted(classes):
+            for pred, kind, (lo, hi), ok in _RULES[cls]:
                 values = [(v, k) for p, v, k in props if p == f"{NA}{pred}"]
                 if len(values) < lo or (hi is not None and len(values) > hi):
                     problems.append(f"{s}: na:{pred} count {len(values)}")
+                need = _CLASSES.get((cls, pred))
                 for v, k in values:
                     if k != kind or not ok(v):
                         problems.append(f"{s}: na:{pred} value {v!r} violates the shape")
+                    elif need is not None and f"{NA}{need}" not in types.get(v, set()):
+                        problems.append(f"{s}: na:{pred} {v} is not a na:{need}")
     if problems:
         raise SkillWriteRefused("shape check failed: " + "; ".join(problems[:8]))
+
+
+def fake_validate(turtle: str) -> None:
+    """The fake lane's shape check of one standalone document. The qp lane is the authority."""
+    check_facts(_parse_turtle(turtle))
 
 
 class FakeBackend:
     """An in-memory store with transactions, shape-checked writes and optional search.
 
-    Transaction ``n`` is the state after the ``n``-th write; ``0`` is empty. ``search``, when
-    given, is called as ``search(query, limit, triples)`` and returns subject IRIs best first.
+    Transaction ``n`` is the state after the ``n``-th write; ``0`` is empty. A write is checked
+    twice, as ``qp knot --shapes`` (0.19.5) does: the shape over the submitted document, then
+    over the state as the store would hold it AFTER the write (the merged state), so a second
+    ``na:status`` on an existing version is refused. A refused write leaves nothing. ``search``, when given, is called as
+    ``search(query, limit, triples)`` and returns subject IRIs best first.
     """
 
-    def __init__(
-        self,
-        validate: Callable[[str], None] = fake_validate,
-        search: Callable[[str, int, list[Triple]], list[str]] | None = None,
-    ) -> None:
-        self._validate = validate
-        self._states: list[frozenset[Triple]] = [frozenset()]
+    def __init__(self, search: Callable[[str, int, list[Triple]], list[str]] | None = None) -> None:
+        self._states: list[frozenset[Fact]] = [frozenset()]
         self._lock = threading.Lock()
         if search is not None:
             self.search = lambda query, limit: search(query, limit, self.triples())
 
     def validate(self, turtle: str) -> None:
-        self._validate(turtle)
+        fake_validate(turtle)
 
     def knot(self, turtle: str) -> int:
-        self._validate(turtle)
-        facts = {(s, p, v, k == "iri") for s, p, v, k in _parse_turtle(turtle)}
+        facts = frozenset(_parse_turtle(turtle))
+        check_facts(facts)
         with self._lock:
-            self._states.append(self._states[-1] | facts)
-            return len(self._states) - 1
-
-    def retract(self, iri: str) -> int:
-        with self._lock:
-            self._states.append(frozenset(t for t in self._states[-1] if t[0] != iri))
+            merged = self._states[-1] | facts
+            check_facts(merged)
+            self._states.append(merged)
             return len(self._states) - 1
 
     def head(self) -> int:
@@ -399,99 +442,233 @@ class FakeBackend:
     def triples(self, tx: int | None = None) -> list[Triple]:
         with self._lock:
             state = self._states[-1] if tx is None else self._states[tx]
-        return sorted(state)
+        return sorted({(s, p, v, k == "iri") for s, p, v, k in state})
 
 
 # --- decoding -----------------------------------------------------------------------------------
 
+Props = dict[str, dict[str, list[str]]]
 
-def _node_iris(skill: Skill) -> list[str]:
-    """Every subject :func:`to_turtle` writes for ``skill``, as bare IRIs."""
-    base = f"{SKILL_BASE}{skill.name}/{skill.hash}"
-    out = [base]
-    if skill.check is not None:
-        out.append(f"{base}/success")
-    for i, trial in enumerate(skill.trials):
-        out.append(f"{base}/trial/{i}")
-        out += [f"{base}/trial/{i}/delta/{j}" for j in range(len(trial.deltas))]
-    return out
+
+def _props(triples: Iterable[Triple]) -> Props:
+    props: Props = {}
+    for s, p, v, _ in triples:
+        props.setdefault(s, {}).setdefault(p, []).append(v)
+    return props
+
+
+def _one(node: dict[str, list[str]], pred: str) -> str | None:
+    values = node.get(f"{NA}{pred}") or []
+    return values[0] if values else None
+
+
+def _many(node: dict[str, list[str]], pred: str) -> list[str]:
+    return node.get(f"{NA}{pred}") or []
+
+
+def _is(node: dict[str, list[str]], cls: str) -> bool:
+    return f"{NA}{cls}" in node.get(RDF_TYPE, [])
+
+
+def _last_tx(props: Props) -> int:
+    """The largest ``na:tx`` of any state or publication, ``0`` when there is none."""
+    return max((int(v) for node in props.values() for v in _many(node, "tx")), default=0)
+
+
+def _trials(props: Props, iris: Iterable[str]) -> tuple[Trial, ...]:
+    out = []
+    for t_iri in sorted(iris, key=lambda i: int(i.rsplit("/", 1)[1])):
+        t = props.get(t_iri, {})
+        deltas = {}
+        for d_iri in _many(t, "delta"):
+            d = props.get(d_iri, {})
+            deltas[_one(d, "metric") or ""] = float(_one(d, "value") or "nan")
+        seed = _one(t, "seed")
+        out.append(
+            Trial(
+                source=_one(t, "source") or "",
+                seed=int(seed) if seed is not None else None,  # type: ignore[arg-type]
+                verdict=_one(t, "verdict"),  # type: ignore[arg-type]
+                deltas=dict(sorted(deltas.items())),
+            )
+        )
+    return tuple(out)
+
+
+def _version(props: Props, iri: str) -> Skill:
+    """The ``na:Skill`` node at ``iri`` as it was written (its own status and trials)."""
+    node = props[iri]
+    check = None
+    check_iri = _one(node, "successCheck")
+    if check_iri is not None:
+        c = props.get(check_iri, {})
+        check = SuccessCheck(
+            metric=_one(c, "metric") or "",
+            comparator=_one(c, "comparator") or "",
+            target=float(_one(c, "target") or "nan"),
+            horizon_turns=int(_one(c, "horizonTurns") or 0),
+        )
+    supersedes = _one(node, "supersedes")
+    skill = Skill(
+        name=_one(node, "name") or "",
+        version=int(_one(node, "version") or 0),
+        description=_one(node, "description") or "",
+        code=_one(node, "code") or "",
+        hash=_one(node, "contentHash") or "",
+        surfaces=tuple(sorted(_many(node, "requiresSurface"))),
+        params=json.loads(_one(node, "params") or "{}"),
+        supersedes=None if supersedes is None else _one(props.get(supersedes, {}), "contentHash"),
+        requires=tuple(sorted(_many(node, "requiresKnob"))),
+        status=_one(node, "status") or "candidate",  # type: ignore[arg-type]
+        trials=_trials(props, _many(node, "trial")),
+        check=check,
+        retired_reason=_one(node, "retiredReason"),
+    )
+    if content_hash(skill.code) != skill.hash:
+        raise ValueError(f"{iri}: stored hash does not match its code")
+    return skill
+
+
+@dataclass(frozen=True)
+class _State:
+    iri: str
+    version: str
+    tx: int
+
+
+def _states(props: Props, carried: set[str] | None = None) -> dict[str, _State]:
+    """The latest state per version IRI; with ``carried``, only states listed there count."""
+    latest: dict[str, _State] = {}
+    for s, node in props.items():
+        if not _is(node, "SkillState") or (carried is not None and s not in carried):
+            continue
+        version, tx = _one(node, "ofVersion"), _one(node, "tx")
+        if version is None or tx is None:
+            continue
+        state = _State(s, version, int(tx))
+        if version not in latest or state.tx > latest[version].tx:
+            latest[version] = state
+    return latest
+
+
+def _apply(props: Props, skill: Skill, state: _State) -> Skill:
+    node = props[state.iri]
+    return replace(
+        skill,
+        status=_one(node, "status") or skill.status,  # type: ignore[arg-type]
+        retired_reason=_one(node, "retiredReason"),
+        trials=_trials(props, _many(node, "trial")),
+    )
 
 
 def skills_from_triples(triples: Iterable[Triple]) -> list[Skill]:
-    """Rebuild every ``na:Skill`` version in ``triples``, ordered by name, version and hash.
+    """A seat book: every ``na:Skill`` version, at its latest ``na:SkillState``.
 
-    RDF keeps no order among repeated values, so surfaces come back sorted; trials keep their
-    recorded order through their indexed IRIs.
+    Each write to a book is one knot that commits its own state, so the latest state (highest
+    ``na:tx``) per version wins; a version with no state reads as it was written. Ordered by
+    name and version. RDF keeps no order among repeated values, so surfaces come back sorted;
+    trials keep their recorded order through their indexed IRIs.
     """
-    props: dict[str, dict[str, list[str]]] = {}
-    for s, p, v, _ in triples:
-        props.setdefault(s, {}).setdefault(p, []).append(v)
-
-    def one(node: dict[str, list[str]], pred: str) -> str | None:
-        values = node.get(f"{NA}{pred}") or []
-        return values[0] if values else None
-
-    def many(node: dict[str, list[str]], pred: str) -> list[str]:
-        return node.get(f"{NA}{pred}") or []
-
+    props = _props(triples)
+    latest = _states(props)
     out = []
-    for s, node in props.items():
-        if f"{NA}Skill" not in node.get(RDF_TYPE, []):
-            continue
-        check = None
-        check_iri = one(node, "successCheck")
-        if check_iri is not None:
-            c = props.get(check_iri, {})
-            check = SuccessCheck(
-                metric=one(c, "metric") or "",
-                comparator=one(c, "comparator") or "",
-                target=float(one(c, "target") or "nan"),
-                horizon_turns=int(one(c, "horizonTurns") or 0),
-            )
-        trials = []
-        for t_iri in sorted(many(node, "trial"), key=lambda i: int(i.rsplit("/", 1)[1])):
-            t = props.get(t_iri, {})
-            deltas = {}
-            for d_iri in many(t, "delta"):
-                d = props.get(d_iri, {})
-                deltas[one(d, "metric") or ""] = float(one(d, "value") or "nan")
-            seed = one(t, "seed")
-            trials.append(
-                Trial(
-                    source=one(t, "source") or "",
-                    seed=int(seed) if seed is not None else None,  # type: ignore[arg-type]
-                    verdict=one(t, "verdict"),  # type: ignore[arg-type]
-                    deltas=dict(sorted(deltas.items())),
-                )
-            )
-        supersedes = one(node, "supersedes")
-        skill = Skill(
-            name=one(node, "name") or "",
-            version=int(one(node, "version") or 0),
-            description=one(node, "description") or "",
-            code=one(node, "code") or "",
-            hash=one(node, "contentHash") or "",
-            surfaces=tuple(sorted(many(node, "requiresSurface"))),
-            params=json.loads(one(node, "params") or "{}"),
-            supersedes=None if supersedes is None else supersedes.rsplit("/", 1)[1],
-            requires=tuple(sorted(many(node, "requiresKnob"))),
-            status=one(node, "status") or "candidate",  # type: ignore[arg-type]
-            trials=tuple(trials),
-            check=check,
-            retired_reason=one(node, "retiredReason"),
-        )
-        if content_hash(skill.code) != skill.hash:
-            raise ValueError(f"{s}: stored hash does not match its code")
-        out.append(skill)
-    out.sort(key=lambda k: (k.name, k.version, k.hash))
+    for iri, node in props.items():
+        if _is(node, "Skill"):
+            skill = _version(props, iri)
+            out.append(_apply(props, skill, latest[iri]) if iri in latest else skill)
+    out.sort(key=lambda k: (k.name, k.version))
     return out
+
+
+@dataclass(frozen=True)
+class CommonsEntry:
+    """One commons entry. Its identity is ``(seat, skill.name, skill.version)``."""
+
+    seat: str
+    skill: Skill
+    iri: str
+    #: ``na:tx`` of the publication that carried the entry's current state.
+    tx: int
+
+    def order(self) -> tuple[bool, int, str, int]:
+        """Commons precedence: verified first, then the latest publication, then seat id."""
+        return (self.skill.status != "verified", -self.tx, self.seat, -self.skill.version)
+
+
+def commons_from_triples(triples: Iterable[Triple]) -> list[CommonsEntry]:
+    """The commons: per (seat, name, version), the latest state a committed publication carries.
+
+    States no ``na:Publication`` lists in ``na:carriesState`` are ignored, and so is a version
+    with no carried state. Ordered by seat, name and version.
+    """
+    props = _props(triples)
+    carried = {
+        iri for node in props.values() if _is(node, "Publication")
+        for iri in _many(node, "carriesState")
+    }  # fmt: skip
+    latest = _states(props, carried)
+    out = []
+    for iri, state in latest.items():
+        node = props.get(iri, {})
+        seat = _one(node, "authoredBy")
+        if not _is(node, "Skill") or seat is None:
+            continue
+        out.append(CommonsEntry(seat, _apply(props, _version(props, iri), state), iri, state.tx))
+    out.sort(key=lambda e: (e.seat, e.skill.name, e.skill.version))
+    return out
+
+
+# --- writing ------------------------------------------------------------------------------------
+
+
+def _state_iri(version: str, tx: int) -> str:
+    return f"{version}/state/{tx}"
+
+
+def _state_turtle(version: str, skill: Skill, tx: int) -> tuple[str, str]:
+    """A new ``na:SkillState`` for the version at ``version``: its IRI and its Turtle."""
+    iri = _state_iri(version, tx)
+    lines = [
+        f"<{iri}> a na:SkillState",
+        f"na:ofVersion <{version}>",
+        f"na:status {json.dumps(skill.status)}",
+    ]
+    if skill.retired_reason is not None:
+        lines.append(f"na:retiredReason {json.dumps(skill.retired_reason, ensure_ascii=False)}")
+    lines += [f"na:trial <{version}/trial/{i}>" for i in range(len(skill.trials))]
+    lines.append(f'na:tx "{int(tx)}"^^<{_XSD}integer>')
+    return iri, PREFIX + " ;\n    ".join(lines) + " .\n"
+
+
+def _new_trials(version: str, before: Sequence[Trial], after: Sequence[Trial]) -> str:
+    """Turtle for the trials in ``after`` beyond ``before``. Trials are only ever appended."""
+    if tuple(after[: len(before)]) != tuple(before):
+        raise SkillWriteRefused(
+            f"{version}: recorded trials are immutable; only appends are written"
+        )
+    blocks = [b for i in range(len(before), len(after)) for b in trial_turtle(version, i, after[i])]
+    return PREFIX + "\n\n".join(blocks) + "\n" if blocks else ""
+
+
+def _version_doc(skill: Skill, prefix: str, authored_by: str | None, tx: int) -> tuple[str, str]:
+    """A new version written once, with its trials and its first state: (state IRI, Turtle)."""
+    version = version_iri(skill.name, skill.version, prefix)
+    node = to_turtle(replace(skill, trials=()), authored_by=authored_by, prefix=prefix)
+    state, state_ttl = _state_turtle(version, skill, tx)
+    return state, node + _new_trials(version, (), skill.trials) + state_ttl
+
+
+def _update_doc(version: str, before: Skill, after: Skill, tx: int) -> tuple[str, str]:
+    """A changed status, trial or retirement: new trials plus a new state, (state IRI, Turtle)."""
+    state, state_ttl = _state_turtle(version, after, tx)
+    return state, _new_trials(version, before.trials, after.trials) + state_ttl
 
 
 # --- ranking ------------------------------------------------------------------------------------
 
 
-def _iri(skill: Skill) -> str:
-    return f"{SKILL_BASE}{skill.name}/{skill.hash}"
+def _book_iri(skill: Skill) -> str:
+    return version_iri(skill.name, skill.version)
 
 
 def rank(
@@ -499,17 +676,19 @@ def rank(
     description: str,
     k: int,
     search: Callable[[str, int], list[str]] | None = None,
+    iri_of: Callable[[Skill], str] = _book_iri,
 ) -> list[Skill]:
     """Order already-filtered ``skills`` by ``description``, best first, at most ``k``.
 
-    With ``search``, its order decides and a skill it does not return is dropped. Without it,
-    the lexical rank of ``skills.py``: shared words, ties by name, no shared word no result.
+    With ``search``, its order decides (matched through ``iri_of``) and a skill it does not
+    return is dropped. Without it, the lexical rank of ``skills.py``: shared words, ties by name,
+    no shared word no result.
     """
     if search is not None:
         hits = search(description, max(k, len(skills)) * 4)
         position = {iri: i for i, iri in reversed(list(enumerate(hits)))}
-        found = [s for s in skills if _iri(s) in position]
-        found.sort(key=lambda s: (position[_iri(s)], s.name))
+        found = [s for s in skills if iri_of(s) in position]
+        found.sort(key=lambda s: (position[iri_of(s)], s.name))
         return found[:k]
     query = _words(description)
     scored = []
@@ -525,13 +704,15 @@ def rank(
 
 
 class QuipuSkillStore(SkillStore):
-    """A :class:`SkillStore` whose versions live in a :class:`SkillBackend`.
+    """A :class:`SkillStore` whose versions live in a :class:`SkillBackend`, append-only.
 
     Same methods, same refusals, same results; the in-memory index is loaded from the backend
-    (at head, or at ``tx`` for a pinned read) and every new or changed version is written through
-    :func:`to_turtle`. A write the backend refuses raises :class:`SkillWriteRefused` and leaves
-    neither the backend nor the index changed. ``read_only`` stores refuse every write with
-    :class:`CommonsReadOnly`; a store opened at ``tx`` is always read-only.
+    (at head, or at ``tx`` for a pinned read). A new version is one knot: the version node, its
+    trials and its first ``na:SkillState``. A trial, promotion or retirement is one knot of a new
+    state (and any new trial nodes); nothing is ever retracted. A write the backend refuses, or
+    one that fails for any reason, raises and leaves the index as it was; the backend's own
+    transaction is all or nothing, so the old state stays readable. ``read_only`` stores refuse
+    every write with :class:`CommonsReadOnly`; a store opened at ``tx`` is always read-only.
     """
 
     def __init__(
@@ -549,7 +730,9 @@ class QuipuSkillStore(SkillStore):
         self.read_only = read_only or tx is not None
         self.authored_by = authored_by
         self._persisted: dict[tuple[str, int], Skill] = {}
-        for skill in skills_from_triples(backend.triples(tx)):
+        triples = backend.triples(tx)
+        self._last_tx = _last_tx(_props(triples))
+        for skill in skills_from_triples(triples):
             self._versions.setdefault(skill.name, []).append(skill)
             self._persisted[(skill.name, skill.version)] = skill
 
@@ -573,11 +756,24 @@ class QuipuSkillStore(SkillStore):
         self._refuse_if_read_only()
         return super().retire(name, version, reason)
 
+    def _knot(self, doc: str) -> None:
+        """One write. On any failure, re-read the store's last ``na:tx``: the write may have
+        committed before the error, and the next state must not reuse its ordinal."""
+        try:
+            self.backend.knot(doc)
+        except Exception:
+            # The original error is the one to report, whatever the re-read does.
+            with contextlib.suppress(Exception):
+                self._last_tx = max(self._last_tx, _last_tx(_props(self.backend.triples())))
+            raise
+        self._last_tx += 1
+
     def _write(self, skill: Skill) -> None:
-        """Persist a new version; on refusal, take it back out of the index. Caller holds the lock."""
+        """Persist a new version; on failure, take it back out of the index. Caller holds the lock."""
         self._refuse_if_read_only()
         try:
-            self.backend.knot(to_turtle(skill, authored_by=self.authored_by))
+            _, doc = _version_doc(skill, SKILL_BASE, self.authored_by, self._last_tx + 1)
+            self._knot(doc)
         except Exception:
             versions = self._versions.get(skill.name) or []
             if versions and versions[-1] is skill:
@@ -588,22 +784,19 @@ class QuipuSkillStore(SkillStore):
         self._persisted[(skill.name, skill.version)] = skill
 
     def _replace(self, name: str, version: int, **changes: Any) -> Skill:
-        """Write the updated version first, then swap it into the index. Caller holds the lock."""
+        """Write a new state first, then swap it into the index. Caller holds the lock."""
         self._refuse_if_read_only()
         versions = self._versions.get(name) or []
         for i, current in enumerate(versions):
             if current.version == version:
                 updated = replace(current, **changes)
-                self._rewrite(self._persisted.get((name, version), current), updated)
+                before = self._persisted.get((name, version), current)
+                _, doc = _update_doc(version_iri(name, version), before, updated, self._last_tx + 1)
+                self._knot(doc)
                 versions[i] = updated
+                self._persisted[(name, version)] = updated
                 return updated
         raise KeyError(f"no skill {name}@v{version}")
-
-    def _rewrite(self, old: Skill, new: Skill) -> None:
-        new_ttl = to_turtle(new, authored_by=self.authored_by)
-        self.backend.validate(new_ttl)  # refused here, nothing has been touched
-        replace_all(self.backend, [old], new_ttl, to_turtle(old, authored_by=self.authored_by))
-        self._persisted[(new.name, new.version)] = new
 
     def retrieve(
         self,
@@ -620,19 +813,82 @@ class QuipuSkillStore(SkillStore):
         return rank(pool, description, k, search)
 
 
-def replace_all(
-    backend: SkillBackend, old: Iterable[Skill], new_ttl: str, restore_ttl: str | None
-) -> int:
-    """Retract ``old`` versions' nodes and knot ``new_ttl``; on a refused knot, restore and raise."""
-    for skill in old:
-        for iri in _node_iris(skill):
-            backend.retract(iri)
-    try:
-        return backend.knot(new_ttl)
-    except Exception:
-        if restore_ttl:
-            backend.knot(restore_ttl)
-        raise
+class CommonsView:
+    """The commons as one game sees it: read-only, pinned to a transaction, deterministic.
+
+    Entries are keyed by ``(seat, name, version)``, so one seat's entry is never another's.
+    Where several entries answer the same name, :meth:`CommonsEntry.order` decides: verified
+    first, then the latest publication, then seat id. Every write raises :class:`CommonsReadOnly`.
+    """
+
+    read_only = True
+
+    def __init__(
+        self,
+        backend: SkillBackend,
+        tx: int | None,
+        min_verified_seeds: int = DEFAULT_MIN_VERIFIED_SEEDS,
+    ) -> None:
+        self.backend = backend
+        self.tx = tx
+        self.min_verified_seeds = min_verified_seeds
+        self._entries = sorted(commons_from_triples(backend.triples(tx)), key=CommonsEntry.order)
+        self._iris = {id(e.skill): e.iri for e in self._entries}
+
+    def _refuse(self, *_: Any, **__: Any) -> Skill:
+        raise CommonsReadOnly("the commons is read-only; it changes only by publication")
+
+    save = record_trial = promote = retire = _refuse
+
+    def entries(self, name: str | None = None) -> list[CommonsEntry]:
+        """Every entry (or every entry for ``name``), in commons precedence."""
+        return [e for e in self._entries if name is None or e.skill.name == name]
+
+    def iri_of(self, skill: Skill) -> str | None:
+        return self._iris.get(id(skill))
+
+    def get(self, name: str, version: int | None = None) -> Skill | None:
+        for e in self.entries(name):
+            if version is None or e.skill.version == version:
+                return e.skill
+        return None
+
+    def history(self, name: str) -> list[Skill]:
+        """Every entry for ``name``, by seat then version."""
+        found = sorted(self.entries(name), key=lambda e: (e.seat, e.skill.version))
+        return [e.skill for e in found]
+
+    def eligible(
+        self,
+        statuses: Iterable[str] = ("verified",),
+        knobs: Iterable[str] | None = None,
+    ) -> list[Skill]:
+        """Per name, the first entry in commons precedence that may run, sorted by name."""
+        allowed = set(statuses) - {"retired"}
+        have = None if knobs is None else set(knobs)
+        out: dict[str, Skill] = {}
+        for e in self._entries:
+            s = e.skill
+            if s.name in out or s.status not in allowed:
+                continue
+            if have is not None and not set(s.requires) <= have:
+                continue
+            out[s.name] = s
+        return [out[n] for n in sorted(out)]
+
+    def retrieve(
+        self,
+        description: str,
+        surface_id: str | None = None,
+        k: int = 5,
+        statuses: Iterable[str] = STATUSES,
+        knobs: Iterable[str] | None = None,
+    ) -> list[Skill]:
+        pool = [s for s in self.eligible(statuses, knobs) if s.applies_to(surface_id)]
+        return rank(pool, description, k, _search_of(self.backend), self._iri)
+
+    def _iri(self, skill: Skill) -> str:
+        return self.iri_of(skill) or ""
 
 
 # --- seats, games and the commons ---------------------------------------------------------------
@@ -662,18 +918,29 @@ def _check_id(kind: str, value: str) -> str:
     return value
 
 
+def commons_prefix(seat: str) -> str:
+    """Where a seat's commons entries live: one namespace per seat identity."""
+    return f"{SKILL_BASE}seat/{quote(seat, safe='')}/"
+
+
 def _publication_iri(seat: str, game: str) -> str:
     return f"{PUBLICATION_BASE}{quote(seat, safe='')}/{quote(game, safe='')}"
 
 
-def _publication_turtle(seat: str, game: str, skills: Sequence[Skill]) -> str:
+def _publication_turtle(seat: str, game: str, tx: int, states: Sequence[str]) -> str:
     lines = [
-        f"<{_publication_iri(seat, game)}> a <{NA}Publication> ;",
-        f"    <{NA}publishedBy> {json.dumps(seat, ensure_ascii=False)} ;",
-        f"    <{NA}game> {json.dumps(game, ensure_ascii=False)}",
+        f"<{_publication_iri(seat, game)}> a na:Publication",
+        f"na:publishedBy {json.dumps(seat, ensure_ascii=False)}",
+        f"na:game {json.dumps(game, ensure_ascii=False)}",
+        f'na:tx "{int(tx)}"^^<{_XSD}integer>',
     ]
-    lines += [f"    ; <{NA}published> <{_iri(s)}>" for s in skills]
-    return "\n".join(lines) + " .\n"
+    lines += [f"na:carriesState <{s}>" for s in states]
+    return PREFIX + " ;\n    ".join(lines) + " .\n"
+
+
+def _content(skill: Skill) -> Skill:
+    """``skill`` without what a state changes: what must never differ for one identity."""
+    return replace(skill, status="candidate", trials=(), retired_reason=None)
 
 
 class SkillLibrary:
@@ -734,11 +1001,9 @@ class SkillLibrary:
             if g.state == "open":
                 g.state = "abandoned"
 
-    def commons(self, game: str) -> QuipuSkillStore:
+    def commons(self, game: str) -> CommonsView:
         """The commons as ``game`` sees it: read-only, as of the game-start transaction."""
-        return QuipuSkillStore(
-            self._commons, self.min_verified_seeds, tx=self.game(game).commons_tx
-        )
+        return CommonsView(self._commons, self.game(game).commons_tx, self.min_verified_seeds)
 
     def seat(self, seat: str, game: str) -> SeatSkills:
         """What a seat may touch during ``game``: its own book and the pinned commons."""
@@ -748,7 +1013,13 @@ class SkillLibrary:
         return SeatSkills(self.book(seat), self.commons(game))
 
     def publish_at_game_end(self, seat: str, game: str) -> list[Skill]:
-        """Copy ``seat``'s new or changed versions to the commons in one write.
+        """Copy ``seat``'s new or changed versions to the commons as ONE knot.
+
+        The knot holds each new version node (under :func:`commons_prefix` for the seat), any new
+        trial nodes, one new ``na:SkillState`` per new or changed entry, and the
+        ``na:Publication`` that lists exactly those states. Nothing is retracted: only the seat's
+        own entries ``(seat, name, version)`` can change, so no seat overwrites or downgrades
+        another's. A refused or failed knot changes nothing.
 
         Returns what was published. Nothing is published for an open or abandoned game, or a
         seat not in it; a second call for the same seat and game publishes nothing. Status
@@ -758,22 +1029,43 @@ class SkillLibrary:
             g = self.game(game)
             if g.state != "closed" or seat not in g.seats or seat in g.published:
                 return []
-            marker = _publication_iri(seat, game)
-            head = self._commons.triples()
-            if any(t[0] == marker for t in head):
+            triples = self._commons.triples()
+            props = _props(triples)
+            if _is(props.get(_publication_iri(seat, game), {}), "Publication"):
                 g.published.add(seat)
                 return []
-            in_commons = {(s.name, s.hash): s for s in skills_from_triples(head)}
-            mine = [s for versions in self.book(seat)._versions.values() for s in versions]
-            fresh = [s for s in mine if in_commons.get((s.name, s.hash)) != _as_stored(s)]
-            changed = [
-                in_commons[(s.name, s.hash)] for s in fresh if (s.name, s.hash) in in_commons
-            ]
-            doc = "".join(to_turtle(s, authored_by=seat) + "\n" for s in fresh)
-            doc += _publication_turtle(seat, game, fresh)
-            self._commons.validate(doc)
-            restore = "".join(to_turtle(s) + "\n" for s in changed) or None
-            replace_all(self._commons, changed, doc, restore)
+            tx = _last_tx(props) + 1
+            prefix = commons_prefix(seat)
+            have = {
+                (e.skill.name, e.skill.version): e
+                for e in commons_from_triples(triples)
+                if e.seat == seat
+            }
+            mine = sorted(
+                (s for versions in self.book(seat)._versions.values() for s in versions),
+                key=lambda s: (s.name, s.version),
+            )
+            parts: list[str] = []
+            states: list[str] = []
+            fresh: list[Skill] = []
+            for skill in map(_as_stored, mine):
+                old = have.get((skill.name, skill.version))
+                if old is None:
+                    state, doc = _version_doc(skill, prefix, seat, tx)
+                elif old.skill == skill:
+                    continue
+                elif _content(old.skill) != _content(skill):
+                    raise SkillWriteRefused(
+                        f"{old.iri}: the commons already holds different content for "
+                        f"{seat!r} {skill.ref}; a published version is immutable"
+                    )
+                else:
+                    state, doc = _update_doc(old.iri, old.skill, skill, tx)
+                parts.append(doc)
+                states.append(state)
+                fresh.append(skill)
+            parts.append(_publication_turtle(seat, game, tx, states))
+            self._commons.knot("".join(parts))
             g.published.add(seat)
             return fresh
 
@@ -785,7 +1077,7 @@ class SeatSkills:
     ``commons`` refuses every write with :class:`CommonsReadOnly`.
     """
 
-    def __init__(self, book: QuipuSkillStore, commons: QuipuSkillStore) -> None:
+    def __init__(self, book: QuipuSkillStore, commons: CommonsView) -> None:
         self._book = book
         self.commons = commons
 
@@ -821,6 +1113,10 @@ class SeatSkills:
         pool = own + [s for s in self.commons.eligible(statuses, knobs) if s.name not in names]
         pool = [s for s in pool if s.applies_to(surface_id)]
         searches = [_search_of(self._book.backend), _search_of(self.commons.backend)]
+
+        def iri_of(skill: Skill) -> str:
+            return self.commons.iri_of(skill) or _book_iri(skill)
+
         if all(searches):
 
             def both(query: str, limit: int) -> list[str]:
@@ -831,5 +1127,5 @@ class SeatSkills:
                 )
                 return [i for i, _ in merged]
 
-            return rank(pool, description, k, both)
+            return rank(pool, description, k, both, iri_of)
         return rank(pool, description, k)

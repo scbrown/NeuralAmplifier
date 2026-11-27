@@ -19,6 +19,7 @@ from typing import Any
 import pytest
 
 from neural_amplifier.skill_quipu import (
+    PREFIX,
     CommonsReadOnly,
     FakeBackend,
     QpBackend,
@@ -27,9 +28,10 @@ from neural_amplifier.skill_quipu import (
     SkillBackend,
     SkillLibrary,
     SkillWriteRefused,
-    skills_from_triples,
+    commons_from_triples,
+    commons_prefix,
 )
-from neural_amplifier.skill_shapes import SKILL_BASE, to_turtle
+from neural_amplifier.skill_shapes import SKILL_BASE, to_turtle, version_iri
 from neural_amplifier.skills import Skill, SkillStore, content_hash
 
 sys.path.insert(0, str(Path(__file__).parent))
@@ -285,12 +287,275 @@ def test_publication_is_one_step_and_only_new_or_changed(library: SkillLibrary) 
     seat.record_trial("expand", 1, "g2", 5, "pass")
     seat.promote("expand", 1)
     library.close_game("g2")
+    head = library._commons.head()
     [changed] = library.publish_at_game_end("alpha", "g2")
+    assert library._commons.head() == head + 1  # a changed version is one recorded step too
     assert (changed.name, changed.status) == ("expand", "verified")
     library.start_game("g3", ["beta"])
     expand = library.commons("g3").get("expand")
     assert expand is not None and expand.status == "verified" and len(expand.trials) == 1
-    assert len(skills_from_triples(library._commons.triples())) == 2
+    assert [(e.seat, e.skill.name) for e in commons_from_triples(library._commons.triples())] == [
+        ("alpha", "expand"),
+        ("alpha", "hurry"),
+    ]
+
+
+# --- version identity and append-only writes (review eph-review-c1bc0f) -------------------------
+
+
+CHECK = {"metric": "base_count", "comparator": "at_least", "target": 2, "horizon_turns": 5}
+
+
+def _subjects(backend: SkillBackend) -> set[str]:
+    return {t[0] for t in backend.triples()}
+
+
+def test_same_code_with_a_new_check_is_its_own_version_node(
+    new_backend: Callable[[], SkillBackend],
+) -> None:
+    backend = new_backend()
+    book = QuipuSkillStore(backend)
+    v1 = book.save("expand", "colony pod", CODE)
+    v2 = book.save("expand", "colony pod", CODE, check=CHECK)
+    assert (v1.version, v2.version, v1.hash) == (1, 2, v2.hash)
+    assert {version_iri("expand", 1), version_iri("expand", 2)} <= _subjects(backend)
+    assert QuipuSkillStore(backend).history("expand") == [v1, v2]
+
+
+def test_a_revert_a_b_a_keeps_three_versions(new_backend: Callable[[], SkillBackend]) -> None:
+    backend = new_backend()
+    book = QuipuSkillStore(backend, min_verified_seeds=1)
+    a1 = book.save("expand", "colony pod", CODE)
+    book.record_trial("expand", 1, "g1", 1, "pass")
+    book.promote("expand", 1)
+    book.save("expand", "colony pod", OTHER)
+    a3 = book.save("expand", "colony pod", CODE)
+    assert a3.version == 3 and a3.hash == a1.hash and a3.status == "candidate"
+    reopened = QuipuSkillStore(backend)
+    assert reopened.history("expand") == book.history("expand")
+    assert reopened.get("expand", 1).status == "verified"  # untouched by the revert
+    assert [s.version for s in reopened.history("expand")] == [1, 2, 3]
+
+
+def test_every_write_only_adds(new_backend: Callable[[], SkillBackend]) -> None:
+    backend = new_backend()
+    assert not hasattr(backend, "retract")
+    book = QuipuSkillStore(backend, min_verified_seeds=1)
+    seen: set[Any] = set()
+    steps: list[Callable[[], Any]] = [
+        lambda: book.save("expand", "colony pod", CODE),
+        lambda: book.record_trial("expand", 1, "g1", 4, "pass", {"base_count": 1}),
+        lambda: book.promote("expand", 1),
+        lambda: book.save("expand", "colony pod", OTHER),
+        lambda: book.retire("expand", 2, "worse"),
+        lambda: book.retire("expand", 1, "superseded"),
+    ]
+    for step in steps:
+        head = backend.head()
+        step()
+        now = set(backend.triples())
+        assert seen <= now and backend.head() == head + 1  # one knot, nothing retracted
+        seen = now
+    assert [s.status for s in QuipuSkillStore(backend).history("expand")] == ["retired"] * 2
+
+
+def test_a_second_value_on_an_existing_version_is_refused(
+    new_backend: Callable[[], SkillBackend],
+) -> None:
+    """Both lanes check the merged state: qp at ingest, the fake by construction."""
+    backend = new_backend()
+    book = QuipuSkillStore(backend)
+    book.save("expand", "colony pod", CODE)
+    before = backend.triples()
+    second_status = PREFIX + f'<{version_iri("expand", 1)}> na:status "verified" .\n'
+    with pytest.raises(SkillWriteRefused):
+        backend.knot(second_status)
+    partial_state = PREFIX + (
+        f"<{version_iri('expand', 1)}/state/9> a na:SkillState ;"
+        f" na:ofVersion <{version_iri('expand', 1)}> .\n"
+    )
+    with pytest.raises(SkillWriteRefused):  # no status, no tx: the document itself fails
+        backend.knot(partial_state)
+    assert backend.triples() == before
+    assert QuipuSkillStore(backend).get("expand").status == "candidate"
+
+
+class _Crash(RuntimeError):
+    pass
+
+
+class _Crashing:
+    """Wraps a backend; ``armed`` makes the next knot fail before anything is committed."""
+
+    def __init__(self, inner: SkillBackend) -> None:
+        self.inner, self.armed = inner, False
+
+    def knot(self, turtle: str) -> int:
+        if self.armed:
+            self.armed = False
+            raise _Crash("connection lost")
+        return self.inner.knot(turtle)
+
+    def validate(self, turtle: str) -> None:
+        self.inner.validate(turtle)
+
+    def triples(self, tx: int | None = None) -> list[Any]:
+        return self.inner.triples(tx)
+
+    def head(self) -> int:
+        return self.inner.head()
+
+
+@pytest.mark.parametrize(
+    "write",
+    [
+        lambda b: b.save("expand", "colony pod", OTHER),
+        lambda b: b.record_trial("expand", 1, "g1", 9, "pass"),
+        lambda b: b.promote("expand", 1),
+        lambda b: b.retire("expand", 1, "worse"),
+    ],
+)
+def test_a_crashed_book_write_changes_nothing(
+    write: Callable[[QuipuSkillStore], Any], new_backend: Callable[[], SkillBackend]
+) -> None:
+    backend = _Crashing(new_backend())
+    book = QuipuSkillStore(backend, min_verified_seeds=1)
+    book.save("expand", "colony pod", CODE)
+    book.record_trial("expand", 1, "g0", 1, "pass")
+    before, history = backend.triples(), book.history("expand")
+    backend.armed = True
+    with pytest.raises(_Crash):
+        write(book)
+    assert backend.triples() == before
+    assert book.history("expand") == history
+    assert QuipuSkillStore(backend).history("expand") == history
+    write(book)  # and the store still works afterwards
+    assert QuipuSkillStore(backend).history("expand") == book.history("expand")
+
+
+def _crashing_library(new_backend: Callable[[], SkillBackend]) -> tuple[SkillLibrary, _Crashing]:
+    books: dict[str, SkillBackend] = {}
+    commons = _Crashing(new_backend())
+
+    def open_book(seat: str) -> SkillBackend:
+        return books.setdefault(seat, new_backend())
+
+    return SkillLibrary(open_book, commons, min_verified_seeds=1), commons
+
+
+def test_a_crashed_or_refused_publication_changes_nothing(
+    new_backend: Callable[[], SkillBackend],
+) -> None:
+    library, commons = _crashing_library(new_backend)
+    _play(library, "g1", "alpha", "expand")
+    library.close_game("g1")
+    library.publish_at_game_end("alpha", "g1")
+    library.start_game("g2", ["alpha"])
+    seat = library.seat("alpha", "g2")
+    seat.record_trial("expand", 1, "g2", 5, "pass")
+    seat.promote("expand", 1)
+    seat.save("hurry", "hurry production", OTHER)
+    library.close_game("g2")
+    before = commons.triples()
+    commons.armed = True
+    with pytest.raises(_Crash):
+        library.publish_at_game_end("alpha", "g2")
+    assert commons.triples() == before
+    library.start_game("g3", ["beta"])
+    assert library.commons("g3").get("expand").status == "candidate"  # the old state reads
+    assert library.commons("g3").get("hurry") is None
+
+    book = library.book("alpha")  # a version the shape refuses: the whole knot is refused
+    bad = replace(book.get("hurry"), status="trusted")  # type: ignore[arg-type]
+    with book._lock:
+        book._versions["hurry"][-1] = bad
+    with pytest.raises(SkillWriteRefused):
+        library.publish_at_game_end("alpha", "g2")
+    assert commons.triples() == before
+
+
+def test_a_state_no_publication_carries_is_ignored(library: SkillLibrary) -> None:
+    _play(library, "g1", "alpha", "expand")
+    library.close_game("g1")
+    library.publish_at_game_end("alpha", "g1")
+    entry = commons_prefix("alpha") + "expand/v1"
+    stray = PREFIX + (
+        f'<{entry}/state/99> a na:SkillState ; na:ofVersion <{entry}> ; na:status "retired" ;'
+        ' na:tx "99"^^<http://www.w3.org/2001/XMLSchema#integer> .\n'
+    )
+    library._commons.knot(stray)  # e.g. half of a write that never got its publication
+    library.start_game("g2", ["beta"])
+    assert library.commons("g2").get("expand").status == "candidate"
+
+
+def _publish(library: SkillLibrary, game: str, seat: str, code: str, verify: bool) -> None:
+    library.start_game(game, [seat])
+    s = library.seat(seat, game)
+    s.save("expand", "colony pod while surplus", code)
+    if verify:
+        s.record_trial("expand", 1, game, 1, "pass")
+        s.promote("expand", 1)
+    library.close_game(game)
+    assert library.publish_at_game_end(seat, game)
+
+
+def test_a_candidate_from_one_seat_never_downgrades_anothers_verified(
+    library: SkillLibrary,
+) -> None:
+    _publish(library, "ga", "alpha", CODE, verify=True)
+    _publish(library, "gb", "beta", CODE, verify=False)  # same code, published later
+    library.start_game("later", ["gamma"])
+    commons = library.commons("later")
+    assert [(e.seat, e.skill.status) for e in commons.entries("expand")] == [
+        ("alpha", "verified"),
+        ("beta", "candidate"),
+    ]
+    got = commons.get("expand")
+    assert got is not None and got.status == "verified" and len(got.trials) == 1
+    assert commons.eligible(("verified", "candidate")) == [got]
+    assert [s.status for s in commons.history("expand")] == ["verified", "candidate"]
+
+
+def test_commons_precedence_is_latest_publication_then_seat(
+    new_backend: Callable[[], SkillBackend],
+) -> None:
+    def build(order: list[str]) -> SkillLibrary:
+        books: dict[str, SkillBackend] = {}
+        lib = SkillLibrary(lambda s: books.setdefault(s, new_backend()), new_backend(), 1)
+        for i, seat in enumerate(order):
+            _publish(lib, f"g{i}", seat, CODE.replace("first", seat), verify=False)
+        lib.start_game("read", ["x"])
+        return lib
+
+    for order in (["alpha", "beta"], ["beta", "alpha"]):
+        commons = build(order).commons("read")
+        newest = commons.get("expand")
+        assert newest is not None and order[-1] in newest.code  # the latest publication wins
+        assert commons.get("expand", 1) is newest
+        assert commons.eligible(("candidate",)) == [newest]
+
+    lib = build([])
+    tx = lib._commons.head()
+    for seat in ("beta", "alpha"):  # one tie on status and tx: seat id decides
+        e = commons_prefix(seat) + "expand/v1"
+        skill = Skill("expand", 1, "colony pod", CODE, content_hash(CODE))
+        lib._commons.knot(
+            to_turtle(skill, authored_by=seat, prefix=commons_prefix(seat))
+            + PREFIX
+            + f'<{e}/state/{tx + 1}> a na:SkillState ; na:ofVersion <{e}> ; na:status "candidate" ;'
+            f' na:tx "{tx + 1}"^^<http://www.w3.org/2001/XMLSchema#integer> .\n'
+        )
+    states = [commons_prefix(s) + f"expand/v1/state/{tx + 1}" for s in ("alpha", "beta")]
+    lib._commons.knot(
+        PREFIX
+        + "<http://neuralamplifier.local/publication/both> a na:Publication ;"
+        + ' na:publishedBy "both" ; na:game "tie" ;'
+        + f' na:tx "{tx + 1}"^^<http://www.w3.org/2001/XMLSchema#integer> ;'
+        + " ; ".join(f" na:carriesState <{s}>" for s in states)
+        + " .\n"
+    )
+    lib.start_game("tie-read", ["x"])
+    assert [e.seat for e in lib.commons("tie-read").entries("expand")] == ["alpha", "beta"]
 
 
 # --- retrieval ---------------------------------------------------------------------------------

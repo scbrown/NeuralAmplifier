@@ -26,18 +26,20 @@ from collections.abc import Callable
 from decimal import Decimal
 from pathlib import Path
 
-from .skills import Skill
+from .skills import Skill, Trial
 
 #: The shape file, at the repository root. Source-checkout only: it is not shipped as package
 #: data, so an installed wheel has no shape file and shapes_bytes() raises FileNotFoundError.
 SHAPES_PATH = Path(__file__).resolve().parents[3] / "shapes" / "na-skill.shapes.ttl"
 #: sha256 of the shape file's bytes. Change the file, change this, in the same review.
-SHAPES_SHA256 = "7b20da55bfd956e76b1dffefd8bebfd2922683c1b02852fd1d205af31ee26277"
+SHAPES_SHA256 = "396cf93384841151666c5155a057e6b950cd027e32c4518eadc295c14f976d1a"
 #: The name the shape is loaded under in a seat store.
 SHAPES_NAME = "na-skill"
 
 NA = "http://neuralamplifier.local/ontology/skill/"
-#: Instance IRIs: one per skill version, keyed by name and content hash.
+#: Instance IRIs: one per skill version, ``<SKILL_BASE><name>/v<version>``. The content hash is a
+#: property of the version, not its identity: two versions may carry the same code (a new success
+#: check, or a revert A->B->A) and each still gets its own node.
 SKILL_BASE = "http://neuralamplifier.local/skill/"
 
 
@@ -54,8 +56,25 @@ def shapes_bytes(path: Path = SHAPES_PATH) -> bytes:
     return data
 
 
-def skill_iri(name: str, digest: str) -> str:
-    return f"<{SKILL_BASE}{name}/{digest}>"
+def version_iri(name: str, version: int, prefix: str = SKILL_BASE) -> str:
+    """The bare IRI of ``name@v<version>`` under ``prefix``: unique per version, not per hash."""
+    return f"{prefix}{name}/v{int(version)}"
+
+
+def trial_turtle(version: str, index: int, trial: Trial) -> list[str]:
+    """Turtle blocks for trial ``index`` of the version at bare IRI ``version``, deltas included."""
+    trial_iri = f"<{version}/trial/{index}>"
+    trial_props: list[tuple[str, str]] = [("source", _str(trial.source))]
+    if trial.seed is not None:
+        trial_props.append(("seed", _int(trial.seed)))
+    trial_props.append(("verdict", _str(trial.verdict)))
+    blocks: list[str] = []
+    for j, (metric, value) in enumerate(sorted(trial.deltas.items())):
+        delta = f"<{version}/trial/{index}/delta/{j}>"
+        trial_props.append(("delta", delta))
+        blocks.append(f"{delta} na:metric {_str(metric)} ;\n    na:value {_decimal(value)} .")
+    blocks.append(_block(trial_iri, "Trial", trial_props))
+    return blocks
 
 
 def _str(value: str) -> str:
@@ -75,22 +94,30 @@ def _decimal(value: float) -> str:
     return f'"{text}"^^<http://www.w3.org/2001/XMLSchema#decimal>'
 
 
+#: The one prefix every document this package writes declares.
+PREFIX = f"@prefix na: <{NA}> .\n\n"
+
+
 def _block(iri: str, cls: str, props: list[tuple[str, str]]) -> str:
     body = [f"    na:{predicate} {obj}" for predicate, obj in props]
     return f"{iri} a na:{cls} ;\n" + " ;\n".join(body) + " ."
 
 
-def to_turtle(skill: Skill, *, authored_by: str | None = None) -> str:
+def to_turtle(skill: Skill, *, authored_by: str | None = None, prefix: str = SKILL_BASE) -> str:
     """One skill version as a Turtle document for :data:`SHAPES_PATH` to check.
 
     Everything comes from the :class:`~neural_amplifier.skills.Skill` itself, including its
     ``check`` (a :class:`~neural_amplifier.skills.SuccessCheck`) and ``retired_reason``, so a
     practice-authored or shelved version serialises with them. ``authored_by`` is provenance the
     store does not yet carry. ``None`` fields are omitted, so a missing value is a missing triple.
+
+    The node is :func:`version_iri` under ``prefix``; ``na:supersedes`` names the previous version
+    (``v<version - 1>``) under the same prefix, since a store only ever revises its latest version.
     """
     success_check = skill.check
     retired_reason = skill.retired_reason
-    me = skill_iri(skill.name, skill.hash)
+    base = version_iri(skill.name, skill.version, prefix)
+    me = f"<{base}>"
     props: list[tuple[str, str]] = [
         ("name", _str(skill.name)),
         ("version", _int(skill.version)),
@@ -103,7 +130,7 @@ def to_turtle(skill: Skill, *, authored_by: str | None = None) -> str:
     if retired_reason is not None:
         props.append(("retiredReason", _str(retired_reason)))
     if skill.supersedes is not None:
-        props.append(("supersedes", skill_iri(skill.name, skill.supersedes)))
+        props.append(("supersedes", f"<{version_iri(skill.name, skill.version - 1, prefix)}>"))
     props += [("requiresSurface", _str(s)) for s in skill.surfaces]
     props += [("requiresKnob", _str(k)) for k in skill.requires]
     if authored_by is not None:
@@ -111,7 +138,7 @@ def to_turtle(skill: Skill, *, authored_by: str | None = None) -> str:
 
     blocks: list[str] = []
     if success_check is not None:
-        check = f"<{SKILL_BASE}{skill.name}/{skill.hash}/success>"
+        check = f"<{base}/success>"
         props.append(("successCheck", check))
         blocks.append(
             _block(
@@ -126,19 +153,10 @@ def to_turtle(skill: Skill, *, authored_by: str | None = None) -> str:
             )
         )
     for i, trial in enumerate(skill.trials):
-        trial_iri = f"<{SKILL_BASE}{skill.name}/{skill.hash}/trial/{i}>"
-        props.append(("trial", trial_iri))
-        trial_props: list[tuple[str, str]] = [("source", _str(trial.source))]
-        if trial.seed is not None:
-            trial_props.append(("seed", _int(trial.seed)))
-        trial_props.append(("verdict", _str(trial.verdict)))
-        for j, (metric, value) in enumerate(sorted(trial.deltas.items())):
-            delta = f"<{SKILL_BASE}{skill.name}/{skill.hash}/trial/{i}/delta/{j}>"
-            trial_props.append(("delta", delta))
-            blocks.append(f"{delta} na:metric {_str(metric)} ;\n    na:value {_decimal(value)} .")
-        blocks.append(_block(trial_iri, "Trial", trial_props))
+        props.append(("trial", f"<{base}/trial/{i}>"))
+        blocks += trial_turtle(base, i, trial)
 
-    head = f"@prefix na: <{NA}> .\n\n"
+    head = PREFIX
     return head + "\n\n".join([_block(me, "Skill", props), *blocks]) + "\n"
 
 
