@@ -16,11 +16,13 @@ import subprocess
 import sys
 import threading
 import time
+from collections.abc import Iterator
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
 from .decisions import DecisionLog, DecisionRecord
+from .live import LiveStream, Subscription, sse_frame
 from .replay import WorldViewStore
 
 REPO = Path(__file__).resolve().parents[3]
@@ -616,6 +618,35 @@ class DashboardReader:
         return result
 
 
+def event_stream(
+    live: LiveStream,
+    sub: Subscription,
+    view: str,
+    heartbeat: float = 15.0,
+    limit: int | None = None,
+) -> Iterator[str]:
+    """The SSE body for one subscription: a ``hello`` with the Now snapshot, then events.
+
+    ``limit`` closes the stream after that many lifecycle events (for tests and ``curl``).
+    """
+    sent = 0
+    try:
+        yield "retry: 3000\n\n"
+        yield sse_frame("hello", {"view": view, "faction_id": sub.faction, **live.now(sub.faction)})
+        while limit is None or sent < limit:
+            item = sub.get(heartbeat)
+            if item is None:
+                if sub.closed:
+                    return
+                yield f": keepalive dropped={sub.dropped}\n\n"
+                continue
+            seq, kind, payload = item
+            yield sse_frame(kind, payload, seq)
+            sent += 1
+    finally:
+        live.unsubscribe(sub)
+
+
 DASHBOARD_HTML = """<!doctype html>
 <html lang=en><head><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1">
 <title>Neural Amplifier // Planetary Datalinks</title><style>
@@ -623,6 +654,7 @@ DASHBOARD_HTML = """<!doctype html>
 *{box-sizing:border-box}body{margin:0;background:radial-gradient(circle at 50% 0,#0b3142,#02070d 55%);color:var(--text);font:14px/1.45 "Lucida Console",Monaco,monospace}header{padding:18px 24px;border-bottom:2px ridge var(--edge);letter-spacing:.15em;background:#031019}h1{margin:0;color:#7ffff5;font-size:20px}.status{color:var(--gold)}main{padding:18px;display:grid;gap:16px}.panel{background:linear-gradient(145deg,#0a2634,#04121b);border:3px ridge #287f8b;box-shadow:0 0 16px #001 inset;padding:14px}h2{font-size:15px;color:#5fe8f0;border-bottom:1px solid #287f8b;padding-bottom:7px;margin:0 0 12px}.summary,.factions{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px}.datum,.faction{border:1px solid #1b6873;padding:8px}.datum b{display:block;color:#fff;font-size:18px}.faction{border-left:7px solid var(--faction)}.faction h3{margin:0 0 8px;color:#fff}.stats{display:grid;grid-template-columns:repeat(2,1fr);gap:4px}.stats span{color:var(--muted)}.stats b{color:var(--text);float:right}table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:7px;border-bottom:1px solid #164650}th{color:#64dfe6}.decision{cursor:pointer}.decision:hover{background:#123b48}.bad{color:var(--bad)}.tabs button{background:#092734;color:var(--text);border:2px ridge #287f8b;padding:8px 14px;cursor:pointer}.hidden{display:none}pre{white-space:pre-wrap;word-break:break-word;color:#c8f7f3;max-height:70vh;overflow:auto}.detail{position:fixed;inset:5%;z-index:2;overflow:auto}.close{float:right}.why{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px}.why section{border:1px solid #1b6873;padding:10px}.why h3{color:var(--gold);margin:0 0 8px}.why .wide{grid-column:1/-1}.why ul{margin:0;padding-left:20px}.disagreement{border-color:var(--bad)!important;color:#ffb0b0}.dstate{display:inline-block;padding:1px 7px;margin-left:6px;border:1px solid currentColor;font-size:11px;letter-spacing:.08em}.d-followed{color:#55e06f}.d-overrode{color:var(--gold)}.d-unsatisfied{color:#ff9f43}.d-unmeasurable,.d-rejected,.d-conflicts{color:var(--muted)}.d-none{color:var(--muted)}.gs{padding:2px 8px;border:1px solid currentColor;letter-spacing:.08em}.gs-absent,.gs-empty{color:var(--muted)}.gs-degraded{color:var(--bad)}.gs-present{color:#55e06f}.cited{color:#7ffff5}.uncited{color:var(--muted)}.banner{padding:12px 16px;margin:0 0 4px;border:3px ridge #287f8b;background:#071b28}.banner b{display:block;font-size:17px;letter-spacing:.1em}.banner.paused{border-color:var(--gold);color:var(--gold)}.banner.live{border-color:#55e06f;color:#9ef7b5}.banner.no-run{border-color:var(--bad);color:#ffb0b0}.banner span{color:var(--muted)}abbr{text-decoration:underline dotted;cursor:help}@media(max-width:700px){main{padding:8px}.panel{overflow:auto}}
 </style></head><body><header><h1>NEURAL AMPLIFIER // PLANETARY DATALINKS</h1><span id=status class=status>LINKING…</span></header><main>
 <div id=banner class=banner><b>LINKING…</b></div>
+<section class=panel><h2>NOW</h2><div id=nowView class=why>The live view needs a seat token or the spectator token: open this page with <code>#token=…</code> on the end of its address.</div><div id=nowOpen></div><div id=nowSpend class=summary></div><div id=nowFeed class=why></div></section>
 <section class=panel><h2>MISSION CONTROL</h2><div id=summary class=summary></div></section>
 <section class=panel><h2>FACTION STATUS</h2><div id=factions class=factions></div></section>
 <section class=panel><h2>DECISION ARCHIVE</h2><table><thead><tr><th>Turn<th>Faction<th>What was decided<th><abbr title="Who actually chose: the language model, or the game engine's own default when the model could not be reached.">Decided by</abbr><th>Action taken<th><abbr title="What the game engine would have picked on its own, for comparison.">Engine would pick</abbr><th>Took<th>Cost</tr></thead><tbody id=decisions></tbody></table></section>
@@ -671,5 +703,17 @@ const note=(x.definitions_missing??[]).length?`<p class=d-none>Directive TEXT sh
 const totals=(x.totals??[]).map(t=>{const def=defs[t.id]??{};return `<tr><td>${esc(t.id)}${def.intent?`<br><span class=uncited>${esc(def.intent)}</span>`:''}<td>${esc(def.metric)} ${esc(def.comparator)} ${esc(def.target)}<td>${esc(t.in_force)}<td>${esc(t.followed??0)}<td>${esc(t.overrode??0)}<td>${esc(t.unsatisfied??0)}<td>${esc(t.unmeasurable??0)}<td>${t.followed_share==null?'—':esc(t.followed_share)}</tr>`}).join('');
 strategy.innerHTML=note+(totals?`<table><thead><tr><th>Directive<th>Metric<th>Turns in force<th>Followed<th>Overrode<th>Unsatisfied<th>Unmeasurable<th>Followed share</tr></thead><tbody>${totals}</tbody></table>`:'<p class=d-none>No directives were in force in this run.</p>')}
 async function loadEvals(){evals.textContent='Re-deriving…';const x=await fetch('/dashboard/api/evals').then(r=>r.json());renderEvals(x)}
-loadGlossary().then(()=>{refresh();loadEvals();loadStrategy();loadGraph('')});
+//: The Now pane. Fed only by the live stream, which the SERVER filters by the token: a seat
+//: token is that seat's player view, the spectator token is everything. The token lives in the
+//: address fragment so it is never sent in a Referer; EventSource cannot set a header, so it
+//: goes to the stream as ?token=. Ages tick here from the server's snapshot.
+const NOW={open:new Map(),spend:[],feed:[],t0:Date.now()};
+const nowEl=()=>(Date.now()-NOW.t0)/1000;
+function nowAge(s){s=Math.max(0,Math.round(s));return s<90?s+' s':Math.round(s/60)+' min'}
+function renderNow(){const el=nowEl();nowOpen.innerHTML=NOW.open.size?`<table><thead><tr><th>Waiting on<th>Faction<th>Turn<th>Open for<th>Who is thinking<th>Thinking for</tr></thead><tbody>${[...NOW.open.values()].map(o=>`<tr><td>${esc(o.surface_id)}<td>${esc(o.faction_id)}<td>${esc(o.turn)}<td>${esc(nowAge(o.age_s+el-o.seen))}<td>${esc(o.thinking??(o.state==='raised'?'not yet claimed':'—'))}<td>${o.thinking_s==null?'—':esc(nowAge(o.thinking_s+el-o.seen))}</tr>`).join('')}</tbody></table>`:'<p class=d-none>Nothing is waiting for an answer right now.</p>';nowSpend.innerHTML=NOW.spend.map(s=>{const pct=s.budget_usd&&s.spent_usd!=null?Math.min(100,100*s.spent_usd/s.budget_usd):null;return `<div class=datum>SEAT ${esc(s.faction_id)} SPEND USD<b>${esc(s.spent_usd)}${s.budget_usd!=null?' of '+esc(s.budget_usd):''}</b>${pct==null?'':`<meter min=0 max=100 value="${pct.toFixed(1)}"></meter>`}</div>`}).join('');nowFeed.innerHTML=NOW.feed.slice(-8).reverse().map(e=>`<div>${esc(e.at)} // ${esc(e.kind)} // faction ${esc(e.faction_id)} // ${esc(e.surface_id)}${e.seat?' // '+esc(e.seat):''}${e.verdict?' // '+esc(e.verdict):''}</div>`).join('')}
+function startNow(){const m=/(?:^|[#&])token=([^&]+)/.exec(location.hash);if(!m)return;const src=new EventSource('/dashboard/api/events?token='+m[1]);
+src.addEventListener('hello',ev=>{const x=JSON.parse(ev.data);NOW.t0=Date.now();NOW.open=new Map(x.open.map(o=>[o.decision,{...o,seen:0}]));NOW.spend=x.spend;nowView.textContent=x.view==='spectator'?'SPECTATOR VIEW: every seat. Opening this during your own game is recorded on the run.':'PLAYER VIEW: seat '+x.faction_id+' only.';renderNow()});
+for(const k of ['raised','claimed','answered','guard','applied','diverged','abandoned'])src.addEventListener(k,ev=>{const x=JSON.parse(ev.data),el=nowEl();NOW.feed.push(x);if(NOW.feed.length>50)NOW.feed.shift();if(k==='raised')NOW.open.set(x.decision,{decision:x.decision,faction_id:x.faction_id,surface_id:x.surface_id,turn:x.turn,age_s:0,state:'raised',thinking:null,thinking_s:null,seen:el});if(k==='claimed'&&NOW.open.has(x.decision)){const o=NOW.open.get(x.decision);o.age_s+=el-o.seen;o.seen=el;o.state='claimed';o.thinking=x.seat;o.thinking_s=0}if(k==='answered'||k==='abandoned'){NOW.open.delete(x.decision);if(k==='answered'&&x.cost_usd!=null){const s=NOW.spend.find(s=>s.faction_id===x.faction_id);if(s)s.spent_usd=Math.round(((s.spent_usd??0)+x.cost_usd)*1e4)/1e4;else NOW.spend.push({faction_id:x.faction_id,spent_usd:x.cost_usd,budget_usd:null})}}renderNow()});
+src.onerror=()=>{nowView.textContent='The live view is not connected (a wrong token, or the service restarted and minted new ones). Retrying.'};setInterval(renderNow,1000)}
+loadGlossary().then(()=>{refresh();loadEvals();loadStrategy();loadGraph('');startNow()});
 </script></body></html>"""
