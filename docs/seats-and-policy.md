@@ -581,6 +581,16 @@ A crew member holding a seat is the planning occasion the build order has been m
   entities are the right pattern (superseding natural keys, shape-checked writes) but the wrong
   vocabulary: a handoff's next step points at a board item. The ledger gets game terms —
   commitment, review, policy change — proposed through Camayoc's ontology process.
+- **Slice 2 is built** (`ledger.py`, `shapes/na-ledger.shapes.ttl`, sha-pinned like na-skill,
+  every term in `na:` and none aliasing `aegis:GitHubReview`): one `CampaignLedger` per seat
+  identity (the seat's principal, or `principal#faction` when a principal holds several seats)
+  on the `SkillBackend` protocol, append-only, one knot per write. `na:Commitment` supersedes
+  by natural key and the earlier version stays readable; `na:Review` is written once per
+  review, `acted` with the directive, plan and policy-change ids it produced, or `missed`;
+  `na:LedgerState` records each write. `/agent/directive`, `/agent/plan` and `/agent/policy`
+  take an optional `commitment` under a seat token, shape-checked before the write applies,
+  and `GET /agent/review` is the review's context: the open review, the open commitments and
+  the last five reviews. The service keeps ledgers in memory; real databases are aegis-dr3.
 
 ## 7. The console
 

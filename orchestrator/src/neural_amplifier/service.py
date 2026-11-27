@@ -11,7 +11,7 @@ from __future__ import annotations
 import json
 import logging
 import os
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from pathlib import Path
 from typing import cast
 
@@ -33,6 +33,7 @@ from .faction_policy import SET_BY, KnobError, PolicyStore, SetBy, registry
 from .grounding_evidence import Cache as GroundingCache
 from .intents import IntentError, UnitIntent
 from .intents import validate as validate_intent
+from .ledger import CampaignLedger, LedgerBook, fake_ledger_backend
 from .live import LiveStream, RunRecord, ViewerTokens
 from .memory import memory_scope
 from .orchestrator import Orchestrator
@@ -42,6 +43,7 @@ from .pending import NotClaimable, Pending
 from .queued import Comparator, Predicate, QueuedAnswer, QueueError, QueueStore
 from .replay import WorldViewStore
 from .seats import SEAT_HEADER, SeatRouter, SeatTokens, seat_entities
+from .skill_quipu import SkillBackend, SkillWriteRefused
 from .strategist import ReviewScheduler, every_from_env
 from .telemetry import OtelSink, Sink, sinks_for
 from .turnplan import PlanEntry, PlanError, PlanStore, TurnPlan
@@ -500,6 +502,7 @@ def create_app(
     brain: Brain | None = None,
     log: DecisionLog | None = None,
     sinks: Sequence[Sink] | None = None,
+    open_ledger: Callable[[str], SkillBackend] | None = None,
 ) -> FastAPI:
     app = FastAPI(title="Neural Amplifier orchestrator", version="0.1.0")
 
@@ -666,12 +669,82 @@ def create_app(
             )
     # The strategist's review cadence (§6, aegis-8fye.8). Seat mode only, and only seats that
     # name a strategist; a missed review is logged on the seat's own log and changes nothing.
+    #
+    # Each seat's campaign ledger (§6, slice 2): one per seat IDENTITY, the seat's principal, or
+    # principal#faction when one principal holds several seats, so no two seats share a ledger.
+    # In memory unless the caller opens real stores (real databases are aegis-dr3).
+    ledgers = LedgerBook(open_ledger or (lambda _identity: fake_ledger_backend()))
+    app.state.ledgers = ledgers
+    seat_identity: dict[int, str] = {}
+    if router is not None:
+        principals = [seat.principal for seat in router.seats.values()]
+        for fid, seat in router.seats.items():
+            shared = principals.count(seat.principal) > 1
+            seat_identity[fid] = f"{seat.principal}#{fid}" if shared else seat.principal
+    app.state.seat_identity = seat_identity
+
+    def ledger_for(fid: int) -> CampaignLedger | None:
+        identity = seat_identity.get(fid)
+        return ledgers.ledger(identity) if identity is not None else None
+
     reviews = (
-        ReviewScheduler(router.seats, Doorbell.from_env(), resolved_log, every=every_from_env())
+        ReviewScheduler(
+            router.seats,
+            Doorbell.from_env(),
+            resolved_log,
+            every=every_from_env(),
+            ledger_for=ledger_for,
+        )
         if router is not None
         else None
     )
     app.state.reviews = reviews
+
+    def _commitment(
+        request: Request, body: dict[str, object]
+    ) -> tuple[CampaignLedger, dict[str, object]] | None:
+        """A commitment attached to a write, shape-checked BEFORE the write is applied.
+
+        Only under a seat token: the ledger is the seat identity's, never named by the caller.
+        """
+        raw = body.get("commitment")
+        if raw in (None, ""):
+            return None
+        if not isinstance(raw, dict):
+            raise HTTPException(422, "commitment must be an object")
+        seat = _seat(request)
+        ledger = ledger_for(seat) if seat is not None else None
+        if ledger is None:
+            raise HTTPException(
+                403, "a commitment needs a seat token: it goes in the seat's ledger"
+            )
+        spec = {k: v for k, v in raw.items() if k not in ("via", "ref", "seat")}
+        try:
+            ledger.check(spec)
+        except SkillWriteRefused as exc:
+            raise HTTPException(422, f"commitment refused: {exc}") from exc
+        return ledger, spec
+
+    def _commit(
+        attached: tuple[CampaignLedger, dict[str, object]] | None, via: str, ref: str
+    ) -> object:
+        if attached is None:
+            return None
+        ledger, spec = attached
+        try:
+            return ledger.commit(spec, via=via, ref=ref).summary()
+        except SkillWriteRefused as exc:  # checked above; a refusal here is a store problem
+            raise HTTPException(422, f"commitment refused: {exc}") from exc
+
+    @app.get("/agent/review")
+    def agent_review(request: Request) -> dict[str, object]:
+        """A strategic review's context for THIS seat: the open review (if any), the seat's
+        open commitments and its last five reviews. Seat token only."""
+        seat = _seat(request)
+        if seat is None or reviews is None:
+            raise HTTPException(404, "reviews run in seat mode only ([seats] with a strategist)")
+        return {"faction_id": seat, **reviews.context(seat)}
+
     # Who may open the live stream: each seat's own token (player view) or the spectator token,
     # written to <run>/spectator/token at 0600. Opening the spectator view marks the run record.
     viewers = ViewerTokens(seat_tokens, spectator=os.environ.get("NA_SPECTATOR_TOKEN") or None)
@@ -789,6 +862,7 @@ def create_app(
                 raise HTTPException(422, f"set_by must be one of {list(SET_BY)}")
             raise HTTPException(422, f"set_by is derived from the caller: {set_by!r} here")
         seen = latest_view.get(fid)
+        attached = _commitment(request, body)
         try:
             result = faction_policy.set_policy(
                 fid,
@@ -800,9 +874,12 @@ def create_app(
             )
         except KnobError as exc:
             raise HTTPException(422, str(exc)) from exc
+        turn = seen.turn if seen is not None else None
+        ref = f"policy:{body.get('knob')}@turn{turn}"
         if reviews is not None:
-            reviews.note_write(fid, "policy")
-        return result
+            reviews.note_write(fid, "policy", ref)
+        committed = _commit(attached, "policy", ref)
+        return result if committed is None else {**result, "commitment": committed}
 
     def _seat_intent(seat: int | None, raw: object) -> object:
         """Seat mode: an intent goes in the seat's own graph; a different faction is refused."""
@@ -1093,9 +1170,10 @@ def create_app(
             pending = queue.peek_for(decision_id, _seat(request))
             if pending is None:
                 raise HTTPException(409, f"no open decision {decision_id!r} to attach a plan to")
+            attached = _commitment(request, body)
             try:
                 directive = Directive.model_validate(
-                    {k: v for k, v in body.items() if k != "decision_id"}
+                    {k: v for k, v in body.items() if k not in ("decision_id", "commitment")}
                 )
             except ValidationError as exc:
                 raise HTTPException(422, f"not a well-formed directive: {exc}") from exc
@@ -1105,13 +1183,17 @@ def create_app(
                 raise HTTPException(422, rejected[0])
             pending.proposed_directives.extend(accepted)
             if reviews is not None:
-                reviews.note_write(pending.world_view.faction_id, "directive")
-            return {
+                reviews.note_write(pending.world_view.faction_id, "directive", accepted[0].id)
+            out: dict[str, object] = {
                 "decision_id": decision_id,
                 "issued": accepted[0].id,
                 "baseline": accepted[0].baseline,
                 "status": "attached; it takes effect when you submit this decision",
             }
+            committed = _commit(attached, "directive", accepted[0].id)
+            if committed is not None:
+                out["commitment"] = committed
+            return out
 
         @app.post("/agent/submit")
         def agent_submit(request: Request, body: dict[str, object]) -> dict[str, object]:
@@ -1679,10 +1761,16 @@ def create_app(
         except PlanError as exc:
             # 422 while the agent still holds the strategy and can fix the entry it got wrong.
             raise HTTPException(422, str(exc)) from exc
+        attached = _commitment(request, body)
         turn_plan.install(installed)
+        ref = f"plan:turn{turn}"
         if reviews is not None:
-            reviews.note_write(faction_id, "plan")
-        return {"plan": installed.summary()}
+            reviews.note_write(faction_id, "plan", ref)
+        committed = _commit(attached, "plan", ref)
+        out: dict[str, object] = {"plan": installed.summary()}
+        if committed is not None:
+            out["commitment"] = committed
+        return out
 
     @app.get("/agent/plan")
     def agent_plan_list(

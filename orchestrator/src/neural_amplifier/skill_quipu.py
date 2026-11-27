@@ -135,8 +135,9 @@ class QpBackend:
         shapes: Path = SHAPES_PATH,
         run: Runner = subprocess.run,
         timeout: float = 60.0,
+        pin: Callable[[Path], bytes] = shapes_bytes,
     ) -> None:
-        shapes_bytes(shapes)  # the pin is checked before the store is touched
+        pin(shapes)  # the pin is checked before the store is touched (ledger.py passes its own)
         self.db = Path(db)
         self.qp = qp
         self.shapes = shapes
@@ -417,21 +418,27 @@ class FakeBackend:
     ``search(query, limit, triples)`` and returns subject IRIs best first.
     """
 
-    def __init__(self, search: Callable[[str, int, list[Triple]], list[str]] | None = None) -> None:
+    def __init__(
+        self,
+        search: Callable[[str, int, list[Triple]], list[str]] | None = None,
+        check: Callable[[Iterable[Fact]], None] | None = None,
+    ) -> None:
+        #: The shape check: ``na-skill``'s by default; the campaign ledger passes its own.
+        self._check = check or check_facts
         self._states: list[frozenset[Fact]] = [frozenset()]
         self._lock = threading.Lock()
         if search is not None:
             self.search = lambda query, limit: search(query, limit, self.triples())
 
     def validate(self, turtle: str) -> None:
-        fake_validate(turtle)
+        self._check(_parse_turtle(turtle))
 
     def knot(self, turtle: str) -> int:
         facts = frozenset(_parse_turtle(turtle))
-        check_facts(facts)
+        self._check(facts)
         with self._lock:
             merged = self._states[-1] | facts
-            check_facts(merged)
+            self._check(merged)
             self._states.append(merged)
             return len(self._states) - 1
 
