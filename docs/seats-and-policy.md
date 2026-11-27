@@ -22,7 +22,7 @@ Rulings from Stiwi, 2026-11-26, recorded in Quipu under `NeuralAmplifier`:
 
 1. Any harness — an `st` crew member, Claude Code — can play the game. A person can play **with**
    it and **against** it, and watch its behaviour in a web console while playing.
-2. Interactive play happens on Linux, on `vati`.
+2. Interactive play happens on Linux, on the game host.
 3. Interactive play on the Claude Code subscription lane counts inside the spend envelope, and
    any budget is fine for it. It is still metered and reported (§8).
 4. Opponents must not be able to see other players' ideas and actions.
@@ -51,7 +51,7 @@ Three things stop that from being a game a person can sit down to:
   every surface. A human, a `claude -p` opponent and a crew member cannot share a game.
 - **The queue is one FIFO.** `DecisionQueue.claim` takes the oldest pending decision whoever
   asks; faction is a parameter the caller supplies on the reads that have one.
-- **Every decision is a model call.** The last long run on `vati` made 1,817 LLM decisions in
+- **Every decision is a model call.** The last long run on the game host made 1,817 LLM decisions in
   173 turns for one faction, about ten a turn, each one freezing the game window. Six opponents
   at that rate is not a turn-based game, it is a queue.
 
@@ -133,7 +133,7 @@ Read from source; none of this is a claim about a running game.
   without being handed the game.
 - **Console views** are tokens too (§7).
 
-**Tier 2 — the process.** A crew member on `vati` shares a unix user and a filesystem with the
+**Tier 2 — the process.** A crew member on the game host shares a unix user and a filesystem with the
 orchestrator, the run directory and the game's save files, so Tier 1 stops an honest agent and
 not a curious one with a shell.
 
@@ -474,7 +474,7 @@ A crew member holding a seat is the planning occasion the build order has been m
 
 ## 7. The console
 
-Built on the existing dashboard (`dashboard.py`, served on `vati` port 8088), which is a
+Built on the existing dashboard (`dashboard.py`, served on the game host at port 8088), which is a
 read-only archive polled every five seconds. Rikuy is a static site whose live readers ship
 disabled, so it is not the host for this.
 
@@ -492,8 +492,8 @@ disabled, so it is not the host for this.
 - **Graph**, later: the seat's Quipu store through a server-side proxy of `/changes/stream`.
   Quipu's feeds are not authorised per graph, so a browser never talks to them directly.
 
-The game itself is a Wine window on `vati`'s display; the console sits beside it or on a second
-device at `vati.lan:8088`.
+The game itself is a Wine window on the game host's display; the console sits beside it or on a
+second device at port 8088 on that host.
 
 ## 8. Spend
 
@@ -529,7 +529,7 @@ between reviews.
 
 Each step is playable or measurable on its own.
 
-1. **Lane and host.** Stand up the crew and the tracker. Bring `vati` back to a running game: no
+1. **Lane and host.** Stand up the crew and the tracker. Bring the game host back to a running game: no
    decision has landed there since 2026-08-24, and the dashboard service is on the scripted
    brain.
 2. **A first game, no new code.** A person on the human slot, one opponent routed through
