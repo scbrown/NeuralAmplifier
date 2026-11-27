@@ -107,3 +107,22 @@ jobs:
             thinker/build/**/thinker.dll
             thinker/build/**/thinker.exe
           if-no-files-found: error
+
+  opensmac-patch:
+    name: OpenSMAC adapter (patch applies and builds)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # Clones OpenSMAC at adapters/opensmac/SMAC_PIN, applies the NA patches and builds
+      # opensmac_headless in the same bubblewrap sandbox used locally (no network, tmpfs HOME).
+      # No game data is involved, so the record/replay test itself runs only on a game host.
+      - name: Install bubblewrap
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends bubblewrap
+          # Ubuntu 24.04 restricts unprivileged user namespaces through AppArmor.
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 || true
+      - name: Build patched opensmac_headless
+        run: |
+          adapters/opensmac/build.sh "$RUNNER_TEMP/opensmac"
+          test -x "$RUNNER_TEMP/opensmac/smac/build/opensmac_headless"

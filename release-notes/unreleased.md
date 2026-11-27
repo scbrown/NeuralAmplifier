@@ -6,6 +6,14 @@ below against the code it ships.
 
 ## Changes
 
+- **OpenSMAC eval adapter.** A third adapter, for eval and research only, beside
+  Thinker: `adapters/opensmac/` carries patch files plus a build script for
+  OpenSMAC at a pinned commit (no fork). Four decision hooks (`base_build`,
+  `tech_selection`, `social_ai`, `base_hurry`) write one JSONL decision record
+  per call in `live` mode and re-apply the logged choices in `replay` mode.
+  Replay fails loudly on an `inputs_sha256` divergence. `replay_test.sh` checks
+  that a 300-turn standard game replays sha256-identical, turn by turn. Thinker
+  is unchanged.
 - **Seat isolation at the API.** Under a `[seats]` table the orchestrator mints
   one token per seat at start and writes it to `<run>/seat-<n>/token` (mode
   0600). Start each seat's MCP server with `neural-amplifier mcp --seat-token
