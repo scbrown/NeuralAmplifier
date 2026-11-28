@@ -105,6 +105,7 @@ class ReviewScheduler:
         log: DecisionLog | None = None,
         every: int = DEFAULT_EVERY,
         ledger_for: Callable[[int], CampaignLedger | None] | None = None,
+        game_id: str | None = None,
     ) -> None:
         if every < 1:
             raise ValueError("review cadence must be at least one turn")
@@ -115,8 +116,10 @@ class ReviewScheduler:
         self.every = every
         #: The seat's campaign ledger, by faction id; None (or a None result) records nothing.
         self.ledger_for = ledger_for
+        #: Part of every review id. A seat's campaign ledger spans games, and a review's ledger
+        #: node is keyed by its id alone, so the id must be unique across games and restarts.
+        self.game_id = game_id
         self._state: dict[int, _SeatState] = {}
-        self._counter = 0
         self._lock = threading.Lock()
         #: Every review_missed event, in order — also what the seat's log received.
         self.missed: list[dict[str, object]] = []
@@ -155,9 +158,8 @@ class ReviewScheduler:
                 # An open review already asks the strategist to look; ringing again on a second
                 # trigger inside it is noise, and the open one's miss check still stands.
                 return None
-            self._counter += 1
             review = Review(
-                id=f"review-s{fid}-{self._counter}",
+                id=self.review_id(fid, turn),
                 turn=turn,
                 due_turn=turn + self.every,
                 reason=reason,
@@ -171,6 +173,19 @@ class ReviewScheduler:
             )
         )
         return review
+
+    def review_id(self, fid: int, turn: int) -> str:
+        """``review-<game>-s<seat>-t<turn>``: the same review gets the same id in every process.
+
+        It used to be a per-process counter (``review-s1-1``). After a restart, which resumes the
+        same game, a new process minted ``review-s1-1`` again, and the ledger merged the new
+        review onto the old one's node. At most one review rings per seat per turn: one cannot
+        ring while another is open, and an open review expires only at a later turn. So game,
+        seat and turn identify it. A restart that replays the same turn names the same review,
+        and the ledger records it once.
+        """
+        game = f"{self.game_id}-" if self.game_id else ""
+        return f"review-{game}s{fid}-t{turn}"
 
     def _start(self, thread: threading.Thread) -> None:
         """Start a background thread, dropping the finished ones from ``threads`` first."""
@@ -237,6 +252,16 @@ class ReviewScheduler:
 
         def write() -> None:
             try:
+                # The in-memory set covers this process; the ledger covers an earlier one.
+                if any(r.review_id == review.id for r in ledger.reviews()):
+                    with self._threads_lock:
+                        self.duplicate_review_ids += 1
+                    log.warning(
+                        "review %s is already in seat %s's ledger; not recording it twice",
+                        review.id,
+                        fid,
+                    )
+                    return
                 ledger.record_review(
                     review.id,
                     review.turn,

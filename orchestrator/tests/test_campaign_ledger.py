@@ -345,16 +345,64 @@ def test_a_duplicate_review_id_is_skipped_counted_and_warned(caplog) -> None:
     ledger = CampaignLedger(fake_ledger_backend(), "three")
     seats = {3: Seat(3, "three", "agent", strategist="agent")}
     s = ReviewScheduler(seats, QuietBell(), every=3, ledger_for=lambda fid: ledger)
-    for t in range(1, 5):  # rings review-s3-1 at 4
-        s.observe(view(t))
-    s._counter = 0  # force the next review to reuse the id
+    s.review_id = lambda fid, turn: "review-twin"  # type: ignore[method-assign]
     with caplog.at_level(logging.WARNING, logger="neural_amplifier.strategist"):
-        for t in range(5, 11):  # review-s3-1 closes at 7; its id-twin rings at 7, closes at 10
+        for t in range(1, 11):  # rings at 4 (closes at 7) and its id-twin at 7 (closes at 10)
             s.observe(view(t))
         _join(s)
-    assert [r.review_id for r in ledger.reviews()] == ["review-s3-1"]
+    assert [r.review_id for r in ledger.reviews()] == ["review-twin"]
     assert s.duplicate_review_ids == 1
-    assert any("review-s3-1 already recorded" in r.getMessage() for r in caplog.records)
+    assert any("review-twin already recorded" in r.getMessage() for r in caplog.records)
+
+
+def _play(s: ReviewScheduler, turns: range) -> None:
+    for t in turns:
+        s.observe(view(t))
+    _join(s)
+
+
+def test_a_restarted_scheduler_does_not_record_a_review_twice(caplog) -> None:
+    # aegis-22my: a restart resumes the same game. The old counter ids (review-s3-1) started
+    # over in the new process and merged a second review onto the first one's ledger node.
+    backend = fake_ledger_backend()
+    seats = {3: Seat(3, "three", "agent", strategist="agent")}
+    first = ReviewScheduler(
+        seats,
+        QuietBell(),
+        every=3,
+        ledger_for=lambda fid: CampaignLedger(backend, "three"),
+        game_id="g1",
+    )
+    _play(first, range(1, 8))  # rings at 4, missed at 7
+    second = ReviewScheduler(  # the restarted process: fresh memory, same game, same ledger
+        seats,
+        QuietBell(),
+        every=3,
+        ledger_for=lambda fid: CampaignLedger(backend, "three"),
+        game_id="g1",
+    )
+    with caplog.at_level(logging.WARNING, logger="neural_amplifier.strategist"):
+        _play(second, range(1, 8))  # replays the same turns: the same review, by the same id
+    ids = [r.review_id for r in CampaignLedger(backend, "three").reviews()]
+    assert ids == ["review-g1-s3-t4"]
+    assert second.duplicate_review_ids == 1
+    assert any("already in seat 3's ledger" in r.getMessage() for r in caplog.records)
+
+
+def test_the_same_turn_in_another_game_is_another_review() -> None:
+    backend = fake_ledger_backend()
+    seats = {3: Seat(3, "three", "agent", strategist="agent")}
+    for game in ("g1", "g2"):  # a seat's ledger spans games
+        s = ReviewScheduler(
+            seats,
+            QuietBell(),
+            every=3,
+            ledger_for=lambda fid: CampaignLedger(backend, "three"),
+            game_id=game,
+        )
+        _play(s, range(1, 8))
+    ids = [r.review_id for r in CampaignLedger(backend, "three").reviews()]
+    assert ids == ["review-g1-s3-t4", "review-g2-s3-t4"]
 
 
 def test_a_failed_ledger_write_after_a_landed_directive_is_not_a_422(
