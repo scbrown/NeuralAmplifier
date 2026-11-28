@@ -41,6 +41,7 @@ spends nothing.
 from __future__ import annotations
 
 import logging
+import math
 import os
 import threading
 from collections.abc import Iterable, Mapping
@@ -54,45 +55,84 @@ log = logging.getLogger(__name__)
 SPEND_CEILING = "spend-ceiling"
 
 
-#: Anthropic first-party rates, USD per million tokens (input, output). Matched by prefix, longest
-#: first, so ``claude-haiku-4-5-20251001`` prices as ``claude-haiku-4-5``.
+#: Anthropic first-party rates, USD per million tokens (input, output), as published on
+#: Anthropic's pricing page (https://www.anthropic.com/pricing, API section; checked 2026-11).
+#: Matched by prefix, longest first, so ``claude-haiku-4-5-20251001`` prices as
+#: ``claude-haiku-4-5`` and ``claude-opus-4-1`` falls through to the ``claude-opus-4`` row. Opus 4,
+#: 4.1 and their dated ids are $15/$75; only Opus 4.5 and later dropped to $5/$25, so each of those
+#: has its own row rather than sharing the family prefix.
 PRICES: dict[str, tuple[float, float]] = {
     "claude-fable-5-2": (8.0, 40.0),
     "claude-fable-5-1": (10.0, 50.0),
     "claude-fable-5": (10.0, 50.0),
     "claude-opus-5-5": (4.0, 20.0),
     "claude-opus-5": (5.0, 25.0),
-    "claude-opus-4": (5.0, 25.0),
+    "claude-opus-4-8": (5.0, 25.0),
+    "claude-opus-4-7": (5.0, 25.0),
+    "claude-opus-4-6": (5.0, 25.0),
+    "claude-opus-4-5": (5.0, 25.0),
+    "claude-opus-4": (15.0, 75.0),
     "claude-sonnet-5-5": (2.0, 10.0),
     "claude-sonnet-5": (2.0, 10.0),
     "claude-sonnet-4": (3.0, 15.0),
     "claude-haiku-5-5": (0.10, 0.50),
     "claude-haiku-4-5": (1.0, 5.0),
 }
+#: Models whose rate rises past a prompt size: (input tokens above which, input, output). Haiku 5.5
+#: is $0.10/$0.50 up to 100K prompt tokens and $0.50/$2.50 beyond.
+LONG_PROMPT: dict[str, tuple[int, float, float]] = {
+    "claude-haiku-5-5": (100_000, 0.50, 2.50),
+}
 CACHE_READ = 0.1
 CACHE_WRITE = 1.25
 
 
-def _rates(model: str) -> tuple[float, float]:
+def parse_price(raw: str) -> tuple[float, float]:
+    """``"<input>,<output>"`` USD per million tokens, both finite and >= 0; ValueError otherwise.
+
+    Refused rather than guessed: a typo here would meter a paid lane at the wrong rate.
+    """
+    parts = raw.split(",")
+    if len(parts) != 2:
+        raise ValueError(f"NA_BRAIN_PRICE must be '<input>,<output>', got {raw!r}")
+    inp, out = (float(x) for x in parts)
+    if not all(math.isfinite(v) and v >= 0 for v in (inp, out)):
+        raise ValueError(f"NA_BRAIN_PRICE rates must be finite and >= 0, got {raw!r}")
+    return inp, out
+
+
+def _prefix(model: str, table: Mapping[str, object]) -> str | None:
+    return next((p for p in sorted(table, key=len, reverse=True) if model.startswith(p)), None)
+
+
+def _rates(model: str, prompt_tokens: int = 0) -> tuple[float, float]:
     override = os.environ.get("NA_BRAIN_PRICE")
     if override:
+        # Validated at config load (``config.load``); a value set after load that does not
+        # parse is priced at the dearest rate, so it can only trip the ceiling early.
         try:
-            inp, out = (float(x) for x in override.split(","))
-            return inp, out
+            return parse_price(override)
         except ValueError:
-            log.warning("NA_BRAIN_PRICE=%r is not '<input>,<output>'; using the table", override)
-    for prefix in sorted(PRICES, key=len, reverse=True):
-        if model.startswith(prefix):
-            return PRICES[prefix]
-    # Unknown model: the dearest listed rate, so the ceiling trips early rather than never.
-    return max(PRICES.values())
+            log.warning("NA_BRAIN_PRICE=%r is malformed; pricing at the dearest rate", override)
+            return max(PRICES.values())
+    prefix = _prefix(model, PRICES)
+    if prefix is None:
+        # Unknown model: the dearest listed rate, so the ceiling trips early rather than never.
+        return max(PRICES.values())
+    long_prefix = _prefix(model, LONG_PROMPT)
+    if long_prefix is not None:
+        above, inp, out = LONG_PROMPT[long_prefix]
+        if prompt_tokens > above:
+            return inp, out
+    return PRICES[prefix]
 
 
 def price_usage(model: str, usage: Mapping[str, int] | None) -> float | None:
     """USD for one API call from its reported token usage; None when no usage was reported."""
     if not usage:
         return None
-    inp, out = _rates(model)
+    prompt = usage.get("input", 0) + usage.get("cached", 0) + usage.get("cache_write", 0)
+    inp, out = _rates(model, prompt)
     total = (
         usage.get("input", 0) * inp
         + usage.get("cached", 0) * inp * CACHE_READ

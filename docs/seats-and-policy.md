@@ -655,7 +655,10 @@ a cost per call and the record already carries it.
   them against the published per-million-token rates in `spend.py` (cache reads 0.1x, cache
   writes 1.25x the input rate). A model missing from that table is priced at the dearest listed
   rate, so the ceiling trips early rather than never; `NA_BRAIN_PRICE="<input>,<output>"` (USD
-  per million tokens) overrides the table.
+  per million tokens) overrides the table. A malformed, negative or non-finite
+  `NA_BRAIN_PRICE` is refused at config load, as a malformed `budget_usd` is. The table is
+  Anthropic's published first-party rates: Opus 4 and 4.1 are $15/$75, Opus 4.5 and later are
+  priced per row, and Haiku 5.5 moves to its higher rate past 100K prompt tokens.
 - The check is not atomic: it runs before a call and the spend lands when that decision's record
   is written, so decisions in flight at the same time can each pass it. The ceiling can be
   overshot by up to one call per concurrent decision. It bounds spend; it is not an exact cap.

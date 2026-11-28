@@ -277,6 +277,14 @@ def load(path: Path | None = None) -> Config:
     knowledge = _table(data, "knowledge")
     run = _table(data, "run")
 
+    price = env("NA_BRAIN_PRICE")
+    if price:
+        from .spend import parse_price
+
+        try:
+            parse_price(price)
+        except ValueError as exc:
+            raise ConfigError(str(exc)) from exc
     return Config(
         brain=Brain(
             kind=(_text(env("NA_BRAIN"), brain.get("kind"), "scripted") or "scripted").lower(),

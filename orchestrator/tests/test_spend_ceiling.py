@@ -156,6 +156,8 @@ def test_a_repair_re_ask_is_also_guarded(thinker_base: WorldView) -> None:
     assert brain.calls == 1
     assert record.tier == "fallback" and record.degraded and record.cost_usd == 0.01
     assert record.degrade_reason and record.degrade_reason.startswith(SPEND_CEILING)
+    # A ceiling stop is not a model failure: the reason must not blame failed repairs.
+    assert "repair attempt" not in record.degrade_reason
 
 
 def _claude_reply(world_view: WorldView, cost: float) -> Any:
@@ -262,7 +264,7 @@ def test_the_api_lane_is_priced_from_its_tokens(monkeypatch: pytest.MonkeyPatch)
     assert price_usage("claude-haiku-4-5", usage) == pytest.approx(1.0 + 0.5 + 0.1)
     assert price_usage("claude-haiku-4-5-20251001", usage) == pytest.approx(1.6)
     # Unknown model: the dearest listed rate, never free.
-    assert price_usage("some-future-model", {"input": 1_000_000}) == pytest.approx(10.0)
+    assert price_usage("some-future-model", {"input": 1_000_000}) == pytest.approx(15.0)
     assert price_usage("claude-haiku-4-5", None) is None
     monkeypatch.setenv("NA_BRAIN_PRICE", "2,4")
     assert price_usage("claude-haiku-4-5", {"input": 1_000_000, "output": 1_000_000}) == (
@@ -309,3 +311,55 @@ def test_the_api_lane_trips_the_ceiling(
     second = orch.decide(thinker_base).record
     assert len(calls) == 1
     assert second.tier == "fallback" and second.degraded
+
+
+@pytest.mark.parametrize(
+    ("model", "rates"),
+    [
+        # Opus 4 and 4.1 (dated or not) are $15/$75; only Opus 4.5+ is $5/$25.
+        ("claude-opus-4-0", (15.0, 75.0)),
+        ("claude-opus-4-1", (15.0, 75.0)),
+        ("claude-opus-4-20250514", (15.0, 75.0)),
+        ("claude-opus-4-1-20250805", (15.0, 75.0)),
+        ("claude-opus-4-5", (5.0, 25.0)),
+        ("claude-opus-4-5-20251101", (5.0, 25.0)),
+        ("claude-opus-4-8", (5.0, 25.0)),
+        ("claude-opus-5-5", (4.0, 20.0)),
+        ("claude-sonnet-4-6", (3.0, 15.0)),
+        ("claude-haiku-5-5", (0.10, 0.50)),
+    ],
+)
+def test_each_model_is_priced_at_its_published_rate(
+    monkeypatch: pytest.MonkeyPatch, model: str, rates: tuple[float, float]
+) -> None:
+    monkeypatch.delenv("NA_BRAIN_PRICE", raising=False)
+    usage = {"input": 1_000_000, "output": 1_000_000}
+    # 1M prompt tokens is past Haiku 5.5's 100K tier; price that row on a small prompt.
+    if model == "claude-haiku-5-5":
+        usage = {"input": 50_000, "output": 50_000}
+        assert price_usage(model, usage) == pytest.approx(sum(rates) * 0.05)
+    else:
+        assert price_usage(model, usage) == pytest.approx(sum(rates))
+
+
+def test_haiku_5_5_long_prompts_cost_the_higher_tier(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("NA_BRAIN_PRICE", raising=False)
+    # Above 100K prompt tokens (cache reads count toward the prompt): $0.50 in, $2.50 out.
+    usage = {"input": 60_000, "cached": 60_000, "output": 10_000}
+    expected = (60_000 * 0.50 + 60_000 * 0.50 * 0.1 + 10_000 * 2.50) / 1_000_000
+    assert price_usage("claude-haiku-5-5", usage) == pytest.approx(expected)
+
+
+@pytest.mark.parametrize("raw", ["cheap", "1", "1,2,3", "nan,1", "1,inf", "-1,2", "1,-2"])
+def test_a_malformed_brain_price_is_refused_at_load(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, raw: str
+) -> None:
+    monkeypatch.setenv("NA_BRAIN_PRICE", raw)
+    with pytest.raises(ConfigError, match="NA_BRAIN_PRICE"):
+        load(tmp_path / "absent.toml")
+
+
+def test_a_well_formed_brain_price_loads(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("NA_BRAIN_PRICE", "2.5, 12")
+    load(tmp_path / "absent.toml")
+    assert price_usage("anything", {"input": 1_000_000}) == pytest.approx(2.5)
