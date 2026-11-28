@@ -238,6 +238,8 @@ class ClaudeCodeBrain:
     """Runs one decision through ``claude -p``, in a fresh process each time."""
 
     name = "claude-code"
+    #: Every call is billed; the spend ceiling guards this brain (``spend.py``).
+    paid = True
 
     def __init__(
         self,
@@ -342,11 +344,16 @@ class ClaudeCodeBrain:
             raise BrainError(f"claude -p reported an error: {envelope.get('result')!r:.200}")
 
         _record_provider_call("success")
-        self.cost_usd += float(envelope.get("total_cost_usd") or 0.0)
+        cost = float(envelope.get("total_cost_usd") or 0.0)
+        self.cost_usd += cost
         orders = _parse_orders(str(envelope.get("result") or ""))
         if orders is None:
             self.malformed += 1
-            raise BrainError("could not find orders JSON in the reply")
+            # The call was billed even though it is unusable; the spend ceiling must count it.
+            error = BrainError("could not find orders JSON in the reply")
+            error.cost_usd = cost  # type: ignore[attr-defined]
+            raise error
+        orders.cost_usd = cost
         orders.usage = _usage_of_envelope(envelope)
         orders.served_model = _served_model(envelope)
         return orders

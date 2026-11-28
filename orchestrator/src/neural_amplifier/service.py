@@ -44,6 +44,7 @@ from .queued import Comparator, Predicate, QueuedAnswer, QueueError, QueueStore
 from .replay import WorldViewStore
 from .seats import SEAT_HEADER, SeatRouter, SeatTokens, seat_entities
 from .skill_quipu import SkillBackend, SkillWriteRefused
+from .spend import SpendLedger
 from .strategist import ReviewScheduler, every_from_env
 from .telemetry import OtelSink, Sink, sinks_for
 from .turnplan import PlanEntry, PlanError, PlanStore, TurnPlan
@@ -581,8 +582,23 @@ def create_app(
     faction_policy = PolicyStore()
     app.state.faction_policy = faction_policy
 
+    # The LLM spend ceiling (spend.py). Seeded from the decision log already on disk so a
+    # restarted service keeps a game's meter; always built, and inert while no budget is set.
+    spend = SpendLedger(
+        default_budget=config.run.budget_usd,
+        seat_budgets=(
+            {fid: seat.budget_usd for fid, seat in resolved_brain.seats.items()}
+            if isinstance(resolved_brain, SeatRouter)
+            else None
+        ),
+    )
+    if resolved_log is not None:
+        spend.load(resolved_log.read())
+    app.state.spend = spend
+
     orchestrator = Orchestrator(
         brain=resolved_brain,
+        spend=spend,
         faction_policy=faction_policy,
         log=resolved_log,
         sinks=resolved_sinks,
@@ -1034,6 +1050,9 @@ def create_app(
                 "failures": [f.error for f in orchestrator.telemetry.failures[-3:]],
             },
             "reviews": reviews.status() if reviews is not None else None,
+            # The spend ceiling: per game/seat spend, budget, and whether it tripped. A tripped
+            # ceiling means later decisions are degraded fallbacks, not model play.
+            "spend": spend.status(),
             "live": {
                 "viewers": live.viewers,
                 "dropped": live.dropped,

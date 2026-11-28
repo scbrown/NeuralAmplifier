@@ -96,6 +96,9 @@ class ClaudeBrain:
     """
 
     name = "claude"
+    #: Billed per call. It reports tokens but no USD price, so its records carry no `cost_usd`
+    #: and the spend ceiling cannot trip on it until a price is recorded (``spend.py``).
+    paid = True
 
     def __init__(self, model: str = DEFAULT_MODEL, effort: str | None = "high") -> None:
         self.model = model

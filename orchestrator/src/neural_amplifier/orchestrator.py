@@ -47,6 +47,7 @@ from .knowledge import (
 )
 from .policy import SurfacePolicy
 from .queued import QueuedAnswer, QueueStore
+from .spend import SpendLedger
 from .telemetry import Emitter, Sink
 from .turnplan import PlanEntry, PlanStore
 from .turnplan import offered as plan_offered
@@ -144,6 +145,14 @@ def _deferral_id(world_view: WorldView) -> str:
     return f"{surface}:{world_view.turn}:{uuid.uuid4().hex[:8]}"
 
 
+def _plus_cost(total: float | None, exc: BaseException) -> float | None:
+    """Add what a FAILED call was billed for: an unusable reply is still a paid one."""
+    cost = getattr(exc, "cost_usd", None)
+    if isinstance(cost, int | float) and not isinstance(cost, bool):
+        return (total or 0.0) + float(cost)
+    return total
+
+
 def _native_choice(world_view: WorldView) -> str | None:
     """What the engine will apply while the agent thinks — when it told us.
 
@@ -203,8 +212,13 @@ class Orchestrator:
         grounding_cache: Cache | None = None,
         jev: Caller | None = None,
         faction_policy: PolicyStore | None = None,
+        spend: SpendLedger | None = None,
     ) -> None:
         self.brain = brain
+        #: The LLM spend ceiling (``spend.py``). Absent means no ceiling, which is how this behaved
+        #: before it existed. When present it is also a telemetry sink, so its totals are the
+        #: decision log's own ``cost_usd`` summed per game — never a separate counter.
+        self.spend = spend
         #: Per-faction policy overlay; absent means every faction is under Thinker's defaults.
         self.faction_policy = faction_policy
         self.jev = jev
@@ -222,7 +236,11 @@ class Orchestrator:
         self.game_id = game_id or f"game-{uuid.uuid4().hex[:8]}"
         # Record of truth first: if a downstream exporter fails, the JSONL line
         # is already written (``docs/observability.md`` §3).
-        self.telemetry = Emitter(*([log] if log is not None else []), *sinks)
+        # The spend ledger directly after the log: it must count exactly what the log holds, and
+        # the console stream stays last.
+        self.telemetry = Emitter(
+            *([log] if log is not None else []), *([spend] if spend is not None else []), *sinks
+        )
         # Records carry only the hash of their input, so replay needs the
         # bytes kept somewhere. Content-addressed, so this dedupes for free.
         self.store = store
@@ -513,9 +531,29 @@ class Orchestrator:
         #: store is configured — which is why `repairs` is recorded separately: the count is
         #: what says a repair happened at all, the hashes are what make it reconstructible.
         repair_inputs: list[str] = []
+        # The spend ceiling. Checked before EVERY paid call — a repair is another billed call —
+        # and summed over attempts, so the record carries what this decision actually cost.
+        paid_seat = self._paid_seat(world_view)
+        cost: float | None = None
+        ceiling = False
         while True:
+            refusal = (
+                self.spend.refusal(self.game_id, paid_seat[1], pending=cost or 0.0)
+                if self.spend is not None and paid_seat[0]
+                else None
+            )
+            if refusal is not None and repairs == 0:
+                return self._spend_ceiling(world_view, fog, grounding, dropped, started, refusal)
             try:
-                orders = self.brain.decide(asked)
+                if refusal is not None:
+                    # Mid-repair: the first attempt was paid for and pushed the game over.
+                    ceiling = True
+                    degrade_reason = refusal
+                    orders = Orders()
+                else:
+                    orders = self.brain.decide(asked)
+                    if orders.cost_usd is not None:
+                        cost = (cost or 0.0) + orders.cost_usd
                 # Before validate(), and that ordering IS the implementation. `defer` is in no
                 # action space — the engine never offers it — so a moment later validation would
                 # correctly call it an id the engine did not offer, strip it, find nothing left,
@@ -529,11 +567,13 @@ class Orchestrator:
             except BrainError as exc:
                 degrade_reason = str(exc) or "brain error"
                 orders = Orders()
+                cost = _plus_cost(cost, exc)
             except Exception as exc:
                 # A brain that raises something unexpected must still not stall the
                 # game (invariant #9). Degrade, and record why.
                 degrade_reason = f"{type(exc).__name__}: {exc}"
                 orders = Orders()
+                cost = _plus_cost(cost, exc)
 
             checked = validate(orders, asked)
             violations += len(checked.unknown)
@@ -582,7 +622,11 @@ class Orchestrator:
             if repairs:
                 degrade_reason = f"{degrade_reason}; {repairs} repair attempt(s) also failed"
 
-        final = self._fallback(world_view) if degrade_reason is not None else allowed
+        if ceiling:
+            # The native answer, as on the spend-ceiling path that never asked at all.
+            final = Orders(degraded=True)
+        else:
+            final = self._fallback(world_view) if degrade_reason is not None else allowed
 
         # A withdrawal answer is intrinsically a promise about later turns. Do not make its
         # durability depend on the model remembering to repeat that semantic fact in a second
@@ -637,12 +681,63 @@ class Orchestrator:
                 configured=self.plan is not None,
                 dropped=dropped,
             ),
+            tier="fallback" if ceiling else "llm",
+            cost_usd=cost,
         )
         # One emit call. Every layer is a projection of *this* object — see the
         # module docstring in ``telemetry.py`` for why that is load-bearing.
         self.telemetry.emit(record)
 
         return Result(orders=final, record=record)
+
+    def _paid_seat(self, world_view: WorldView) -> tuple[bool, int | None]:
+        """Whether the brain that would answer this decision is billed, and its seat.
+
+        Duck-typed like ``_record``: under a seat table the answering driver is the seat's own,
+        so an agent seat is never metered because a priced seat sits beside it.
+        """
+        seat_for = getattr(self.brain, "seat_for", None)
+        seat = seat_for(world_view) if callable(seat_for) else None
+        driver_for = getattr(self.brain, "driver_for", None)
+        answered = (driver_for(world_view) if callable(driver_for) else None) or self.brain
+        return bool(getattr(answered, "paid", False)), (seat.faction_id if seat else None)
+
+    def _spend_ceiling(
+        self,
+        world_view: WorldView,
+        fog: Redaction,
+        grounding: Grounding,
+        dropped: list[str],
+        started: float,
+        reason: str,
+    ) -> Result:
+        """Record a decision the spend ceiling refused to pay for.
+
+        Empty orders, so the engine applies its own native answer — the same hand-back as the
+        deterministic tier. Unlike that tier this IS degraded: the configuration wanted the model
+        and the budget would not allow it, which is exactly what ``degrade_rate`` exists to show.
+        """
+        orders = Orders(degraded=True)
+        record = self._record(
+            world_view=world_view,
+            orders=orders,
+            degrade_reason=reason,
+            latency_ms=int((time.monotonic() - started) * 1000),
+            unknown=0,
+            fog=fog,
+            knowledge=summarise(grounding, Ruling(), self.guard is not None),
+            plan=self._plan_block(
+                world_view,
+                orders,
+                issued=[],
+                rejected=[],
+                configured=self.plan is not None,
+                dropped=dropped,
+            ),
+            tier="fallback",
+        )
+        self.telemetry.emit(record)
+        return Result(orders=orders, record=record)
 
     def _deterministic(
         self,
@@ -980,6 +1075,7 @@ class Orchestrator:
         repeated: int = 0,
         repairs: int = 0,
         repair_inputs: Sequence[str] = (),
+        cost_usd: float | None = None,
     ) -> DecisionRecord:
         # Derive the ledger when the adapter stamped the *inputs* but not the entries.
         #
@@ -1044,6 +1140,7 @@ class Orchestrator:
             # where zeroes are the truth rather than a gap (na-6db: the field existed and was
             # structurally zero on every record, which reads as a measured "free").
             tokens=Tokens(**orders.usage) if orders.usage else Tokens(),
+            cost_usd=round(cost_usd, 6) if cost_usd is not None else None,
             latency_ms=latency_ms,
             adherence_violations=unknown,
             repeated_actions=repeated,

@@ -570,3 +570,7 @@ class Orders(_Model):
     #: attempt 4, which made "which model hit this wall" unanswerable (aegis-5xi). Excluded and
     #: brain-set for the same reasons as `usage`.
     served_model: str | None = Field(default=None, exclude=True)
+    #: What this call was billed for in USD, when the provider priced it. Brain-set and excluded
+    #: for the same reasons as `usage`; the orchestrator writes it to the record and the spend
+    #: ceiling sums it (`spend.py`).
+    cost_usd: float | None = Field(default=None, exclude=True)

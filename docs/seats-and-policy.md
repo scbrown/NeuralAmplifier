@@ -638,9 +638,21 @@ not in the record, so they read `UNKNOWN`. Copilot and Graph are later slices.
 Ruling 3: any budget is fine for interactive play, and it is still counted. `claude -p` reports
 a cost per call and the record already carries it.
 
-- Each seat has `budget_usd`, a meter with a ceiling. A seat that reaches it keeps playing on
-  its skills and its last policy, recorded as a budget stop rather than a degradation.
-- The console shows the meter per seat and per game.
+- Each seat has `budget_usd`, a meter with a ceiling, and it is enforced (`spend.py`). The meter
+  is the decision log: every record carries the `cost_usd` its brain call was billed for, and
+  the guard sums those records per `game_id` and per seat. It is seeded from the log on disk
+  when the service starts, so a restart does not reset it.
+- Once a seat's measured spend reaches its budget, no further paid call is made for that seat.
+  Its decisions fall back to the engine's native answer and are recorded at `tier="fallback"`,
+  `degraded=true`, with a `degrade_reason` starting `spend-ceiling`. One WARNING is logged when
+  it trips. One seat over budget never stops another.
+- An unseated run takes its ceiling from `NA_BUDGET_USD`, or `[run] budget_usd` in `na.toml`.
+  Unset (the default) means no ceiling, which is the behaviour before enforcement existed.
+- Only billed brains (`claude`, `claude-code`) are metered. The `claude` API lane reports tokens
+  but no USD price, so it records no `cost_usd` and its ceiling cannot trip until one is
+  recorded. `claude-code` reports `total_cost_usd` per call.
+- The console shows the meter per seat and per game. A tripped ceiling appears on the decision
+  row, the run banner (`SPEND CEILING`), the live `answered` event, and `/health` under `spend`.
 - The default follows the existing rule on `na-xb1`: up to USD 50 a game, proceed and report.
 
 Skills and policy are the real control. A seat that answers every base spends on bases; a seat

@@ -69,6 +69,23 @@ def _number(env: str | None, toml: object, default: int) -> int:
     raise ConfigError(f"expected a whole number, got {toml!r}")
 
 
+def _usd(env: str | None, toml: object) -> float | None:
+    """A USD ceiling: a number >= 0, or None for "no ceiling". Refused at load when malformed,
+    because a typo here would otherwise read as "unlimited" and spend without a bound."""
+    raw: object = env if env not in (None, "") else toml
+    if raw is None:
+        return None
+    if isinstance(raw, bool):
+        raise ConfigError(f"budget_usd must be a number >= 0, got {raw!r}")
+    try:
+        value = float(raw)  # type: ignore[arg-type]
+    except (TypeError, ValueError) as exc:
+        raise ConfigError(f"budget_usd must be a number >= 0, got {raw!r}") from exc
+    if value < 0 or value != value:
+        raise ConfigError(f"budget_usd must be a number >= 0, got {raw!r}")
+    return value
+
+
 @dataclass(frozen=True)
 class Brain:
     """Which brain answers, and as what.
@@ -119,6 +136,10 @@ class Run:
     #: ``<run_dir>/seat-<n>/token`` (aegis-8fye.3, slice C). Absent, the service infers it from a
     #: decision log at ``<run>/orch/...``.
     run_dir: str | None = None
+    #: The LLM spend ceiling for an UNSEATED run, in USD, per game (``spend.py``). ``NA_BUDGET_USD``
+    #: or ``[run] budget_usd``. None — the default — is no ceiling. Under a seat table each seat's
+    #: own ``budget_usd`` applies instead and this is ignored.
+    budget_usd: float | None = None
 
 
 #: Faction ids a seat can name. 0 is the native-life "faction" and never a player.
@@ -273,6 +294,7 @@ def load(path: Path | None = None) -> Config:
             otel=_flag(env("NA_OTEL"), run.get("otel"), False),
             game_dir=_text(env("NA_GAME_DIR"), run.get("game_dir"), None),
             run_dir=_text(env("NA_RUN_DIR"), run.get("run_dir"), None),
+            budget_usd=_usd(env("NA_BUDGET_USD"), run.get("budget_usd")),
         ),
         surfaces=parse_surfaces(_table(data, "surfaces"), data.get("surface_default"), source),
         seats=parse_seats(_table(data, "seats")),
