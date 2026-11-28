@@ -641,19 +641,28 @@ a cost per call and the record already carries it.
 - Each seat has `budget_usd`, a meter with a ceiling, and it is enforced (`spend.py`). The meter
   is the decision log: every record carries the `cost_usd` its brain call was billed for, and
   the guard sums those records per `game_id` and per seat. It is seeded from the log on disk
-  when the service starts, so a restart does not reset it.
+  when the service starts, so a restart does not reset it. The service keeps the same
+  `game_id` across a restart: `NA_GAME_ID` / `[run] game_id` when set, otherwise the `game_id`
+  of the newest record in its decision log. Only a fresh log starts a new game (and a new meter).
 - Once a seat's measured spend reaches its budget, no further paid call is made for that seat.
   Its decisions fall back to the engine's native answer and are recorded at `tier="fallback"`,
   `degraded=true`, with a `degrade_reason` starting `spend-ceiling`. One WARNING is logged when
   it trips. One seat over budget never stops another.
 - An unseated run takes its ceiling from `NA_BUDGET_USD`, or `[run] budget_usd` in `na.toml`.
   Unset (the default) means no ceiling, which is the behaviour before enforcement existed.
-- Only billed brains (`claude`, `claude-code`) are metered. The `claude` API lane reports tokens
-  but no USD price, so it records no `cost_usd` and its ceiling cannot trip until one is
-  recorded. `claude-code` reports `total_cost_usd` per call.
+- Only billed brains (`claude`, `claude-code`) are metered. `claude-code` reports
+  `total_cost_usd` per call. The `claude` API lane reports tokens only, so it is priced from
+  them against the published per-million-token rates in `spend.py` (cache reads 0.1x, cache
+  writes 1.25x the input rate). A model missing from that table is priced at the dearest listed
+  rate, so the ceiling trips early rather than never; `NA_BRAIN_PRICE="<input>,<output>"` (USD
+  per million tokens) overrides the table.
+- The check is not atomic: it runs before a call and the spend lands when that decision's record
+  is written, so decisions in flight at the same time can each pass it. The ceiling can be
+  overshot by up to one call per concurrent decision. It bounds spend; it is not an exact cap.
 - The console shows the meter per seat and per game. A tripped ceiling appears on the decision
   row, the run banner (`SPEND CEILING`), the live `answered` event, and `/health` under `spend`.
-- The default follows the existing rule on `na-xb1`: up to USD 50 a game, proceed and report.
+- There is no default ceiling: `budget_usd` unset on a seat (and `NA_BUDGET_USD` unset on an
+  unseated run) means unlimited. Set one explicitly to cap a game.
 
 Skills and policy are the real control. A seat that answers every base spends on bases; a seat
 that reviews every ten turns spends on reviews; a seat running verified skills spends nothing

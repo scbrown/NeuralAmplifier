@@ -22,6 +22,17 @@ dashboard shows, never a second in-memory counter that could disagree with it.
 and the engine applies its own native answer (empty orders). One WARNING line is logged the
 first time each game/seat trips; the reason is on every later record, so it is never silent.
 
+**Pricing the API lane.** ``claude -p`` reports a billed ``total_cost_usd``. The Anthropic API
+reports tokens only, so ``ClaudeBrain`` prices its own usage with :func:`price_usage`: the
+published per-million-token rates below, cache reads at 0.1x and cache writes at 1.25x the input
+rate. A model missing from the table is priced at the HIGHEST listed rate, so an unknown model
+trips the ceiling early rather than never. ``NA_BRAIN_PRICE="<input>,<output>"`` (USD per million
+tokens) overrides the table for a contract or partner rate.
+
+**Not atomic.** The check runs before a call and the spend lands when its record is written, so
+decisions in flight at the same moment can each pass the check: the ceiling can be overshot by up
+to one call per concurrent decision. It bounds spend; it is not an exact cap.
+
 Only brains that declare ``paid = True`` are guarded. An agent, human or scripted seat costs
 nothing per call here, and degrading one because a number reached zero would stop a player who
 spends nothing.
@@ -30,6 +41,7 @@ spends nothing.
 from __future__ import annotations
 
 import logging
+import os
 import threading
 from collections.abc import Iterable, Mapping
 
@@ -40,6 +52,71 @@ log = logging.getLogger(__name__)
 #: Prefix of every ``degrade_reason`` this guard writes. Stable: the dashboard and any log
 #: reader recognise a spend-ceiling degradation by it.
 SPEND_CEILING = "spend-ceiling"
+
+
+#: Anthropic first-party rates, USD per million tokens (input, output). Matched by prefix, longest
+#: first, so ``claude-haiku-4-5-20251001`` prices as ``claude-haiku-4-5``.
+PRICES: dict[str, tuple[float, float]] = {
+    "claude-fable-5-2": (8.0, 40.0),
+    "claude-fable-5-1": (10.0, 50.0),
+    "claude-fable-5": (10.0, 50.0),
+    "claude-opus-5-5": (4.0, 20.0),
+    "claude-opus-5": (5.0, 25.0),
+    "claude-opus-4": (5.0, 25.0),
+    "claude-sonnet-5-5": (2.0, 10.0),
+    "claude-sonnet-5": (2.0, 10.0),
+    "claude-sonnet-4": (3.0, 15.0),
+    "claude-haiku-5-5": (0.10, 0.50),
+    "claude-haiku-4-5": (1.0, 5.0),
+}
+CACHE_READ = 0.1
+CACHE_WRITE = 1.25
+
+
+def _rates(model: str) -> tuple[float, float]:
+    override = os.environ.get("NA_BRAIN_PRICE")
+    if override:
+        try:
+            inp, out = (float(x) for x in override.split(","))
+            return inp, out
+        except ValueError:
+            log.warning("NA_BRAIN_PRICE=%r is not '<input>,<output>'; using the table", override)
+    for prefix in sorted(PRICES, key=len, reverse=True):
+        if model.startswith(prefix):
+            return PRICES[prefix]
+    # Unknown model: the dearest listed rate, so the ceiling trips early rather than never.
+    return max(PRICES.values())
+
+
+def price_usage(model: str, usage: Mapping[str, int] | None) -> float | None:
+    """USD for one API call from its reported token usage; None when no usage was reported."""
+    if not usage:
+        return None
+    inp, out = _rates(model)
+    total = (
+        usage.get("input", 0) * inp
+        + usage.get("cached", 0) * inp * CACHE_READ
+        + usage.get("cache_write", 0) * inp * CACHE_WRITE
+        + usage.get("output", 0) * out
+    )
+    return total / 1_000_000
+
+
+def resume_game_id(
+    records: Iterable[DecisionRecord], ledger: SpendLedger | None = None
+) -> str | None:
+    """The ``game_id`` of the newest record in a decision log, seeding ``ledger`` on the way.
+
+    One pass over the log: a restarted service continues the game its log belongs to, so the
+    meter it seeds and the id it checks the ceiling against are the same game.
+    """
+    last: str | None = None
+    for record in records:
+        if ledger is not None:
+            ledger.write(record)
+        if record.game_id:
+            last = record.game_id
+    return last
 
 
 def record_cost(record: DecisionRecord) -> float | None:

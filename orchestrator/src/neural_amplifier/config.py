@@ -140,6 +140,10 @@ class Run:
     #: or ``[run] budget_usd``. None — the default — is no ceiling. Under a seat table each seat's
     #: own ``budget_usd`` applies instead and this is ignored.
     budget_usd: float | None = None
+    #: The game this run is, for spend accounting and trace correlation. ``NA_GAME_ID`` or
+    #: ``[run] game_id``. Unset, a restarted service continues the ``game_id`` of the newest
+    #: record in its decision log, and only a fresh log mints a new one.
+    game_id: str | None = None
 
 
 #: Faction ids a seat can name. 0 is the native-life "faction" and never a player.
@@ -295,6 +299,7 @@ def load(path: Path | None = None) -> Config:
             game_dir=_text(env("NA_GAME_DIR"), run.get("game_dir"), None),
             run_dir=_text(env("NA_RUN_DIR"), run.get("run_dir"), None),
             budget_usd=_usd(env("NA_BUDGET_USD"), run.get("budget_usd")),
+            game_id=_text(env("NA_GAME_ID"), run.get("game_id"), None),
         ),
         surfaces=parse_surfaces(_table(data, "surfaces"), data.get("surface_default"), source),
         seats=parse_seats(_table(data, "seats")),

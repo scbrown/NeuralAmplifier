@@ -22,7 +22,7 @@ from neural_amplifier.dashboard import DashboardReader, run_state
 from neural_amplifier.decisions import DecisionLog
 from neural_amplifier.orchestrator import Orchestrator
 from neural_amplifier.seats import SeatRouter
-from neural_amplifier.spend import SPEND_CEILING, SpendLedger
+from neural_amplifier.spend import SPEND_CEILING, SpendLedger, price_usage
 
 
 class PricedBrain:
@@ -207,3 +207,105 @@ def test_the_dashboard_names_the_ceiling(thinker_base: WorldView, tmp_path: Path
     assert "SPEND CEILING" in state["headline"] and SPEND_CEILING in state["detail"]
     newest = reader.decisions()[0]
     assert newest["tier"] == "fallback" and newest["degrade_reason"].startswith(SPEND_CEILING)
+
+
+def test_a_restarted_service_keeps_the_game_and_its_meter(
+    thinker_base: WorldView, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Through create_app, as the service is really built: no game_id is passed in."""
+    from fastapi.testclient import TestClient
+
+    from neural_amplifier.service import create_app
+
+    monkeypatch.setenv("NA_BUDGET_USD", "0.01")
+    monkeypatch.delenv("NA_GAME_ID", raising=False)
+    path = tmp_path / "d.jsonl"
+
+    first_brain = PricedBrain(0.01)
+    first = TestClient(create_app(brain=first_brain, log=DecisionLog(path), sinks=[]))
+    game = first.app.state.orchestrator.game_id
+    first.app.state.orchestrator.decide(thinker_base)
+    assert first_brain.calls == 1
+
+    # The restart: a new process, a new app, the same log on disk.
+    brain = PricedBrain(0.01)
+    again = TestClient(create_app(brain=brain, log=DecisionLog(path), sinks=[]))
+    assert again.app.state.orchestrator.game_id == game
+    record = again.app.state.orchestrator.decide(thinker_base).record
+    assert brain.calls == 0
+    assert record.tier == "fallback" and record.degraded
+    assert record.degrade_reason and record.degrade_reason.startswith(SPEND_CEILING)
+    spend = again.get("/health").json()["spend"]
+    assert spend[0]["game_id"] == game and spend[0]["tripped"] is True
+
+
+def test_a_configured_game_id_wins_and_a_fresh_log_mints_one(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from fastapi.testclient import TestClient
+
+    from neural_amplifier.service import create_app
+
+    monkeypatch.setenv("NA_GAME_ID", "game-fixed")
+    app = create_app(brain=PricedBrain(), log=DecisionLog(tmp_path / "a.jsonl"), sinks=[])
+    assert TestClient(app).app.state.orchestrator.game_id == "game-fixed"
+
+    monkeypatch.delenv("NA_GAME_ID")
+    app = create_app(brain=PricedBrain(), log=DecisionLog(tmp_path / "b.jsonl"), sinks=[])
+    assert TestClient(app).app.state.orchestrator.game_id.startswith("game-")
+
+
+def test_the_api_lane_is_priced_from_its_tokens(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("NA_BRAIN_PRICE", raising=False)
+    usage = {"input": 1_000_000, "output": 100_000, "cached": 1_000_000, "cache_write": 0}
+    # Haiku 4.5: $1 in, $5 out, cache read 0.1x input.
+    assert price_usage("claude-haiku-4-5", usage) == pytest.approx(1.0 + 0.5 + 0.1)
+    assert price_usage("claude-haiku-4-5-20251001", usage) == pytest.approx(1.6)
+    # Unknown model: the dearest listed rate, never free.
+    assert price_usage("some-future-model", {"input": 1_000_000}) == pytest.approx(10.0)
+    assert price_usage("claude-haiku-4-5", None) is None
+    monkeypatch.setenv("NA_BRAIN_PRICE", "2,4")
+    assert price_usage("claude-haiku-4-5", {"input": 1_000_000, "output": 1_000_000}) == (
+        pytest.approx(6.0)
+    )
+
+
+def test_the_api_lane_trips_the_ceiling(
+    thinker_base: WorldView, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """ClaudeBrain records a priced cost_usd, so its paid calls stop at the ceiling too."""
+    import sys
+    import types
+
+    from neural_amplifier.brain import ClaudeBrain
+    from neural_amplifier.response import model_for
+
+    monkeypatch.delenv("NA_BRAIN_PRICE", raising=False)
+    parsed = model_for(thinker_base.scope).model_validate(
+        {"choices": [{"action_id": thinker_base.action_space[0].id, "reason": "api"}]}
+    )
+    calls: list[int] = []
+
+    class Messages:
+        def parse(self, **_: Any) -> Any:
+            calls.append(1)
+            usage = types.SimpleNamespace(
+                input_tokens=10_000,
+                output_tokens=1_000,
+                cache_read_input_tokens=0,
+                cache_creation_input_tokens=0,
+            )
+            return types.SimpleNamespace(stop_reason="end_turn", parsed_output=parsed, usage=usage)
+
+    class Client:
+        messages = Messages()
+
+    monkeypatch.setitem(sys.modules, "anthropic", types.SimpleNamespace(Anthropic=lambda: Client()))
+    brain = ClaudeBrain(model="claude-haiku-4-5", effort=None)
+    orch = Orchestrator(brain, spend=SpendLedger(default_budget=0.01))
+    first = orch.decide(thinker_base).record
+    # 10k in at $1/M + 1k out at $5/M = $0.015 >= $0.01.
+    assert first.cost_usd == pytest.approx(0.015)
+    second = orch.decide(thinker_base).record
+    assert len(calls) == 1
+    assert second.tier == "fallback" and second.degraded

@@ -96,8 +96,8 @@ class ClaudeBrain:
     """
 
     name = "claude"
-    #: Billed per call. It reports tokens but no USD price, so its records carry no `cost_usd`
-    #: and the spend ceiling cannot trip on it until a price is recorded (``spend.py``).
+    #: Billed per call. The API reports tokens, not USD, so the cost is priced from the usage
+    #: against the published rates (``spend.price_usage``) and the spend ceiling guards it.
     paid = True
 
     def __init__(self, model: str = DEFAULT_MODEL, effort: str | None = "high") -> None:
@@ -227,8 +227,11 @@ class ClaudeBrain:
         parsed = response.parsed_output
         if parsed is None:  # pragma: no cover - network path
             raise BrainError("model returned no parseable orders")
+        from .spend import price_usage
+
         orders = to_orders(parsed)
         orders.usage = self._usage_of(response)
+        orders.cost_usd = price_usage(self.model, orders.usage)
         return orders
 
 

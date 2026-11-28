@@ -44,7 +44,7 @@ from .queued import Comparator, Predicate, QueuedAnswer, QueueError, QueueStore
 from .replay import WorldViewStore
 from .seats import SEAT_HEADER, SeatRouter, SeatTokens, seat_entities
 from .skill_quipu import SkillBackend, SkillWriteRefused
-from .spend import SpendLedger
+from .spend import SpendLedger, resume_game_id
 from .strategist import ReviewScheduler, every_from_env
 from .telemetry import OtelSink, Sink, sinks_for
 from .turnplan import PlanEntry, PlanError, PlanStore, TurnPlan
@@ -592,13 +592,17 @@ def create_app(
             else None
         ),
     )
-    if resolved_log is not None:
-        spend.load(resolved_log.read())
+    # The game_id the ceiling is keyed by must be the one the seeded spend belongs to. A fresh
+    # random id per process would make a restart mid-game start at $0 and pay again, so: the
+    # configured id, else the newest record's in the log (the game this log is), else minted.
+    resumed = resume_game_id(resolved_log.read(), spend) if resolved_log is not None else None
+    game_id = config.run.game_id or resumed
     app.state.spend = spend
 
     orchestrator = Orchestrator(
         brain=resolved_brain,
         spend=spend,
+        game_id=game_id,
         faction_policy=faction_policy,
         log=resolved_log,
         sinks=resolved_sinks,
