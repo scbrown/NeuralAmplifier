@@ -28,6 +28,7 @@ opt-in at the harness (``--brain claude-code``) exactly as ``NA_BRAIN=claude`` g
 from __future__ import annotations
 
 import json
+import math
 import os
 import re
 import subprocess
@@ -238,6 +239,8 @@ class ClaudeCodeBrain:
     """Runs one decision through ``claude -p``, in a fresh process each time."""
 
     name = "claude-code"
+    #: Every call is billed; the spend ceiling guards this brain (``spend.py``).
+    paid = True
 
     def __init__(
         self,
@@ -337,16 +340,25 @@ class ClaudeCodeBrain:
             envelope = json.loads(done.stdout)
         except ValueError as exc:
             raise BrainError(f"claude -p did not return JSON: {done.stdout[:200]}") from exc
+        cost = _envelope_cost(envelope)
         if envelope.get("is_error"):
             _record_provider_call("failure", _failure_class(str(envelope.get("result") or "")))
-            raise BrainError(f"claude -p reported an error: {envelope.get('result')!r:.200}")
+            # An error envelope can still carry a billed call; the spend ceiling must count it.
+            self.cost_usd += cost
+            failed = BrainError(f"claude -p reported an error: {envelope.get('result')!r:.200}")
+            failed.cost_usd = cost  # type: ignore[attr-defined]
+            raise failed
 
         _record_provider_call("success")
-        self.cost_usd += float(envelope.get("total_cost_usd") or 0.0)
+        self.cost_usd += cost
         orders = _parse_orders(str(envelope.get("result") or ""))
         if orders is None:
             self.malformed += 1
-            raise BrainError("could not find orders JSON in the reply")
+            # The call was billed even though it is unusable; the spend ceiling must count it.
+            error = BrainError("could not find orders JSON in the reply")
+            error.cost_usd = cost  # type: ignore[attr-defined]
+            raise error
+        orders.cost_usd = cost
         orders.usage = _usage_of_envelope(envelope)
         orders.served_model = _served_model(envelope)
         return orders
@@ -412,6 +424,17 @@ def _strip_issuing(system: str) -> str:
         if not skipping:
             out.append(line)
     return "\n".join(out)
+
+
+def _envelope_cost(envelope: object) -> float:
+    """``total_cost_usd`` from a ``claude -p`` envelope; 0.0 when absent or unusable."""
+    if not isinstance(envelope, dict):
+        return 0.0
+    try:
+        cost = float(envelope.get("total_cost_usd") or 0.0)
+    except (TypeError, ValueError):
+        return 0.0
+    return cost if math.isfinite(cost) and cost > 0 else 0.0
 
 
 def _parse_orders(text: str) -> Orders | None:

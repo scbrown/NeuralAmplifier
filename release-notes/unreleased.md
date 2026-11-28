@@ -14,6 +14,21 @@ below against the code it ships.
   `POST /game/end` (operator only, once) closes the game and publishes each
   seat's book to the commons, or with `outcome: abandoned` publishes nothing.
   Unseated runs are unchanged.
+
+- **The LLM spend ceiling is enforced.** `budget_usd` used to be display-only.
+  Every decision record now carries `cost_usd`, the amount its brain calls were
+  billed, and the orchestrator sums the decision log per `game_id` (per seat in
+  seat mode). Once that reaches the budget it refuses further paid calls. Those
+  decisions fall back to the engine's native answer, recorded
+  `tier="fallback"`, `degraded=true`, and `degrade_reason="spend-ceiling: ..."`.
+  One WARNING is logged when the ceiling trips, and it shows on the dashboard
+  decision row, the run banner and `/health`. Seats use their own `budget_usd`.
+  An unseated run uses `NA_BUDGET_USD` or `[run] budget_usd`. Unset means no
+  ceiling, as before. A restarted service keeps its game's meter: the `game_id`
+  is `NA_GAME_ID` / `[run] game_id`, else the newest one in the decision log. The
+  `claude` API lane is priced from its token usage (`NA_BRAIN_PRICE` overrides),
+  so its ceiling trips too.
+
 - **Seat isolation, tiers 2 and 3.** `neural-amplifier seat-profile` writes an
   attached seat's harness profile: no built-in tools, no shell, only its own MCP
   server, and deny rules on the run directory. A leak-probe test checks that a

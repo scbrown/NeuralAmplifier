@@ -38,8 +38,13 @@ guard = true
 
 [run]
 # Where a run's evidence goes. A record nobody keeps cannot be replayed or measured.
-# Overrides: NA_DECISION_LOG, NA_WORLD_VIEW_STORE, NA_PLAN, NA_OTEL.
+# Overrides: NA_DECISION_LOG, NA_WORLD_VIEW_STORE, NA_PLAN, NA_OTEL, NA_BUDGET_USD.
 # decision_log = "decisions.jsonl"
+# LLM spend ceiling in USD per game, for an unseated run (a seat uses its own budget_usd).
+# Once the decision log's summed cost_usd reaches it, no more paid calls are made: decisions
+# fall back to the engine's native answer, recorded tier="fallback", degraded, with
+# degrade_reason "spend-ceiling: ...". Unset = no ceiling.
+# budget_usd = 5.00
 # world_view_store = "worldviews"
 # plan = "plan.json"
 otel = false

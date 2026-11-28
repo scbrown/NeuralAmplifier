@@ -45,7 +45,8 @@ def test_health_exposes_telemetry_state(tmp_path: Path) -> None:
     telemetry = client.get("/health").json()["telemetry"]
 
     # The console stream is always last: it may lag the record of truth, never lead it.
-    assert telemetry["sinks"] == ["DecisionLog", "LiveStream"]
+    # The spend ceiling's ledger sits right behind the log, so it counts exactly what the log holds.
+    assert telemetry["sinks"] == ["DecisionLog", "SpendLedger", "LiveStream"]
     assert telemetry["healthy"] is True
 
 

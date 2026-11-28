@@ -46,6 +46,7 @@ from .replay import WorldViewStore
 from .seats import SEAT_HEADER, SeatRouter, SeatTokens, seat_entities
 from .skill_quipu import FakeBackend, SeatSkills, SkillBackend, SkillLibrary, SkillWriteRefused
 from .skills import SkillBrain
+from .spend import SpendLedger, resume_game_id
 from .strategist import ReviewScheduler, every_from_env
 from .telemetry import OtelSink, Sink, sinks_for
 from .turnplan import PlanEntry, PlanError, PlanStore, TurnPlan
@@ -584,8 +585,32 @@ def create_app(
     faction_policy = PolicyStore()
     app.state.faction_policy = faction_policy
 
+    # The LLM spend ceiling (spend.py). Seeded from the decision log already on disk so a
+    # restarted service keeps a game's meter; always built, and inert while no budget is set.
+    spend = SpendLedger(
+        default_budget=config.run.budget_usd,
+        seat_budgets=(
+            {fid: seat.budget_usd for fid, seat in resolved_brain.seats.items()}
+            if isinstance(resolved_brain, SeatRouter)
+            else None
+        ),
+    )
+    # The game_id the ceiling is keyed by must be the one the seeded spend belongs to. A fresh
+    # random id per process would make a restart mid-game start at $0 and pay again, so: the
+    # configured id, else the newest record's in the log (the game this log is), else minted.
+    resumed = resume_game_id(resolved_log.read(), spend) if resolved_log is not None else None
+    game_id = config.run.game_id or resumed
+    if resumed is not None and not config.run.game_id:
+        # Visible on purpose: a new game started on an old log inherits that game's meter.
+        logging.getLogger(__name__).info(
+            "resuming game_id %s from the decision log (set NA_GAME_ID for a new game)", resumed
+        )
+    app.state.spend = spend
+
     orchestrator = Orchestrator(
         brain=resolved_brain,
+        spend=spend,
+        game_id=game_id,
         faction_policy=faction_policy,
         log=resolved_log,
         sinks=resolved_sinks,
@@ -1110,6 +1135,9 @@ def create_app(
                 "failures": [f.error for f in orchestrator.telemetry.failures[-3:]],
             },
             "reviews": reviews.status() if reviews is not None else None,
+            # The spend ceiling: per game/seat spend, budget, and whether it tripped. A tripped
+            # ceiling means later decisions are degraded fallbacks, not model play.
+            "spend": spend.status(),
             "live": {
                 "viewers": live.viewers,
                 "dropped": live.dropped,
