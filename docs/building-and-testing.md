@@ -118,6 +118,9 @@ thing for one run without editing the tree, which is what CI and the cloud setup
 | `NA_BRAIN`, `NA_BRAIN_MODEL`, `NA_BRAIN_EFFORT` | `[brain] kind`, `model`, `effort` |
 | `NA_QUIPU_URL`, `NA_ENGINE`, `NA_TOKEN_BUDGET`, `NA_HANK_GUARD` | `[knowledge]` |
 | `NA_DECISION_LOG`, `NA_WORLD_VIEW_STORE`, `NA_PLAN`, `NA_PLAN_STATE`, `NA_OTEL` | `[run]` |
+| `NA_BUDGET_USD` (LLM spend ceiling per game, unseated runs; unset = no ceiling) | `[run] budget_usd` |
+| `NA_GAME_ID` (game the spend meter is keyed by; unset = resume the decision log's newest `game_id`) | `[run] game_id` |
+| `NA_BRAIN_PRICE` (`<input>,<output>` USD per million tokens for the `claude` API lane; unset = built-in table) | — |
 | — | `[surfaces]` + `surface_default` — which surfaces the LLM tier decides |
 
 A malformed file refuses to start the service rather than failing one turn at a time in a

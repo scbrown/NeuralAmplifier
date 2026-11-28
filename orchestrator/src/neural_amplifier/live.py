@@ -37,6 +37,7 @@ from typing import Any
 
 from .contract import WorldView
 from .decisions import DecisionRecord
+from .spend import record_cost
 
 #: Per-viewer backlog. A console that stops reading for this many events starts losing the
 #: oldest ones, which is the right thing to lose: the Now pane is about the present.
@@ -130,9 +131,7 @@ def _now_iso() -> str:
 
 
 def _cost(record: DecisionRecord) -> float | None:
-    extra = record.model_extra or {}
-    raw = extra.get("cost_usd", extra.get("usd"))
-    return float(raw) if isinstance(raw, int | float) and not isinstance(raw, bool) else None
+    return record_cost(record)
 
 
 class LiveStream:
@@ -269,6 +268,7 @@ class LiveStream:
                 "turn": record.turn,
                 "tier": record.tier,
                 "degraded": record.degraded,
+                "degrade_reason": record.degrade_reason,
                 "chosen": [c.get("action_id", c.get("id")) for c in record.chosen],
                 "latency_ms": record.latency_ms,
                 "cost_usd": cost,

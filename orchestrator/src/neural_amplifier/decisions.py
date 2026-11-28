@@ -33,7 +33,9 @@ from pydantic import BaseModel, ConfigDict, Field
 #: exactly this turn. Not `queued` — nothing conditional is standing, the table dies with its
 #: turn — and the bead requires the distinction explicitly, so replay can tell strategy-driven
 #: answers from agent-driven ones.
-Tier = Literal["deterministic", "llm", "deferred", "queued", "plan", "review"]
+#: ``fallback`` is a decision the brain was deliberately NOT asked (the spend ceiling,
+#: ``spend.py``): degraded, with the engine's native answer applied.
+Tier = Literal["deterministic", "llm", "deferred", "queued", "plan", "review", "fallback"]
 
 
 def world_view_hash(payload: dict[str, Any]) -> str:
@@ -269,6 +271,10 @@ class DecisionRecord(BaseModel):
 
     model: str | None = None
     tokens: Tokens = Field(default_factory=Tokens)
+    #: What this decision's brain calls were billed for, in USD, as the provider reported it —
+    #: summed over repair attempts. ``None`` when nothing priced was called (scripted, agent,
+    #: a lane that reports tokens but no price). The spend ceiling sums this per game_id.
+    cost_usd: float | None = None
     latency_ms: int | None = None
 
 

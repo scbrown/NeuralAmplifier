@@ -24,6 +24,7 @@ from typing import Any
 from .decisions import DecisionLog, DecisionRecord
 from .live import LiveStream, Subscription, sse_frame
 from .replay import WorldViewStore
+from .spend import SPEND_CEILING, record_cost
 
 REPO = Path(__file__).resolve().parents[3]
 FACTION_COLOURS = ("#62d6ff", "#ff4545", "#f4e04d", "#55e06f", "#c880ff", "#ff9f43", "#eeeeee")
@@ -44,9 +45,7 @@ def _choice_id(choice: dict[str, Any]) -> str:
 
 def _record_cost(record: DecisionRecord) -> float | None:
     """Model spend when a producer recorded it; never confuse it with game energy credits."""
-    extra = record.model_extra or {}
-    raw = extra.get("cost_usd", extra.get("usd"))
-    return float(raw) if isinstance(raw, int | float) else None
+    return record_cost(record)
 
 
 #: Directive dispositions, most-decision-relevant first. ``in_force`` alone is not a
@@ -125,6 +124,11 @@ PLAIN_TIER = {
     "deferred": ("Put off", "The decision was parked to be answered later."),
     "queued": ("Waiting", "The decision is queued and has not been answered yet."),
     "plan": ("From the plan", "A pre-set plan entry supplied this action."),
+    "fallback": (
+        "Engine fallback",
+        "The model was deliberately not asked (for example, the spend budget ran out), so the"
+        " engine's own answer was applied.",
+    ),
 }
 
 PLAIN_DISPOSITION = {
@@ -188,11 +192,20 @@ def run_state(live: dict[str, Any], paused_after: float = 120.0) -> dict[str, An
             "detail": "This dashboard has not been pointed at a game's decision log.",
         }
     idle = live.get("idle_seconds")
+    ceilings = live.get("spend_ceiling") or []
+    ceiling_note = (
+        " SPEND CEILING REACHED — the model is no longer being asked; the engine's own answer"
+        " is applied: " + "; ".join(str(c.get("reason")) for c in ceilings)
+        if ceilings
+        else ""
+    )
     if live.get("active"):
         return {
             "state": "live",
-            "headline": f"LIVE // TURN {live.get('turn') or '—'}",
-            "detail": f"{live.get('decisions') or 0} decisions so far. The game is advancing.",
+            "headline": f"LIVE // TURN {live.get('turn') or '—'}"
+            + (" // SPEND CEILING" if ceilings else ""),
+            "detail": f"{live.get('decisions') or 0} decisions so far. The game is advancing."
+            + ceiling_note,
         }
     if idle is None:
         return {
@@ -212,6 +225,7 @@ def run_state(live: dict[str, Any], paused_after: float = 120.0) -> dict[str, An
         "detail": (
             f"The game reached turn {live.get('turn') or '—'} and stopped there."
             " The page is up to date — this is the game not running, not a broken page."
+            + ceiling_note
         ),
         "idle_seconds": idle,
     }
@@ -366,6 +380,10 @@ class DashboardReader:
         )
         latest: dict[str, tuple[DecisionRecord, dict[str, Any]]] = {}
         total_cost = 0.0
+        #: The spend ceiling, per seat (or ``None`` = the whole unseated game), as its newest
+        #: refusal worded it. Shown on the banner: a run whose budget ran out keeps advancing on
+        #: native answers, and without this it would read as an ordinary live LLM game.
+        ceilings: dict[Any, str] = {}
         for record in records:
             view = self.world_view(record)
             # A log without its content-addressed store is incomplete evidence, but the record
@@ -375,6 +393,8 @@ class DashboardReader:
             faction = str(facts.get("faction") or record.faction)
             latest[faction] = (record, facts)
             total_cost += _record_cost(record) or 0
+            if record.degrade_reason and record.degrade_reason.startswith(SPEND_CEILING):
+                ceilings[record.seat] = record.degrade_reason
 
         factions_by_id: dict[int, dict[str, Any]] = {}
         for faction_id, bases in self.faction_census().items():
@@ -444,6 +464,10 @@ class DashboardReader:
             "turn": newest.turn if newest is not None else None,
             "decisions": len(records),
             "spend": round(total_cost, 4),
+            "spend_ceiling": [
+                {"seat": seat, "reason": reason}
+                for seat, reason in sorted(ceilings.items(), key=lambda kv: kv[0] or 0)
+            ],
             "fairness": fairness,
             "run_id": (newest_view or {}).get("run_id"),
             "seed": (newest_view or {}).get("seed", (newest_view or {}).get("map_seed")),
@@ -476,6 +500,7 @@ class DashboardReader:
                     "surface": record.surface_id,
                     "tier": record.tier,
                     "degraded": record.degraded,
+                    "degrade_reason": record.degrade_reason,
                     "chosen": chosen,
                     "native": native,
                     "disagreed": native is not None and str(native) not in chosen,
@@ -788,7 +813,7 @@ const statusEl=document.getElementById('status');
 let GLOSS={};
 async function loadGlossary(){try{GLOSS=await fetch('/dashboard/api/glossary').then(r=>r.json())}catch(e){GLOSS={}}}
 const esc=x=>String(x??'—').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-async function refresh(){let delay=30000;try{const [l,d]=await Promise.all([fetch('/dashboard/api/live').then(r=>r.json()),fetch('/dashboard/api/decisions?limit=100').then(r=>r.json())]);delay=l.active?5000:30000;const rs=l.run_state??{state:'paused',headline:'UNKNOWN',detail:''};statusEl.textContent=rs.headline;banner.className='banner '+rs.state;banner.innerHTML=`<b>${esc(rs.headline)}</b><span>${esc(rs.detail)}</span>`;summary.innerHTML=[['GAME',l.game_id],['TURN',l.turn],['DECISIONS',l.decisions],['SPEND USD',l.spend],['RUN',l.run_id],['ARM',l.arm],['SEED',l.seed],['DIFFICULTY',l.fairness?.difficulty],['SLOT',l.fairness?.slot],['VICTORY',l.victory]].map(x=>`<div class=datum>${esc(x[0])}<b>${esc(x[1])}</b></div>`).join('');factions.innerHTML=l.factions.map(f=>`<article class=faction style="--faction:${esc(f.colour)}"><h3>${esc(f.name)}</h3><div class=stats>${[['BASES',f.bases],['POP',f.population],['MINERALS',f.minerals],['ENERGY',f.energy],['INCOME',f.income],['LABS',f.labs],['MILITARY',f.military],['TECHS',f.techs]].map(x=>`<span>${esc(x[0])}<b>${esc(x[1])}</b></span>`).join('')}</div></article>`).join('');decisions.innerHTML=d.map(x=>`<tr class="decision ${x.disagreed?'bad':''}" onclick="showDecision(${x.id})"><td>${esc(x.turn)}<td>${esc(x.faction)}<td>${esc(x.surface)}<td>${x.degraded?`<abbr title="${esc(GLOSS.fallback?.help??'')}">${esc(GLOSS.fallback?.name??'Fallback')}</abbr>`:`<abbr title="${esc(GLOSS.tier?.[x.tier]?.help??'')}">${esc(GLOSS.tier?.[x.tier]?.name??x.tier)}</abbr>`}<td>${esc(x.chosen.join(', '))}<td>${esc(x.native)}<td>${esc(x.latency_ms)} ms<td>${esc(x.cost)}</tr>`).join('')}catch(e){statusEl.textContent='CANNOT REACH THE DASHBOARD SERVICE';banner.className='banner no-run';banner.innerHTML=`<b>CANNOT REACH THE DASHBOARD SERVICE</b><span>The page is up but its data service did not answer: ${esc(e)}</span>`}finally{setTimeout(refresh,delay)}}
+async function refresh(){let delay=30000;try{const [l,d]=await Promise.all([fetch('/dashboard/api/live').then(r=>r.json()),fetch('/dashboard/api/decisions?limit=100').then(r=>r.json())]);delay=l.active?5000:30000;const rs=l.run_state??{state:'paused',headline:'UNKNOWN',detail:''};statusEl.textContent=rs.headline;banner.className='banner '+rs.state;banner.innerHTML=`<b>${esc(rs.headline)}</b><span>${esc(rs.detail)}</span>`;summary.innerHTML=[['GAME',l.game_id],['TURN',l.turn],['DECISIONS',l.decisions],['SPEND USD',l.spend],['RUN',l.run_id],['ARM',l.arm],['SEED',l.seed],['DIFFICULTY',l.fairness?.difficulty],['SLOT',l.fairness?.slot],['VICTORY',l.victory]].map(x=>`<div class=datum>${esc(x[0])}<b>${esc(x[1])}</b></div>`).join('');factions.innerHTML=l.factions.map(f=>`<article class=faction style="--faction:${esc(f.colour)}"><h3>${esc(f.name)}</h3><div class=stats>${[['BASES',f.bases],['POP',f.population],['MINERALS',f.minerals],['ENERGY',f.energy],['INCOME',f.income],['LABS',f.labs],['MILITARY',f.military],['TECHS',f.techs]].map(x=>`<span>${esc(x[0])}<b>${esc(x[1])}</b></span>`).join('')}</div></article>`).join('');decisions.innerHTML=d.map(x=>`<tr class="decision ${x.disagreed?'bad':''}" onclick="showDecision(${x.id})"><td>${esc(x.turn)}<td>${esc(x.faction)}<td>${esc(x.surface)}<td>${x.degraded?`<abbr title="${esc(GLOSS.fallback?.help??'')}">${esc(GLOSS.fallback?.name??'Fallback')}</abbr>${x.degrade_reason?' // '+esc(x.degrade_reason):''}`:`<abbr title="${esc(GLOSS.tier?.[x.tier]?.help??'')}">${esc(GLOSS.tier?.[x.tier]?.name??x.tier)}</abbr>`}<td>${esc(x.chosen.join(', '))}<td>${esc(x.native)}<td>${esc(x.latency_ms)} ms<td>${esc(x.cost)}</tr>`).join('')}catch(e){statusEl.textContent='CANNOT REACH THE DASHBOARD SERVICE';banner.className='banner no-run';banner.innerHTML=`<b>CANNOT REACH THE DASHBOARD SERVICE</b><span>The page is up but its data service did not answer: ${esc(e)}</span>`}finally{setTimeout(refresh,delay)}}
 //: Each empty state gets its OWN sentence. "No facts" for all three would erase the
 //: distinction the orchestrator went to the trouble of recording (quipu_absent vs
 //: quipu_degraded vs a real query that matched nothing) - and the degraded case is a
