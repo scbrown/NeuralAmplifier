@@ -10,7 +10,10 @@ open commitments and the last five reviews; and no seat reads another's ledger.
 from __future__ import annotations
 
 import hashlib
+import logging
 import shutil
+import threading
+import time
 from pathlib import Path
 from typing import Any
 
@@ -297,3 +300,147 @@ def test_a_missed_review_reaches_the_seats_ledger(seated) -> None:
     ctx = client.get("/agent/review", headers=h[3]).json()
     assert [r["outcome"] for r in ctx["recent_reviews"]] == ["missed"]
     assert ctx["review"] is not None  # the review rung at 7 is open now
+
+
+# ---------------------------------------------------------------- review nits (aegis-ke9)
+
+
+class GatedBell(QuietBell):
+    """Rings return at once until ``hold`` is set; then a ring blocks until ``release``."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.hold = threading.Event()
+        self.release = threading.Event()
+
+    def ring_review(self, review_id: str) -> bool:
+        if self.hold.is_set():
+            self.release.wait(10)
+        return True
+
+
+def test_finished_review_threads_are_pruned() -> None:
+    ledger = CampaignLedger(fake_ledger_backend(), "three")
+    seats = {3: Seat(3, "three", "agent", strategist="agent")}
+    bell = GatedBell()
+    s = ReviewScheduler(seats, bell, every=2, ledger_for=lambda fid: ledger)
+    for t in range(1, 40):  # a ring every two turns, each closing missed: ~19 reviews
+        s.observe(view(t))
+    _join(s)
+    assert len(ledger.reviews()) >= 15
+    bell.hold.set()
+    try:
+        # Turn 41 closes the review rung at 39 and rings the next: both threads start now.
+        assert s.observe(view(41)) is not None
+        assert s.threads, "the new ring thread is listed"
+        # Everything finished before turn 40 is gone; only threads started since remain.
+        assert len(s.threads) <= 2
+        assert any(t.is_alive() for t in s.threads)
+    finally:
+        bell.release.set()
+        _join(s)
+
+
+def test_a_duplicate_review_id_is_skipped_counted_and_warned(caplog) -> None:
+    ledger = CampaignLedger(fake_ledger_backend(), "three")
+    seats = {3: Seat(3, "three", "agent", strategist="agent")}
+    s = ReviewScheduler(seats, QuietBell(), every=3, ledger_for=lambda fid: ledger)
+    for t in range(1, 5):  # rings review-s3-1 at 4
+        s.observe(view(t))
+    s._counter = 0  # force the next review to reuse the id
+    with caplog.at_level(logging.WARNING, logger="neural_amplifier.strategist"):
+        for t in range(5, 11):  # review-s3-1 closes at 7; its id-twin rings at 7, closes at 10
+            s.observe(view(t))
+        _join(s)
+    assert [r.review_id for r in ledger.reviews()] == ["review-s3-1"]
+    assert s.duplicate_review_ids == 1
+    assert any("review-s3-1 already recorded" in r.getMessage() for r in caplog.records)
+
+
+def test_a_failed_ledger_write_after_a_landed_directive_is_not_a_422(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("NA_ALLOW_BLIND", "1")
+    monkeypatch.setenv("NA_RUN_DIR", str(tmp_path))
+    monkeypatch.delenv("NA_TMUX_TARGET", raising=False)
+    monkeypatch.delenv("NA_DOORBELL_CMD", raising=False)
+    queue = DecisionQueue()
+    router = SeatRouter(
+        {3: Seat(3, "malcolm", "agent", strategist="agent")},
+        build=lambda seat: AgentBrain(
+            queue=queue, doorbell=Doorbell(target="", enabled=False), timeout=10
+        ),
+    )
+    app = create_app(brain=router)
+    app.state.reviews.doorbell = QuietBell()
+    client = TestClient(app)
+    h = {SEAT_HEADER: app.state.seat_tokens.tokens[3]}
+
+    def boom(self: CampaignLedger, *a: Any, **kw: Any) -> None:
+        raise OSError("ledger store unavailable")
+
+    monkeypatch.setattr(CampaignLedger, "commit", boom)
+
+    results: dict[str, Any] = {}
+    body = view(43).model_dump(mode="json", exclude_none=True)
+    body["metrics"] = {"energy_reserves": 120}
+    decide = threading.Thread(
+        target=lambda: results.update(r=client.post("/decide", json=body)), daemon=True
+    )
+    decide.start()
+    deadline = time.monotonic() + 5
+    while not queue.waiting() and time.monotonic() < deadline:
+        time.sleep(0.01)
+    pending = queue.waiting()[0]
+    claimed = client.post("/agent/next", json={"wait": 0}, headers=h).json()
+    assert claimed["decision_id"] == pending.id
+
+    r = client.post(
+        "/agent/directive",
+        headers=h,
+        json={
+            "decision_id": pending.id,
+            "id": "d-hold",
+            "intent": "keep energy up",
+            "metric": "energy_reserves",
+            "comparator": "hold",
+            "commitment": hold(until_turn=60),
+        },
+    )
+    assert 200 <= r.status_code < 300, r.text
+    out = r.json()
+    assert out["issued"] == "d-hold"
+    assert "ledger store unavailable" in out["commitment_error"]
+    assert "commitment" not in out
+    assert [d.id for d in pending.proposed_directives] == ["d-hold"]
+
+    answered = client.post(
+        "/agent/submit", headers=h, json={"decision_id": pending.id, "action_id": "facility:4"}
+    )
+    assert answered.status_code == 200, answered.text
+    decide.join(5)
+    assert results["r"].status_code == 200
+
+
+def test_a_failed_ledger_write_after_a_landed_policy_is_not_a_422(
+    seated, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _, client, h = seated
+
+    def boom(self: CampaignLedger, *a: Any, **kw: Any) -> None:
+        raise SkillWriteRefused("store refused")
+
+    monkeypatch.setattr(CampaignLedger, "commit", boom)
+    r = client.post(
+        "/agent/policy",
+        headers=h[3],
+        json={
+            "knob": "focus.growth",
+            "value": 1,
+            "reason": "grow",
+            "commitment": hold(until_turn=9),
+        },
+    )
+    assert r.status_code == 200, r.text
+    assert "store refused" in r.json()["commitment_error"]
+    assert client.get("/agent/policy", headers=h[3]).json()["knobs"] != {}
