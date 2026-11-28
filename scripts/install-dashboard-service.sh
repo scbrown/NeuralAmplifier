@@ -11,6 +11,7 @@ user_unit_dir="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user"
 config_dir="${XDG_CONFIG_HOME:-$HOME/.config}/neural-amplifier"
 local_lib_dir="${XDG_DATA_HOME:-$HOME/.local}/lib/neural-amplifier"
 installed_unit="$user_unit_dir/$unit_name"
+releases="${NA_DASHBOARD_RELEASES:-$local_lib_dir/dashboard-releases}"
 environment_file="$config_dir/dashboard.env"
 
 usage() {
@@ -83,11 +84,17 @@ check() {
         sleep 1
     done
     main_pid=$(systemctl --user show "$unit_name" -p MainPID --value)
-    [[ $main_pid != 0 ]] || {
+    # Numeric and non-zero: an empty answer must not read as "running".
+    [[ $main_pid =~ ^[0-9]+$ && $main_pid != 0 ]] || {
         echo "FAIL: $unit_name has no running main process" >&2
         return 1
     }
     control_group=$(systemctl --user show "$unit_name" -p ControlGroup --value)
+    # An empty control group would make the grep below match any listener at all.
+    [[ -n $control_group ]] || {
+        echo "FAIL: $unit_name has no control group" >&2
+        return 1
+    }
     listener_pid=$(ss -H -ltnp "sport = :$port" | sed -n 's/.*pid=\([0-9]*\).*/\1/p' | head -1)
     [[ -n $listener_pid ]] && /usr/bin/grep -Fq "$control_group" "/proc/$listener_pid/cgroup" || {
         echo "FAIL: port $port is not owned by $unit_name (listener pid ${listener_pid:-none})" >&2
@@ -96,7 +103,15 @@ check() {
     curl --fail --silent --show-error \
         "http://127.0.0.1:$port/dashboard" \
         >/dev/null
-    echo "PASS: $unit_name enabled, active, installed from $source_unit, dashboard HTTP 200"
+    # It must be serving the release `current` points at, not an old directory or a checkout.
+    local serving want
+    serving=$(readlink -f "/proc/$main_pid/cwd")
+    want=$(readlink -f "$releases/current")
+    [[ -n $want && $serving == "$want" ]] || {
+        echo "FAIL: $unit_name runs from ${serving:-unknown}, not the current release ${want:-none}" >&2
+        return 1
+    }
+    echo "PASS: $unit_name enabled, active, installed from $source_unit, serving release ${want##*/}, dashboard HTTP 200"
 }
 
 case ${1:-} in
@@ -109,8 +124,12 @@ case ${1:-} in
         if [[ ! -f "$environment_file" ]]; then
             write_environment
         fi
+        # The unit runs from the current release, so one must exist before it first starts.
+        NA_DASHBOARD_REPO="$repo" "$local_lib_dir/deploy-dashboard.sh" --build-only
         systemctl --user daemon-reload
-        systemctl --user enable --now "$unit_name"
+        systemctl --user enable "$unit_name"
+        # restart, not start: an already-running unit must pick up the new WorkingDirectory.
+        systemctl --user restart "$unit_name"
         systemctl --user enable --now "$deploy_timer"
         check
         ;;

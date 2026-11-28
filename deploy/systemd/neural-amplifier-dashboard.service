@@ -4,7 +4,8 @@ After=network.target
 
 [Service]
 Type=simple
-WorkingDirectory=%h/workspace/NeuralAmplifier
+# A clean release snapshot of main (scripts/deploy-dashboard.sh), never the shared checkout.
+WorkingDirectory=%h/.local/lib/neural-amplifier/dashboard-releases/current
 Environment=PATH=%h/.local/bin:/usr/local/bin:/usr/bin:/bin
 EnvironmentFile=%h/.config/neural-amplifier/dashboard.env
 ExecStart=/usr/bin/env just dashboard ${NA_DASHBOARD_PORT} ${NA_DASHBOARD_LOG} ${NA_DASHBOARD_STORE}

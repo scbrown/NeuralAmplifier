@@ -130,11 +130,20 @@ remains gated on the infrastructure change process.
 ### Dashboard auto-deploy
 
 Installing the service also enables `neural-amplifier-dashboard-deploy.timer`. Every five minutes
-it fetches `origin/main` in the shared checkout. When—and only when—the checkout can move with a
-clean fast-forward, it restarts the dashboard once and verifies that the unit owns the listening
-process and `/dashboard` returns HTTP 200. A conflict, non-fast-forward, fetch failure, or failed
-verification is logged and stops that deployment; the updater never stashes, resets, forces, or
-loops restarts.
+it fetches `origin/main` in the shared checkout, which only updates remote-tracking refs and never
+touches the working tree. When main has moved, it exports that revision with `git archive` into
+its own release directory, `~/.local/lib/neural-amplifier/dashboard-releases/<sha>`, and runs
+`uv sync --frozen` there. It then swaps the `current` symlink atomically, restarts the dashboard
+once and verifies it. The checks are: the unit owns the listening process, its working directory
+is the `current` release, and `/dashboard` returns HTTP 200. The unit always runs from `current`,
+never from the checkout, so local edits in the checkout (an item export, a work branch) cannot
+block a deployment or change what the dashboard serves.
+
+A failed export, sync or verification is logged. A failed verification also puts `current` back
+on the previous release, with one more restart, and marks the revision `.verify-failed`. That
+revision is not retried on later ticks; delete the marker to retry it by hand. The updater never
+stashes, resets, forces, or loops restarts. The newest three releases are kept
+(`NA_DASHBOARD_KEEP_RELEASES`).
 
 This means a push to NeuralAmplifier `main` is a live dashboard deployment within approximately
 five minutes. Treat the push as the deployment decision. Audit results with:
@@ -144,7 +153,8 @@ journalctl --user -u neural-amplifier-dashboard-deploy.service
 tail ~/.local/state/neural-amplifier/dashboard-deploy.log
 ```
 
-Each deployment records the previous and deployed full commit IDs before a separate `PASS` line;
+Each deployment records the previous and deployed full commit IDs before a separate `PASS` line
+(or `FAIL` and `ROLLBACK`);
 failures record the attempted target and Git or verification output without changing run paths.
 
 The run paths remain in `~/.config/neural-amplifier/dashboard.env`, outside the checkout, so an
