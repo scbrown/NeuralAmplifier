@@ -6,6 +6,13 @@ below against the code it ships.
 
 ## Changes
 
+- **Review ids are stable across restarts and games.** A strategist review is now
+  `review-<game>-s<seat>-t<turn>`, not a per-process counter (`review-s3-1`). A restarted
+  service resumes the same game, and its counter started over, so a second review merged
+  onto the first one's node in the seat's campaign ledger, which spans games. A review that
+  is already in the ledger is not recorded again, so a restart that replays a turn records
+  its review once.
+
 - **The dashboard deploys from release snapshots, not the shared checkout.** The
   auto-deploy timer used to `git merge --ff-only` the checkout the dashboard ran from. Any
   local edit to a file that main also changed blocked every later deployment, and the

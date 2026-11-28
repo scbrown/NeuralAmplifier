@@ -750,6 +750,7 @@ def create_app(
             resolved_log,
             every=every_from_env(),
             ledger_for=ledger_for,
+            game_id=orchestrator.game_id,
         )
         if router is not None
         else None

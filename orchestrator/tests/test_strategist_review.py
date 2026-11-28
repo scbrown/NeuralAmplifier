@@ -230,7 +230,7 @@ def test_a_review_rings_every_n_turns_per_seat() -> None:
     turns = [r.turn for r in rung if r is not None]
     assert turns == [11, 21, 31]
     assert all(r.reason == "cadence" for r in rung if r is not None)
-    assert bell.reviews == ["review-s3-1", "review-s3-2", "review-s3-3"]
+    assert bell.reviews == ["review-s3-t11", "review-s3-t21", "review-s3-t31"]
 
 
 def test_a_seat_with_no_strategist_is_never_reviewed() -> None:
@@ -316,7 +316,7 @@ def test_a_missed_review_is_logged_on_the_seats_log(tmp_path: Path) -> None:
         s.observe(view(t))
     _join(s)
     # Rung at 6, unanswered by 11 (when the next is due): one miss, and a fresh review opens.
-    assert [m["review_id"] for m in s.missed] == ["review-s3-1"]
+    assert [m["review_id"] for m in s.missed] == ["review-s3-t6"]
     lines = [
         json.loads(x) for x in (tmp_path / "seat-3" / "decisions.jsonl").read_text().splitlines()
     ]
