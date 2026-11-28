@@ -54,7 +54,7 @@ import tokenize
 from collections.abc import Iterable, Sequence
 from dataclasses import asdict, dataclass, field, replace
 from pathlib import Path
-from typing import Any, Literal, get_args
+from typing import Any, Literal, Protocol, get_args
 
 from .brain import Brain, BrainError
 from .contract import Choice, Orders, WorldView
@@ -676,6 +676,29 @@ class PolicySet:
 Effect = QueuedAnswer | str | PolicySet
 
 
+class SkillSource(Protocol):
+    """What :class:`SkillBrain` reads: a :class:`SkillStore`, or a seat's ``SeatSkills``.
+
+    A seated run hands each seat's brain its ``SeatSkills`` (its own book plus the commons pinned
+    at game start), which has no way to name another seat's book.
+    """
+
+    def retrieve(
+        self,
+        description: str,
+        surface_id: str | None = None,
+        k: int = 5,
+        statuses: Iterable[str] = ...,
+        knobs: Iterable[str] | None = None,
+    ) -> list[Skill]: ...
+
+    def eligible(
+        self,
+        statuses: Iterable[str] = ...,
+        knobs: Iterable[str] | None = None,
+    ) -> list[Skill]: ...
+
+
 class SkillBrain:
     """Answers a decision from the skill library, or hands it to ``fallback`` untouched.
 
@@ -695,7 +718,7 @@ class SkillBrain:
 
     def __init__(
         self,
-        store: SkillStore,
+        store: SkillSource,
         fallback: Brain,
         runner: SkillRunner | None = None,
         queue: QueueStore | None = None,
@@ -705,7 +728,7 @@ class SkillBrain:
         engine_knobs: Iterable[str] | None = None,
         policy: PolicyStore | None = None,
     ) -> None:
-        self.store = store
+        self.store: SkillSource = store
         self.fallback = fallback
         self.runner = runner or SkillRunner()
         self.queue = queue

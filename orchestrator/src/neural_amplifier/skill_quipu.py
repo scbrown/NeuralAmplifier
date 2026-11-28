@@ -1106,6 +1106,21 @@ class SeatSkills:
     def history(self, name: str) -> list[Skill]:
         return self._book.history(name)
 
+    def eligible(
+        self,
+        statuses: Iterable[str] = ("verified",),
+        knobs: Iterable[str] | None = None,
+    ) -> list[Skill]:
+        """Own book and pinned commons, per name, sorted by name; the seat's own version wins.
+
+        What :meth:`SkillBrain.on_turn` reads, so a seated brain's turn skills come from the
+        same two places as its decision skills and nowhere else.
+        """
+        own = self._book.eligible(statuses, knobs)
+        names = {s.name for s in own}
+        pool = own + [s for s in self.commons.eligible(statuses, knobs) if s.name not in names]
+        return sorted(pool, key=lambda s: s.name)
+
     def retrieve(
         self,
         description: str,
