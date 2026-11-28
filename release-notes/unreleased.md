@@ -6,6 +6,17 @@ below against the code it ships.
 
 ## Changes
 
+- **The dashboard deploys from release snapshots, not the shared checkout.** The
+  auto-deploy timer used to `git merge --ff-only` the checkout the dashboard ran from. Any
+  local edit to a file that main also changed blocked every later deployment, and the
+  dashboard stayed on an old revision that could fail on newer decision records. Each
+  revision is now exported with `git archive` into its own release directory and synced
+  there. The `current` symlink is swapped atomically, and the unit runs from `current`. A
+  failed verification rolls back to the previous release and is not retried until main
+  moves. `check` now also fails on an empty `MainPID` or control group (both used to pass)
+  and on a unit serving anything but `current`. Re-run `just dashboard-service install`
+  once to switch an existing install over.
+
 - **The LLM spend ceiling is enforced.** `budget_usd` used to be display-only.
   Every decision record now carries `cost_usd`, the amount its brain calls were
   billed, and the orchestrator sums the decision log per `game_id` (per seat in
