@@ -6,6 +6,15 @@ below against the code it ships.
 
 ## Changes
 
+- **Seat skill books in the running service.** The service builds one skill
+  library (in memory by default, injectable as `create_app(skills=...)`), with one
+  book per seat identity keyed as the campaign ledgers are, plus a shared commons.
+  A seated app starts its game when it is built, pinning the commons; each seat
+  whose driver is a `SkillBrain` reads only its own book and that pinned commons.
+  `POST /game/end` (operator only, once) closes the game and publishes each
+  seat's book to the commons, or with `outcome: abandoned` publishes nothing.
+  Unseated runs are unchanged.
+
 - **The LLM spend ceiling is enforced.** `budget_usd` used to be display-only.
   Every decision record now carries `cost_usd`, the amount its brain calls were
   billed, and the orchestrator sums the decision log per `game_id` (per seat in
