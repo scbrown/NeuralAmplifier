@@ -563,7 +563,9 @@ class Orchestrator:
                 # Not repaired, not guarded, not validated. There is nothing to check — a
                 # deferral names no action, so no rule about actions can have an opinion on it.
                 if self.deferrals is not None and _defer_requested(orders):
-                    return self._deferred(world_view, fog, grounding, dropped, started, orders)
+                    return self._deferred(
+                        world_view, fog, grounding, dropped, started, orders, cost_usd=cost
+                    )
             except BrainError as exc:
                 degrade_reason = str(exc) or "brain error"
                 orders = Orders()
@@ -880,6 +882,7 @@ class Orchestrator:
         dropped: list[str],
         started: float,
         orders: Orders,
+        cost_usd: float | None = None,
     ) -> Result:
         """The agent asked for more time. Answer the engine now; keep the decision open.
 
@@ -923,6 +926,9 @@ class Orchestrator:
                 dropped=dropped,
             ),
             tier="deferred",
+            # A deferral after a paid call (or a paid repair) was still billed: the ledger is
+            # summed from the log, so dropping it here would let deferrals spend unmetered.
+            cost_usd=cost_usd,
         )
         self.telemetry.emit(record)
 

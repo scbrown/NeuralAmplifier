@@ -597,6 +597,11 @@ def create_app(
     # configured id, else the newest record's in the log (the game this log is), else minted.
     resumed = resume_game_id(resolved_log.read(), spend) if resolved_log is not None else None
     game_id = config.run.game_id or resumed
+    if resumed is not None and not config.run.game_id:
+        # Visible on purpose: a new game started on an old log inherits that game's meter.
+        logging.getLogger(__name__).info(
+            "resuming game_id %s from the decision log (set NA_GAME_ID for a new game)", resumed
+        )
     app.state.spend = spend
 
     orchestrator = Orchestrator(

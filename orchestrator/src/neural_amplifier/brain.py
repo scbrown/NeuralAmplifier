@@ -220,18 +220,36 @@ class ClaudeBrain:
         except Exception as exc:  # pragma: no cover - network path
             raise BrainError(str(exc)) from exc
 
-        # Safety classifiers can decline; that is a content outcome, not an error.
-        if response.stop_reason == "refusal":  # pragma: no cover - network path
-            raise BrainError("model declined the request")
+        return self._orders_from(response)
 
-        parsed = response.parsed_output
-        if parsed is None:  # pragma: no cover - network path
-            raise BrainError("model returned no parseable orders")
+    def _orders_from(self, response: Any) -> Orders:
+        """Orders from a completed response, or a BrainError that still carries its price.
+
+        A refusal or an unparseable reply (e.g. ``max_tokens`` truncation) was billed all the
+        same. The spend ceiling is summed from the decision log, so a failure that dropped its
+        cost would let a model that keeps failing keep paying with the meter at $0.
+        """
         from .spend import price_usage
 
+        usage = self._usage_of(response)
+        cost = price_usage(self.model, usage)
+
+        def failed(why: str) -> BrainError:
+            error = BrainError(why)
+            error.cost_usd = cost  # type: ignore[attr-defined]
+            return error
+
+        # Safety classifiers can decline; that is a content outcome, not an error.
+        if response.stop_reason == "refusal":
+            raise failed("model declined the request")
+
+        parsed = response.parsed_output
+        if parsed is None:
+            raise failed("model returned no parseable orders")
+
         orders = to_orders(parsed)
-        orders.usage = self._usage_of(response)
-        orders.cost_usd = price_usage(self.model, orders.usage)
+        orders.usage = usage
+        orders.cost_usd = cost
         return orders
 
 

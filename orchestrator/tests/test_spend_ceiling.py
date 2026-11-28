@@ -363,3 +363,94 @@ def test_a_well_formed_brain_price_loads(tmp_path: Path, monkeypatch: pytest.Mon
     monkeypatch.setenv("NA_BRAIN_PRICE", "2.5, 12")
     load(tmp_path / "absent.toml")
     assert price_usage("anything", {"input": 1_000_000}) == pytest.approx(2.5)
+
+
+def _api_client(monkeypatch: pytest.MonkeyPatch, response: Any, calls: list[int]) -> None:
+    import sys
+    import types
+
+    class Messages:
+        def parse(self, **_: Any) -> Any:
+            calls.append(1)
+            return response
+
+    class Client:
+        messages = Messages()
+
+    monkeypatch.setitem(sys.modules, "anthropic", types.SimpleNamespace(Anthropic=lambda: Client()))
+
+
+@pytest.mark.parametrize(
+    ("stop_reason", "why"),
+    [("refusal", "declined"), ("max_tokens", "no parseable orders")],
+)
+def test_a_billed_api_failure_is_still_metered(
+    thinker_base: WorldView, monkeypatch: pytest.MonkeyPatch, stop_reason: str, why: str
+) -> None:
+    """A refusal or a truncated reply was billed; it must count toward the ceiling."""
+    import types
+
+    from neural_amplifier.brain import ClaudeBrain
+
+    monkeypatch.delenv("NA_BRAIN_PRICE", raising=False)
+    usage = types.SimpleNamespace(
+        input_tokens=10_000,
+        output_tokens=1_000,
+        cache_read_input_tokens=0,
+        cache_creation_input_tokens=0,
+    )
+    response = types.SimpleNamespace(stop_reason=stop_reason, parsed_output=None, usage=usage)
+    calls: list[int] = []
+    _api_client(monkeypatch, response, calls)
+    orch = Orchestrator(
+        ClaudeBrain(model="claude-haiku-4-5", effort=None), spend=SpendLedger(default_budget=0.01)
+    )
+    first = orch.decide(thinker_base).record
+    assert first.degraded and first.degrade_reason and why in first.degrade_reason
+    assert first.cost_usd == pytest.approx(0.015)
+    second = orch.decide(thinker_base).record
+    assert len(calls) == 1
+    assert second.tier == "fallback"
+    assert second.degrade_reason and second.degrade_reason.startswith(SPEND_CEILING)
+
+
+def test_a_claude_code_error_envelope_is_still_metered(
+    monkeypatch: pytest.MonkeyPatch, thinker_base: WorldView
+) -> None:
+    envelope = {"is_error": True, "result": "something broke", "total_cost_usd": 0.02}
+    calls: list[int] = []
+
+    def run(argv: Any, **_: Any) -> Any:
+        calls.append(1)
+        return subprocess.CompletedProcess(argv, 0, json.dumps(envelope), "")
+
+    monkeypatch.setattr(claude_code_brain.subprocess, "run", run)
+    brain = ClaudeCodeBrain()
+    orch = Orchestrator(brain, spend=SpendLedger(0.01))
+    first = orch.decide(thinker_base).record
+    assert first.degraded and first.cost_usd == 0.02
+    assert brain.cost_usd == pytest.approx(0.02)
+    second = orch.decide(thinker_base).record
+    assert len(calls) == 1
+    assert second.tier == "fallback"
+    assert second.degrade_reason and second.degrade_reason.startswith(SPEND_CEILING)
+
+
+def test_a_paid_deferral_keeps_its_cost(thinker_base: WorldView) -> None:
+    """A deferral returned by a paid call was billed: it reaches the record and the meter."""
+    from neural_amplifier.deferrals import DEFER_ACTION_ID, DeferralSet
+
+    class DeferringBrain(PricedBrain):
+        def decide(self, world_view: WorldView) -> Orders:
+            self.calls += 1
+            orders = Orders(choices=[Choice(action_id=DEFER_ACTION_ID, reason="later")])
+            orders.cost_usd = self.price
+            return orders
+
+    brain = DeferringBrain(0.01)
+    orch = Orchestrator(brain, spend=SpendLedger(0.01), deferrals=DeferralSet())
+    first = orch.decide(thinker_base).record
+    assert first.tier == "deferred" and first.cost_usd == 0.01
+    second = orch.decide(thinker_base).record
+    assert brain.calls == 1
+    assert second.tier == "fallback"
