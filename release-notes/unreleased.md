@@ -6,6 +6,14 @@ below against the code it ships.
 
 ## Changes
 
+- **Seat skill books in the running service.** The service builds one skill
+  library (in memory by default, injectable as `create_app(skills=...)`), with one
+  book per seat identity keyed as the campaign ledgers are, plus a shared commons.
+  A seated app starts its game when it is built, pinning the commons; each seat
+  whose driver is a `SkillBrain` reads only its own book and that pinned commons.
+  `POST /game/end` (operator only, once) closes the game and publishes each
+  seat's book to the commons, or with `outcome: abandoned` publishes nothing.
+  Unseated runs are unchanged.
 - **Seat isolation, tiers 2 and 3.** `neural-amplifier seat-profile` writes an
   attached seat's harness profile: no built-in tools, no shell, only its own MCP
   server, and deny rules on the run directory. A leak-probe test checks that a

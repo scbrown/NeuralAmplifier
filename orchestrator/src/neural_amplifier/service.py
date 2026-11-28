@@ -11,6 +11,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import threading
 from collections.abc import Callable, Sequence
 from pathlib import Path
 from typing import cast
@@ -43,7 +44,8 @@ from .pending import NotClaimable, Pending
 from .queued import Comparator, Predicate, QueuedAnswer, QueueError, QueueStore
 from .replay import WorldViewStore
 from .seats import SEAT_HEADER, SeatRouter, SeatTokens, seat_entities
-from .skill_quipu import SkillBackend, SkillWriteRefused
+from .skill_quipu import FakeBackend, SeatSkills, SkillBackend, SkillLibrary, SkillWriteRefused
+from .skills import SkillBrain
 from .strategist import ReviewScheduler, every_from_env
 from .telemetry import OtelSink, Sink, sinks_for
 from .turnplan import PlanEntry, PlanError, PlanStore, TurnPlan
@@ -503,6 +505,7 @@ def create_app(
     log: DecisionLog | None = None,
     sinks: Sequence[Sink] | None = None,
     open_ledger: Callable[[str], SkillBackend] | None = None,
+    skills: SkillLibrary | None = None,
 ) -> FastAPI:
     app = FastAPI(title="Neural Amplifier orchestrator", version="0.1.0")
 
@@ -686,6 +689,34 @@ def create_app(
     def ledger_for(fid: int) -> CampaignLedger | None:
         identity = seat_identity.get(fid)
         return ledgers.ledger(identity) if identity is not None else None
+
+    # The skill library (§3.2.1, §5.5; aegis-gqi0 slice 3): one book per seat IDENTITY, keyed
+    # exactly as the ledgers are, and one shared commons. In memory unless the caller passes a
+    # library over real stores (real databases are aegis-dr3).
+    #
+    # Game boundaries. START: here, when a seated app is built, since one app serves one game
+    # (``orchestrator.game_id``); the commons is pinned to its head now, so nothing published
+    # after this is visible to this game. Each seat whose driver is a SkillBrain is handed its
+    # SeatSkills: its own book and the pinned commons, never another seat's book. END:
+    # ``POST /game/end`` below (operator only), the one game-end hook. A game never ended stays
+    # open, and like an abandoned one publishes nothing. Unseated runs touch none of this.
+    skill_library = (
+        skills
+        if skills is not None
+        else SkillLibrary(lambda _identity: FakeBackend(), FakeBackend())
+    )
+    app.state.skills = skill_library
+    seat_skills: dict[int, SeatSkills] = {}
+    skill_game: str | None = None
+    if router is not None:
+        skill_game = orchestrator.game_id
+        skill_library.start_game(skill_game, seat_identity.values())
+        for fid, driver in router.drivers.items():
+            if isinstance(driver, SkillBrain):
+                seat_skills[fid] = skill_library.seat(seat_identity[fid], skill_game)
+                driver.store = seat_skills[fid]
+    app.state.seat_skills = seat_skills
+    app.state.skill_game = skill_game
 
     reviews = (
         ReviewScheduler(
@@ -1016,6 +1047,51 @@ def create_app(
     # world view that arrives, and every outcome — so it stays true without anyone maintaining it.
     turn_store = TurnStore()
     app.state.turns = turn_store
+
+    game_end_lock = threading.Lock()
+
+    @app.post("/game/end")
+    def game_end(request: Request, body: dict[str, object] | None = None) -> dict[str, object]:
+        """End the seated game: ``closed`` (default) publishes each seat's book to the commons
+        once, after the close; ``abandoned`` publishes nothing. Operator only, and only once."""
+        if request.headers.get(SEAT_HEADER):
+            raise HTTPException(403, "a seat cannot end the game; the operator does")
+        if skill_game is None:
+            raise HTTPException(404, "game boundaries apply in seat mode only ([seats])")
+        outcome = (body or {}).get("outcome") or "closed"
+        if outcome not in ("closed", "abandoned"):
+            raise HTTPException(422, "outcome must be 'closed' or 'abandoned'")
+        with game_end_lock:
+            game = skill_library.game(skill_game)
+            if game.state != "open":
+                raise HTTPException(409, f"game {skill_game!r} has already ended ({game.state})")
+            if outcome == "abandoned":
+                skill_library.abandon_game(skill_game)
+                return {"game_id": skill_game, "state": "abandoned", "published": {}}
+            skill_library.close_game(skill_game)
+            published: dict[str, list[str]] = {}
+            failed: dict[str, str] = {}
+            for identity in sorted(game.seats):
+                try:
+                    published[identity] = [
+                        s.ref for s in skill_library.publish_at_game_end(identity, skill_game)
+                    ]
+                except Exception as exc:  # one seat's refused knot must not hold back the rest
+                    logging.getLogger(__name__).warning(
+                        "could not publish seat %s's skills for game %s: %s",
+                        identity,
+                        skill_game,
+                        exc,
+                    )
+                    failed[identity] = str(exc)
+            out: dict[str, object] = {
+                "game_id": skill_game,
+                "state": "closed",
+                "published": published,
+            }
+            if failed:
+                out["failed"] = failed
+            return out
 
     @app.get("/health")
     def health() -> dict[str, object]:
