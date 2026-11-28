@@ -120,8 +120,17 @@ class ReviewScheduler:
         self._lock = threading.Lock()
         #: Every review_missed event, in order — also what the seat's log received.
         self.missed: list[dict[str, object]] = []
-        #: The ring threads started, so a test can join them; never joined on the turn path.
+        #: The ring and ledger threads still running, so a test can join them; never joined on
+        #: the turn path. Finished ones are pruned whenever a new one starts, so this holds only
+        #: live threads rather than growing by one per review for the whole game.
         self.threads: list[threading.Thread] = []
+        #: Its own lock: a ledger thread starts from inside ``_lock`` (on a review's expiry).
+        self._threads_lock = threading.Lock()
+        #: Every review id recorded to a ledger. The ledger's review IRI carries the id and no
+        #: tx, so a second record under one id would merge onto the first review's node.
+        self._recorded_ids: set[str] = set()
+        #: Reviews not recorded because their id was already recorded (logged at WARNING).
+        self.duplicate_review_ids = 0
 
     # ------------------------------------------------------------------ turn path
 
@@ -156,12 +165,19 @@ class ReviewScheduler:
             state.open = review
             state.anchor = turn
             state.rung.append(review)
-        thread = threading.Thread(
-            target=self.doorbell.ring_review, args=(review.id,), daemon=True, name=review.id
+        self._start(
+            threading.Thread(
+                target=self.doorbell.ring_review, args=(review.id,), daemon=True, name=review.id
+            )
         )
-        self.threads.append(thread)
-        thread.start()
         return review
+
+    def _start(self, thread: threading.Thread) -> None:
+        """Start a background thread, dropping the finished ones from ``threads`` first."""
+        with self._threads_lock:
+            self.threads = [t for t in self.threads if t.is_alive()]
+            self.threads.append(thread)
+        thread.start()
 
     def _discontinuity(self, state: _SeatState, world_view: WorldView) -> Reason | None:
         reason: Reason | None = None
@@ -208,6 +224,15 @@ class ReviewScheduler:
         ledger = self.ledger_for(fid) if self.ledger_for is not None else None
         if ledger is None:
             return
+        if review.id in self._recorded_ids:
+            self.duplicate_review_ids += 1
+            log.warning(
+                "review id %s already recorded; not recording seat %s's second review under it",
+                review.id,
+                fid,
+            )
+            return
+        self._recorded_ids.add(review.id)
         outcome = "acted" if review.answered_by is not None else "missed"
 
         def write() -> None:
@@ -226,9 +251,7 @@ class ReviewScheduler:
                     "could not record review %s in seat %s's ledger: %s", review.id, fid, exc
                 )
 
-        thread = threading.Thread(target=write, daemon=True, name=f"ledger-{review.id}")
-        self.threads.append(thread)
-        thread.start()
+        self._start(threading.Thread(target=write, daemon=True, name=f"ledger-{review.id}"))
 
     # ------------------------------------------------------------------ write path
 

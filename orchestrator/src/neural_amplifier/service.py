@@ -752,14 +752,23 @@ def create_app(
 
     def _commit(
         attached: tuple[CampaignLedger, dict[str, object]] | None, via: str, ref: str
-    ) -> object:
+    ) -> dict[str, object]:
+        """Write the attached commitment, AFTER the directive/plan/policy write has landed.
+
+        Returns the fields to merge into the route's success response. A failure here never
+        turns the response into an error: the write already landed, and an agent retrying an
+        error would land it twice. It is reported as ``commitment_error`` instead.
+        """
         if attached is None:
-            return None
+            return {}
         ledger, spec = attached
         try:
-            return ledger.commit(spec, via=via, ref=ref).summary()
-        except SkillWriteRefused as exc:  # checked above; a refusal here is a store problem
-            raise HTTPException(422, f"commitment refused: {exc}") from exc
+            return {"commitment": ledger.commit(spec, via=via, ref=ref).summary()}
+        except Exception as exc:  # checked above; a failure here is a store problem
+            logging.getLogger(__name__).warning(
+                "%s %s landed but its commitment was not recorded: %s", via, ref, exc
+            )
+            return {"commitment_error": f"commitment not recorded: {exc}"}
 
     @app.get("/agent/review")
     def agent_review(request: Request) -> dict[str, object]:
@@ -903,8 +912,7 @@ def create_app(
         ref = f"policy:{body.get('knob')}@turn{turn}"
         if reviews is not None:
             reviews.note_write(fid, "policy", ref)
-        committed = _commit(attached, "policy", ref)
-        return result if committed is None else {**result, "commitment": committed}
+        return {**result, **_commit(attached, "policy", ref)}
 
     def _seat_intent(seat: int | None, raw: object) -> object:
         """Seat mode: an intent goes in the seat's own graph; a different faction is refused."""
@@ -1218,9 +1226,7 @@ def create_app(
                 "baseline": accepted[0].baseline,
                 "status": "attached; it takes effect when you submit this decision",
             }
-            committed = _commit(attached, "directive", accepted[0].id)
-            if committed is not None:
-                out["commitment"] = committed
+            out.update(_commit(attached, "directive", accepted[0].id))
             return out
 
         @app.post("/agent/submit")
@@ -1794,11 +1800,7 @@ def create_app(
         ref = f"plan:turn{turn}"
         if reviews is not None:
             reviews.note_write(faction_id, "plan", ref)
-        committed = _commit(attached, "plan", ref)
-        out: dict[str, object] = {"plan": installed.summary()}
-        if committed is not None:
-            out["commitment"] = committed
-        return out
+        return {"plan": installed.summary(), **_commit(attached, "plan", ref)}
 
     @app.get("/agent/plan")
     def agent_plan_list(
